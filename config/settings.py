@@ -10,7 +10,8 @@ class Settings(BaseSettings):
     """Настройки приложения"""
 
     # Database
-    database_url: str = "postgresql://user:password@localhost:5432/contract_ai"
+    # По умолчанию SQLite, можно переключить на PostgreSQL в .env
+    database_url: str = "sqlite:///./contract_ai.db"
 
     # LLM API Keys
     anthropic_api_key: str = ""
