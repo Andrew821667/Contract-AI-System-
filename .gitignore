@@ -1,0 +1,86 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Data directories (A>45@60B ?>;L7>20B5;LA:85 D09;K)
+data/uploads/*
+data/normalized/*
+data/reports/*
+data/exports/*
+!data/uploads/.gitkeep
+!data/normalized/.gitkeep
+!data/reports/.gitkeep
+!data/exports/.gitkeep
+
+# Templates (A>E@0=O5< 2 git B>;L:> ?@8<5@K)
+data/templates/*
+!data/templates/.gitkeep
+!data/templates/example_*.xml
+
+# ChromaDB
+chroma_data/
+*.chroma
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Redis
+dump.rdb
+
+# OS
+Thumbs.db
