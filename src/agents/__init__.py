@@ -4,15 +4,19 @@ AI Agents for Contract AI System
 from .base_agent import BaseAgent, AgentResult
 from .orchestrator_agent import OrchestratorAgent, WorkflowState
 
-# Import full implementation or stub
+# Import full implementations or stubs
 try:
     from .onboarding_agent_full import OnboardingAgentFull as OnboardingAgent
 except ImportError:
     from .agent_stubs import OnboardingAgent
 
+try:
+    from .contract_generator_agent import ContractGeneratorAgent
+except ImportError:
+    from .agent_stubs import ContractGeneratorAgent
+
 # Stubs for remaining agents
 from .agent_stubs import (
-    ContractGeneratorAgent,
     ContractAnalyzerAgent,
     DisagreementProcessorAgent,
     ChangesAnalyzerAgent,

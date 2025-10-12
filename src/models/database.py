@@ -5,8 +5,8 @@ SQLAlchemy <>45;8 4;O Contract AI System
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import (
-    Boolean, Column, String, Text, Integer,
-    DateTime, ForeignKey, CheckConstraint, UniqueConstraint
+    Boolean, Column, String, Text, Integer, Float,
+    DateTime, ForeignKey, CheckConstraint, UniqueConstraint, JSON
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
@@ -235,6 +235,56 @@ class ExportLog(Base):
         return f"<ExportLog(id={self.id}, contract_id={self.contract_id}, type={self.export_type})>"
 
 
+class ContractFeedback(Base):
+    """Модель обратной связи для сбора данных обучения ML"""
+    __tablename__ = "contract_feedback"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    contract_id = Column(String(36), ForeignKey('contracts.id', ondelete='CASCADE'), index=True)
+    user_id = Column(String(36), ForeignKey('users.id', ondelete='SET NULL'), index=True)
+
+    # User feedback
+    rating = Column(Integer)  # 1-5 stars
+    acceptance_status = Column(Boolean, default=None, index=True)  # true=accepted, false=rejected, null=pending
+
+    # User corrections (what user changed)
+    user_corrections = Column(JSON, default={})
+
+    # Generation parameters (for reproducing)
+    generation_params = Column(JSON, default={})
+
+    # Template and context used
+    template_id = Column(String(36), ForeignKey('templates.id', ondelete='SET NULL'))
+    rag_context_used = Column(JSON, default={})
+
+    # Quality metrics
+    validation_errors = Column(Integer, default=0)
+    validation_warnings = Column(Integer, default=0)
+    generation_duration = Column(Float)
+
+    # Comments
+    user_comment = Column(Text)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    contract = relationship("Contract")
+    user = relationship("User")
+    template = relationship("Template")
+
+    __table_args__ = (
+        CheckConstraint(
+            'rating >= 1 AND rating <= 5',
+            name='check_rating_range'
+        ),
+    )
+
+    def __repr__(self):
+        return f"<ContractFeedback(id={self.id}, contract_id={self.contract_id}, rating={self.rating})>"
+
+
 # -:A?>@B 2A5E <>45;59
 __all__ = [
     "Base",
@@ -244,5 +294,6 @@ __all__ = [
     "AnalysisResult",
     "ReviewTask",
     "LegalDocument",
-    "ExportLog"
+    "ExportLog",
+    "ContractFeedback"
 ]
