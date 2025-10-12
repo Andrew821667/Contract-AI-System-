@@ -34,7 +34,7 @@ class User(Base):
 
     # Relationships
     templates = relationship("Template", back_populates="creator")
-    assigned_tasks = relationship("ReviewTask", back_populates="assignee")
+    assigned_tasks = relationship("ReviewTask", foreign_keys="ReviewTask.assigned_to", back_populates="assignee")
     export_logs = relationship("ExportLog", back_populates="user")
 
     __table_args__ = (
@@ -143,27 +143,41 @@ class ReviewTask(Base):
     __tablename__ = "review_tasks"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    contract_id = Column(String(36), ForeignKey('contracts.id', ondelete='CASCADE'), nullable=False)
+    contract_id = Column(String(36), ForeignKey('contracts.id', ondelete='CASCADE'), nullable=False, index=True)
     assigned_to = Column(String(36), ForeignKey('users.id'), index=True)
+    assigned_by = Column(String(36), ForeignKey('users.id'))
     status = Column(String(50), default='pending', index=True)
-    priority = Column(String(20), default='normal', index=True)
+    priority = Column(String(20), default='medium', index=True)
     deadline = Column(DateTime, index=True)
     decision = Column(String(50))
     comments = Column(Text)
+
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    assigned_at = Column(DateTime)
+    started_at = Column(DateTime)
     completed_at = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # SLA tracking
+    expected_duration = Column(Integer)  # expected minutes to complete
+    actual_duration = Column(Integer)  # actual minutes taken
+    sla_breached = Column(Boolean, default=False, index=True)
+
+    # Audit trail
+    history = Column(Text)  # JSON array of status changes with timestamps
 
     # Relationships
     contract = relationship("Contract", back_populates="review_tasks")
-    assignee = relationship("User", back_populates="assigned_tasks")
+    assignee = relationship("User", foreign_keys=[assigned_to], back_populates="assigned_tasks")
+    assigner = relationship("User", foreign_keys=[assigned_by])
 
     __table_args__ = (
         CheckConstraint(
-            status.in_(['pending', 'in_progress', 'completed']),
+            status.in_(['pending', 'in_review', 'approved', 'rejected', 'completed']),
             name='check_task_status'
         ),
         CheckConstraint(
-            priority.in_(['critical', 'high', 'normal', 'low']),
+            priority.in_(['high', 'medium', 'low']),
             name='check_task_priority'
         ),
         CheckConstraint(
