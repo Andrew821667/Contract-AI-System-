@@ -15,9 +15,13 @@ try:
 except ImportError:
     from .agent_stubs import ContractGeneratorAgent
 
+try:
+    from .contract_analyzer_agent import ContractAnalyzerAgent
+except ImportError:
+    from .agent_stubs import ContractAnalyzerAgent
+
 # Stubs for remaining agents
 from .agent_stubs import (
-    ContractAnalyzerAgent,
     DisagreementProcessorAgent,
     ChangesAnalyzerAgent,
     QuickExportAgent

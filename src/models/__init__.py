@@ -4,7 +4,8 @@ Database models and connection management
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from config.settings import settings
-from .database import Base, User, Template, Contract, AnalysisResult, ReviewTask, LegalDocument, ExportLog
+from .database import Base, User, Template, Contract, AnalysisResult, ReviewTask, LegalDocument, ExportLog, ContractFeedback
+from .analyzer_models import ContractRisk, ContractRecommendation, ContractAnnotation, ContractSuggestedChange, AnalysisFeedback
 
 # !>740=85 engine
 engine = create_engine(
@@ -57,5 +58,11 @@ __all__ = [
     "AnalysisResult",
     "ReviewTask",
     "LegalDocument",
-    "ExportLog"
+    "ExportLog",
+    "ContractFeedback",
+    "ContractRisk",
+    "ContractRecommendation",
+    "ContractAnnotation",
+    "ContractSuggestedChange",
+    "AnalysisFeedback"
 ]
