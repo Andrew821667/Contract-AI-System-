@@ -30,10 +30,10 @@ try:
 except ImportError:
     from .agent_stubs import ChangesAnalyzerAgent
 
-# Stubs for remaining agents
-from .agent_stubs import (
-    QuickExportAgent
-)
+try:
+    from .quick_export_agent import QuickExportAgent
+except ImportError:
+    from .agent_stubs import QuickExportAgent
 
 __all__ = [
     "BaseAgent",
