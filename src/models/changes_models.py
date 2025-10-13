@@ -28,7 +28,7 @@ class ContractVersion(Base):
     description = Column(Text)
     parent_version_id = Column(Integer, ForeignKey('contract_versions.id'))
     is_current = Column(Boolean, default=True, index=True)
-    metadata = Column(JSON, default=dict)
+    version_metadata = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

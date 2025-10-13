@@ -15,6 +15,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Import settings first
+from config.settings import settings
+
 # Import agents and services
 try:
     from src.agents import (
@@ -27,8 +30,7 @@ try:
         QuickExportAgent
     )
     from src.services.llm_gateway import LLMGateway
-    from src.models.database import get_session
-    from config.settings import config
+    from src.models import SessionLocal
     AGENTS_AVAILABLE = True
 except ImportError as e:
     st.error(f"Ошибка импорта: {e}")
@@ -40,9 +42,9 @@ def init_session_state():
     if 'current_page' not in st.session_state:
         st.session_state.current_page = 'home'
     if 'llm_gateway' not in st.session_state and AGENTS_AVAILABLE:
-        st.session_state.llm_gateway = LLMGateway(config=config.llm_config)
+        st.session_state.llm_gateway = LLMGateway()
     if 'db_session' not in st.session_state and AGENTS_AVAILABLE:
-        st.session_state.db_session = get_session()
+        st.session_state.db_session = SessionLocal()
 
 
 def sidebar_navigation():
@@ -66,7 +68,7 @@ def sidebar_navigation():
             st.session_state.current_page = key
     
     st.sidebar.markdown("---")
-    st.sidebar.info(f"**Версия:** 1.0.0\n**LLM провайдер:** {config.llm_config.get('provider', 'openai')}")
+    st.sidebar.info(f"**Версия:** 1.0.0\n**LLM провайдер:** {settings.default_llm_provider}")
 
 
 def page_home():
@@ -499,10 +501,10 @@ def page_settings():
     api_key = st.text_input("API Key", type="password", value="")
     
     st.subheader("База данных")
-    db_url = st.text_input("Database URL", value=config.database_url)
-    
+    db_url = st.text_input("Database URL", value=settings.database_url)
+
     st.subheader("RAG System")
-    chroma_path = st.text_input("ChromaDB Path", value=config.rag_config.get('chroma_db_path', './data/chroma_db'))
+    chroma_path = st.text_input("ChromaDB Path", value=settings.chroma_persist_directory)
     
     if st.button("💾 Сохранить настройки"):
         st.success("Настройки сохранены (функциональность в разработке)")
