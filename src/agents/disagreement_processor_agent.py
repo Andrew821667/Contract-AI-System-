@@ -90,23 +90,25 @@ References: Use RAG sources when available (precedents, similar cases, legal nor
             if not contract_id or not analysis_id:
                 return AgentResult(
                     success=False,
+                    data={},
                     error="Missing contract_id or analysis_id"
                 )
 
             logger.info(f"Starting disagreement generation for contract {contract_id} (mode: {mode})")
 
             # 1. Get contract and analysis
-            contract = self.db_session.query(Contract).filter(
+            contract = self.db.query(Contract).filter(
                 Contract.id == contract_id
             ).first()
 
             if not contract:
                 return AgentResult(
                     success=False,
+                    data={},
                     error=f"Contract {contract_id} not found"
                 )
 
-            analysis = self.db_session.query(AnalysisResult).filter(
+            analysis = self.db.query(AnalysisResult).filter(
                 AnalysisResult.id == analysis_id
             ).first()
 
@@ -117,7 +119,7 @@ References: Use RAG sources when available (precedents, similar cases, legal nor
                 )
 
             # 2. Get risks from analyzer
-            risks = self.db_session.query(ContractRisk).filter(
+            risks = self.db.query(ContractRisk).filter(
                 ContractRisk.analysis_id == analysis_id
             ).all()
 
@@ -129,7 +131,7 @@ References: Use RAG sources when available (precedents, similar cases, legal nor
                 )
 
             # 3. Get recommendations
-            recommendations = self.db_session.query(ContractRecommendation).filter(
+            recommendations = self.db.query(ContractRecommendation).filter(
                 ContractRecommendation.analysis_id == analysis_id
             ).all()
 
@@ -163,8 +165,8 @@ References: Use RAG sources when available (precedents, similar cases, legal nor
                 'generation_mode': mode,
                 'generation_timestamp': datetime.utcnow().isoformat()
             }
-            self.db_session.commit()
-            self.db_session.refresh(disagreement)
+            self.db.commit()
+            self.db.refresh(disagreement)
 
             logger.info(f"Disagreement generated: {len(objections)} objections")
 
@@ -186,6 +188,7 @@ References: Use RAG sources when available (precedents, similar cases, legal nor
             traceback.print_exc()
             return AgentResult(
                 success=False,
+                data={},
                 error=str(e)
             )
 
@@ -200,9 +203,9 @@ References: Use RAG sources when available (precedents, similar cases, legal nor
             tone=tone,
             created_by=user_id
         )
-        self.db_session.add(disagreement)
-        self.db_session.commit()
-        self.db_session.refresh(disagreement)
+        self.db.add(disagreement)
+        self.db.commit()
+        self.db.refresh(disagreement)
         return disagreement
 
     def _get_rag_context_for_objections(
@@ -397,8 +400,8 @@ Return ONLY valid JSON, no additional text."""
     def _save_objections(self, objections: List[DisagreementObjection]):
         """Save objections to database"""
         for objection in objections:
-            self.db_session.add(objection)
-        self.db_session.commit()
+            self.db.add(objection)
+        self.db.commit()
 
     def _objection_to_dict(self, objection: DisagreementObjection) -> Dict[str, Any]:
         """Convert objection to dict for response"""
@@ -426,15 +429,15 @@ Return ONLY valid JSON, no additional text."""
             priority_order: Optional custom order (list of objection IDs)
         """
         try:
-            disagreement = self.db_session.query(Disagreement).filter(
+            disagreement = self.db.query(Disagreement).filter(
                 Disagreement.id == disagreement_id
             ).first()
 
             if not disagreement:
-                return AgentResult(success=False, error="Disagreement not found")
+                return AgentResult(success=False, data={}, error="Disagreement not found")
 
             # Update objections
-            objections = self.db_session.query(DisagreementObjection).filter(
+            objections = self.db.query(DisagreementObjection).filter(
                 DisagreementObjection.disagreement_id == disagreement_id
             ).all()
 
@@ -446,7 +449,7 @@ Return ONLY valid JSON, no additional text."""
             disagreement.priority_order = priority_order or selected_objection_ids
             disagreement.status = 'review'
 
-            self.db_session.commit()
+            self.db.commit()
 
             logger.info(f"User selected {len(selected_objection_ids)} objections")
 
@@ -462,22 +465,22 @@ Return ONLY valid JSON, no additional text."""
 
         except Exception as e:
             logger.error(f"Failed to update user selection: {e}")
-            self.db_session.rollback()
-            return AgentResult(success=False, error=str(e))
+            self.db.rollback()
+            return AgentResult(success=False, data={}, error=str(e))
 
     def generate_xml_document(self, disagreement_id: int) -> AgentResult:
         """Generate structured XML document with objections"""
         try:
-            disagreement = self.db_session.query(Disagreement).filter(
+            disagreement = self.db.query(Disagreement).filter(
                 Disagreement.id == disagreement_id
             ).first()
 
             if not disagreement:
-                return AgentResult(success=False, error="Disagreement not found")
+                return AgentResult(success=False, data={}, error="Disagreement not found")
 
             # Get selected objections in priority order
             selected_ids = disagreement.priority_order or disagreement.selected_objections
-            objections = self.db_session.query(DisagreementObjection).filter(
+            objections = self.db.query(DisagreementObjection).filter(
                 DisagreementObjection.id.in_(selected_ids)
             ).all()
 
@@ -511,7 +514,7 @@ Return ONLY valid JSON, no additional text."""
 
             # Save to disagreement
             disagreement.xml_content = xml_str
-            self.db_session.commit()
+            self.db.commit()
 
             logger.info(f"Generated XML document for disagreement {disagreement_id}")
 
@@ -530,7 +533,7 @@ Return ONLY valid JSON, no additional text."""
             logger.error(f"XML generation failed: {e}")
             import traceback
             traceback.print_exc()
-            return AgentResult(success=False, error=str(e))
+            return AgentResult(success=False, data={}, error=str(e))
 
 
 __all__ = ["DisagreementProcessorAgent"]
