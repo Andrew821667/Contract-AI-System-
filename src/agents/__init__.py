@@ -25,9 +25,13 @@ try:
 except ImportError:
     from .agent_stubs import DisagreementProcessorAgent
 
+try:
+    from .changes_analyzer_agent import ChangesAnalyzerAgent
+except ImportError:
+    from .agent_stubs import ChangesAnalyzerAgent
+
 # Stubs for remaining agents
 from .agent_stubs import (
-    ChangesAnalyzerAgent,
     QuickExportAgent
 )
 

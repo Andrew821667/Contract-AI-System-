@@ -7,6 +7,7 @@ from config.settings import settings
 from .database import Base, User, Template, Contract, AnalysisResult, ReviewTask, LegalDocument, ExportLog, ContractFeedback
 from .analyzer_models import ContractRisk, ContractRecommendation, ContractAnnotation, ContractSuggestedChange, AnalysisFeedback
 from .disagreement_models import Disagreement, DisagreementObjection, DisagreementExportLog, DisagreementFeedback
+from .changes_models import ContractVersion, ContractChange, ChangeAnalysisResult, ChangeReviewFeedback
 
 # !>740=85 engine
 engine = create_engine(
@@ -69,5 +70,9 @@ __all__ = [
     "Disagreement",
     "DisagreementObjection",
     "DisagreementExportLog",
-    "DisagreementFeedback"
+    "DisagreementFeedback",
+    "ContractVersion",
+    "ContractChange",
+    "ChangeAnalysisResult",
+    "ChangeReviewFeedback"
 ]
