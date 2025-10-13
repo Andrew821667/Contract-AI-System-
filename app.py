@@ -18,6 +18,27 @@ st.set_page_config(
 # Import settings first
 from config.settings import settings
 
+# Import auth utilities
+from src.utils.auth import (
+    init_session_state as init_auth_state,
+    show_user_info,
+    get_current_user,
+    check_feature_access,
+    show_upgrade_message,
+    create_demo_users
+)
+from src.utils.contract_types import (
+    get_all_contract_names,
+    get_contract_type_code,
+    get_contracts_by_category,
+    get_all_categories
+)
+from src.utils.knowledge_base import (
+    KnowledgeBaseManager,
+    KnowledgeBaseCategory,
+    initialize_knowledge_base
+)
+
 # Import agents and services
 try:
     from src.agents import (
@@ -39,19 +60,34 @@ except ImportError as e:
 
 def init_session_state():
     """Initialize session state"""
+    # Initialize auth state
+    init_auth_state()
+
+    # Initialize page state
     if 'current_page' not in st.session_state:
         st.session_state.current_page = 'home'
+
+    # Initialize services
     if 'llm_gateway' not in st.session_state and AGENTS_AVAILABLE:
         st.session_state.llm_gateway = LLMGateway()
     if 'db_session' not in st.session_state and AGENTS_AVAILABLE:
         st.session_state.db_session = SessionLocal()
+
+    # Initialize knowledge base
+    if 'kb_manager' not in st.session_state:
+        st.session_state.kb_manager = initialize_knowledge_base()
+
+    # Create demo users on first run
+    if 'demo_users_created' not in st.session_state:
+        create_demo_users()
+        st.session_state.demo_users_created = True
 
 
 def sidebar_navigation():
     """Sidebar navigation"""
     st.sidebar.title("📄 Contract AI System")
     st.sidebar.markdown("---")
-    
+
     pages = {
         'home': '🏠 Главная',
         'onboarding': '📥 Обработка запросов',
@@ -60,13 +96,19 @@ def sidebar_navigation():
         'disagreements': '⚖️ Возражения',
         'changes': '📊 Анализ изменений',
         'export': '📤 Экспорт',
+        'knowledge_base': '📚 База знаний',
         'settings': '⚙️ Настройки'
     }
-    
+
     for key, label in pages.items():
         if st.sidebar.button(label, key=f"nav_{key}"):
             st.session_state.current_page = key
-    
+
+    st.sidebar.markdown("---")
+
+    # Show user info
+    show_user_info()
+
     st.sidebar.markdown("---")
     st.sidebar.info(f"**Версия:** 1.0.0\n**LLM провайдер:** {settings.default_llm_provider}")
 
