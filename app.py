@@ -307,35 +307,71 @@ def page_analyzer():
         
         with st.spinner("Анализ договора..."):
             try:
+                from src.models import Contract
+                from src.services.document_parser import DocumentParser
+
                 # Save uploaded file
                 file_path = os.path.join("data/contracts", uploaded_file.name)
                 os.makedirs(os.path.dirname(file_path), exist_ok=True)
                 with open(file_path, 'wb') as f:
                     f.write(uploaded_file.getbuffer())
-                
+
+                # Parse document to XML
+                st.info("📄 Парсинг документа...")
+                parser = DocumentParser()
+                parsed_xml = parser.parse(file_path)
+
+                if not parsed_xml:
+                    st.error("❌ Не удалось распарсить документ")
+                    return
+
+                # Create contract in database
+                st.info("💾 Создание записи в БД...")
+                contract = Contract(
+                    user_id=user_id,
+                    contract_type='unknown',  # Will be determined by analyzer
+                    status='uploaded',
+                    file_path=file_path,
+                    content=parsed_xml
+                )
+                st.session_state.db_session.add(contract)
+                st.session_state.db_session.commit()
+                st.session_state.db_session.refresh(contract)
+
+                # Analyze contract
+                st.info("🔍 Анализ договора...")
                 agent = ContractAnalyzerAgent(
                     llm_gateway=st.session_state.llm_gateway,
                     db_session=st.session_state.db_session
                 )
-                
+
                 result = agent.execute({
-                    'contract_id': 'contract_' + datetime.now().strftime('%Y%m%d_%H%M%S'),
-                    'file_path': file_path,
-                    'counterparty_tin': counterparty_tin,
-                    'user_id': user_id
+                    'contract_id': contract.id,
+                    'parsed_xml': parsed_xml,
+                    'check_counterparty': True,
+                    'metadata': {
+                        'counterparty_tin': counterparty_tin,
+                        'uploaded_by': user_id
+                    }
                 })
                 
                 if result.success:
                     st.success("✅ Анализ завершен")
-                    
-                    # Risk level
-                    risk_level = result.data.get('risk_level', 'unknown')
-                    if risk_level == 'high':
-                        st.error(f"🔴 **Уровень риска:** {risk_level.upper()}")
-                    elif risk_level == 'medium':
-                        st.warning(f"🟡 **Уровень риска:** {risk_level.upper()}")
+
+                    # Determine risk level from risks
+                    risks = result.data.get('risks', [])
+                    high_risks = sum(1 for r in risks if r.get('severity') == 'high')
+                    medium_risks = sum(1 for r in risks if r.get('severity') == 'medium')
+
+                    if high_risks > 0:
+                        risk_level = 'high'
+                        st.error(f"🔴 **Уровень риска:** ВЫСОКИЙ ({high_risks} критичных рисков)")
+                    elif medium_risks > 2:
+                        risk_level = 'medium'
+                        st.warning(f"🟡 **Уровень риска:** СРЕДНИЙ ({medium_risks} средних рисков)")
                     else:
-                        st.success(f"🟢 **Уровень риска:** {risk_level.upper()}")
+                        risk_level = 'low'
+                        st.success(f"🟢 **Уровень риска:** НИЗКИЙ")
                     
                     # Risks
                     st.subheader("Выявленные риски")
@@ -367,7 +403,7 @@ def page_disagreements():
     st.title("⚖️ Генерация возражений")
 
     # Check access
-    if not check_feature_access('can_generate_disagreements'):
+    if not check_feature_access('can_use_disagreements'):
         show_upgrade_message('Генерация возражений')
         return
 
@@ -426,7 +462,7 @@ def page_changes():
     st.title("📊 Анализ изменений")
 
     # Check access
-    if not check_feature_access('can_analyze_changes'):
+    if not check_feature_access('can_use_changes_analyzer'):
         show_upgrade_message('Анализ изменений')
         return
 
