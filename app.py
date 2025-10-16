@@ -22,6 +22,7 @@ from config.settings import settings
 from src.utils.auth import (
     init_session_state as init_auth_state,
     show_user_info,
+    show_login_form,
     get_current_user,
     check_feature_access,
     show_upgrade_message,
@@ -38,6 +39,9 @@ from src.utils.knowledge_base import (
     KnowledgeBaseCategory,
     initialize_knowledge_base
 )
+
+# Import improved pages
+from app_pages_improved import page_generator_improved, page_knowledge_base
 
 # Import agents and services
 try:
@@ -147,15 +151,21 @@ def page_home():
 def page_onboarding():
     """Onboarding Agent page"""
     st.title("📥 Обработка входящих запросов")
-    
+
+    # Check access
+    if not check_feature_access('can_use_onboarding'):
+        show_upgrade_message('Обработка запросов')
+        return
+
+    user = get_current_user()
+    user_id = user['id'] if user else 'demo_user'
+
     st.markdown("### Введите запрос пользователя")
     user_query = st.text_area(
         "Запрос",
         placeholder="Например: Нужен договор поставки товара на 500 000 рублей с ООО 'Поставщик'",
         height=150
     )
-    
-    user_id = st.text_input("ID пользователя", value="user_001")
     
     if st.button("🚀 Обработать запрос", type="primary"):
         if not user_query:
@@ -267,18 +277,20 @@ def page_generator():
 def page_analyzer():
     """Analyzer Agent page"""
     st.title("🔍 Анализ договоров")
-    
+
+    # Check access
+    if not check_feature_access('can_analyze_contracts'):
+        show_upgrade_message('Анализ договоров')
+        return
+
+    user = get_current_user()
+    user_id = user['id'] if user else 'demo_user'
+
     st.markdown("### Анализ договора контрагента")
-    
+
     uploaded_file = st.file_uploader("Загрузите договор", type=['docx', 'pdf', 'xml'])
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        counterparty_tin = st.text_input("ИНН контрагента", value="7700000000")
-    
-    with col2:
-        user_id = st.text_input("ID пользователя", value="user_001", key="analyze_user")
+
+    counterparty_tin = st.text_input("ИНН контрагента", value="7700000000")
     
     if st.button("🚀 Анализировать", type="primary"):
         if not uploaded_file:
@@ -349,18 +361,19 @@ def page_analyzer():
 def page_disagreements():
     """Disagreement Processor page"""
     st.title("⚖️ Генерация возражений")
-    
+
+    # Check access
+    if not check_feature_access('can_generate_disagreements'):
+        show_upgrade_message('Генерация возражений')
+        return
+
+    user = get_current_user()
+    user_id = user['id'] if user else 'demo_user'
+
     st.markdown("### Создание документа с возражениями")
-    
+
     contract_id = st.text_input("ID договора для анализа", value="contract_001")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        analysis_id = st.text_input("ID анализа", value="analysis_001")
-    
-    with col2:
-        user_id = st.text_input("ID пользователя", value="user_001", key="disagree_user")
+    analysis_id = st.text_input("ID анализа", value="analysis_001")
     
     auto_prioritize = st.checkbox("Автоматическая приоритизация", value=True)
     
@@ -407,17 +420,22 @@ def page_disagreements():
 def page_changes():
     """Changes Analyzer page"""
     st.title("📊 Анализ изменений")
-    
+
+    # Check access
+    if not check_feature_access('can_analyze_changes'):
+        show_upgrade_message('Анализ изменений')
+        return
+
     st.markdown("### Сравнение версий договора")
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
         from_version_id = st.number_input("От версии ID", min_value=1, value=1)
-    
+
     with col2:
         to_version_id = st.number_input("До версии ID", min_value=1, value=2)
-    
+
     contract_id = st.text_input("ID договора", value="contract_001", key="changes_contract")
     
     if st.button("🚀 Анализировать изменения", type="primary"):
@@ -469,23 +487,33 @@ def page_changes():
 def page_export():
     """Quick Export page"""
     st.title("📤 Быстрый экспорт")
-    
+
+    # Check access
+    user = get_current_user()
+    user_id = user['id'] if user else 'demo_user'
+
     st.markdown("### Экспорт договора")
-    
+
     contract_id = st.text_input("ID договора", value="contract_001", key="export_contract")
-    
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
         export_format = st.selectbox(
             "Формат экспорта",
-            ["docx", "pdf", "txt", "json", "all"]
+            ["docx", "pdf", "txt", "json", "xml", "all"]
         )
-    
+
     with col2:
         include_analysis = st.checkbox("Включить результаты анализа", value=False)
-    
-    user_id = st.text_input("ID пользователя", value="user_001", key="export_user")
+
+    # Check PDF export permission
+    if export_format in ['pdf', 'all']:
+        if not check_feature_access('can_export_pdf'):
+            st.warning("⚠️ Экспорт в PDF доступен только в полной версии")
+            if export_format == 'pdf':
+                show_upgrade_message('Экспорт в PDF')
+                return
     
     if st.button("🚀 Экспортировать", type="primary"):
         if not AGENTS_AVAILABLE:
@@ -527,27 +555,33 @@ def page_export():
                 st.error(f"Ошибка: {e}")
 
 
+def page_login():
+    """Login page"""
+    st.title("🔐 Вход в систему")
+    show_login_form()
+
+
 def page_settings():
     """Settings page"""
     st.title("⚙️ Настройки")
-    
+
     st.markdown("### Конфигурация системы")
-    
+
     st.subheader("LLM Provider")
     provider = st.selectbox(
         "Провайдер",
         ["openai", "anthropic", "yandex", "gigachat"],
         index=0
     )
-    
+
     api_key = st.text_input("API Key", type="password", value="")
-    
+
     st.subheader("База данных")
     db_url = st.text_input("Database URL", value=settings.database_url)
 
     st.subheader("RAG System")
     chroma_path = st.text_input("ChromaDB Path", value=settings.chroma_persist_directory)
-    
+
     if st.button("💾 Сохранить настройки"):
         st.success("Настройки сохранены (функциональность в разработке)")
 
@@ -556,16 +590,18 @@ def main():
     """Main application"""
     init_session_state()
     sidebar_navigation()
-    
+
     # Route to page
     page = st.session_state.current_page
-    
-    if page == 'home':
+
+    if page == 'login':
+        page_login()
+    elif page == 'home':
         page_home()
     elif page == 'onboarding':
         page_onboarding()
     elif page == 'generator':
-        page_generator()
+        page_generator_improved()  # Use improved version
     elif page == 'analyzer':
         page_analyzer()
     elif page == 'disagreements':
@@ -574,6 +610,8 @@ def main():
         page_changes()
     elif page == 'export':
         page_export()
+    elif page == 'knowledge_base':
+        page_knowledge_base()  # Add knowledge base page
     elif page == 'settings':
         page_settings()
 
