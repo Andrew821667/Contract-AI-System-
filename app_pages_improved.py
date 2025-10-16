@@ -269,9 +269,32 @@ def page_generator_improved():
                     # Генерация с помощью LLM без шаблона
                     st.info("🤖 Генерация договора с помощью AI...")
 
-                    # TODO: Implement LLM generation
-                    st.warning("⚠️ LLM генерация в разработке. Используется шаблон.")
-                    result = None
+                    from src.services.llm_contract_generator import LLMContractGenerator
+
+                    llm_gen = LLMContractGenerator(st.session_state.llm_gateway)
+
+                    # Формируем полные данные для генерации
+                    full_params = params.copy()
+                    full_params['contract_type'] = contract_type
+
+                    # Генерируем договор
+                    contract_text = llm_gen.generate_contract_from_scratch(full_params)
+
+                    # Сохраняем результат
+                    st.success("✅ Договор успешно сгенерирован с помощью AI!")
+
+                    st.subheader("📄 Сгенерированный договор")
+                    st.text_area("Текст договора", contract_text, height=400)
+
+                    # Кнопка для скачивания
+                    st.download_button(
+                        "📥 Скачать договор",
+                        data=contract_text,
+                        file_name=f"contract_{contract_type}_{user_id}.txt",
+                        mime="text/plain"
+                    )
+
+                    return
                 else:
                     # Генерация по шаблону
                     from src.agents import ContractGeneratorAgent
@@ -309,11 +332,69 @@ def page_generator_improved():
                 else:
                     # Если шаблон не найден - предложить LLM генерацию
                     st.error("❌ Не удалось сгенерировать договор по шаблону")
-                    st.warning("💡 Попробуйте включить 'Генерировать с помощью AI' в расширенных настройках")
+
+                    if st.button("🤖 Попробовать генерацию с помощью AI", type="primary"):
+                        st.info("🤖 Генерируем договор с помощью AI...")
+
+                        from src.services.llm_contract_generator import LLMContractGenerator
+
+                        llm_gen = LLMContractGenerator(st.session_state.llm_gateway)
+
+                        # Формируем полные данные для генерации
+                        full_params = params.copy()
+                        full_params['contract_type'] = contract_type
+
+                        # Генерируем договор
+                        contract_text = llm_gen.generate_contract_from_scratch(full_params)
+
+                        # Сохраняем результат
+                        st.success("✅ Договор успешно сгенерирован с помощью AI!")
+
+                        st.subheader("📄 Сгенерированный договор")
+                        st.text_area("Текст договора", contract_text, height=400)
+
+                        # Кнопка для скачивания
+                        st.download_button(
+                            "📥 Скачать договор",
+                            data=contract_text,
+                            file_name=f"contract_{contract_type}_{user_id}.txt",
+                            mime="text/plain"
+                        )
 
             except Exception as e:
                 st.error(f"❌ Ошибка: {str(e)}")
-                st.info("💡 Попробуйте использовать AI генерацию без шаблона")
+
+                # Предложить AI генерацию при ошибке
+                if st.button("🤖 Попробовать генерацию с помощью AI", key="error_fallback", type="primary"):
+                    try:
+                        st.info("🤖 Генерируем договор с помощью AI...")
+
+                        from src.services.llm_contract_generator import LLMContractGenerator
+
+                        llm_gen = LLMContractGenerator(st.session_state.llm_gateway)
+
+                        # Формируем полные данные для генерации
+                        full_params = params.copy()
+                        full_params['contract_type'] = contract_type
+
+                        # Генерируем договор
+                        contract_text = llm_gen.generate_contract_from_scratch(full_params)
+
+                        # Сохраняем результат
+                        st.success("✅ Договор успешно сгенерирован с помощью AI!")
+
+                        st.subheader("📄 Сгенерированный договор")
+                        st.text_area("Текст договора", contract_text, height=400)
+
+                        # Кнопка для скачивания
+                        st.download_button(
+                            "📥 Скачать договор",
+                            data=contract_text,
+                            file_name=f"contract_{contract_type}_{user_id}.txt",
+                            mime="text/plain"
+                        )
+                    except Exception as e2:
+                        st.error(f"❌ Ошибка AI генерации: {str(e2)}")
 
 
 def page_knowledge_base():

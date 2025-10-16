@@ -182,10 +182,40 @@ def show_login_form():
     """Показать форму входа"""
     st.markdown("### 🔐 Вход в систему")
 
+    # Быстрый выбор демо-аккаунта
+    st.markdown("#### Быстрый вход")
+    st.markdown("Выберите аккаунт для входа:")
+
+    demo_accounts = [
+        {"email": "demo@example.com", "name": "Demo User", "role": "🔵 DEMO", "desc": "Ограниченный функционал (3 договора/день)"},
+        {"email": "user@example.com", "name": "Full User", "role": "🟢 FULL", "desc": "Полный функционал (50 договоров/день)"},
+        {"email": "vip@example.com", "name": "VIP User", "role": "🟡 VIP", "desc": "VIP функционал (1000 договоров/день, приоритет)"},
+        {"email": "admin@example.com", "name": "Admin User", "role": "🔴 ADMIN", "desc": "Администратор (безлимит, управление)"},
+    ]
+
+    cols = st.columns(2)
+    for idx, account in enumerate(demo_accounts):
+        with cols[idx % 2]:
+            if st.button(
+                f"{account['role']}\n{account['name']}",
+                key=f"quick_login_{idx}",
+                use_container_width=True,
+                help=account['desc']
+            ):
+                user = login_user(account['email'])
+                if user:
+                    st.success(f"✅ Добро пожаловать, {user['name']}!")
+                    st.rerun()
+                else:
+                    st.error("❌ Ошибка входа")
+
+    st.markdown("---")
+    st.markdown("#### Вход по email")
+
     with st.form("login_form"):
         email = st.text_input("Email", placeholder="user@example.com")
         password = st.text_input("Пароль", type="password", placeholder="••••••••")
-        submit = st.form_submit_button("Войти")
+        submit = st.form_submit_button("Войти", use_container_width=True)
 
         if submit:
             if email:
@@ -199,15 +229,25 @@ def show_login_form():
                 st.error("❌ Введите email")
 
     st.markdown("---")
-    st.info("""
-    **Демо-режим:**
-    Вы можете использовать систему в демо-режиме с ограниченным функционалом.
 
-    **Тестовые аккаунты:**
-    - demo@example.com (демо)
-    - user@example.com (полный доступ)
-    - vip@example.com (VIP)
-    - admin@example.com (администратор)
+    # Таблица сравнения ролей
+    with st.expander("📊 Сравнение тарифов"):
+        st.markdown("""
+        | Функция | DEMO | FULL | VIP | ADMIN |
+        |---------|------|------|-----|-------|
+        | Договоров/день | 3 | 50 | 1000 | ♾️ |
+        | LLM запросов/день | 10 | 100 | 1000 | ♾️ |
+        | Экспорт PDF | ❌ | ✅ | ✅ | ✅ |
+        | Экспорт XML | ❌ | ✅ | ✅ | ✅ |
+        | RAG поиск | ❌ | ✅ | ✅ | ✅ |
+        | Возражения | ❌ | ✅ | ✅ | ✅ |
+        | Анализ изменений | ❌ | ✅ | ✅ | ✅ |
+        | Приоритет поддержки | ❌ | ❌ | ✅ | ✅ |
+        | Управление | ❌ | ❌ | ❌ | ✅ |
+        """)
+
+    st.info("""
+    💡 **Совет:** Для тестирования всех функций используйте аккаунт **admin@example.com**
     """)
 
 
@@ -220,21 +260,62 @@ def show_user_info():
 
         st.sidebar.markdown("---")
         st.sidebar.markdown(f"### 👤 {user['name']}")
-        st.sidebar.markdown(f"**Роль:** {role.value.upper()}")
+
+        # Показать роль с цветным индикатором
+        role_colors = {
+            UserRole.DEMO: "🔵",
+            UserRole.FULL: "🟢",
+            UserRole.VIP: "🟡",
+            UserRole.ADMIN: "🔴"
+        }
+        role_indicator = role_colors.get(role, "⚪")
+        st.sidebar.markdown(f"**Роль:** {role_indicator} {role.value.upper()}")
 
         # Показать лимиты
-        with st.sidebar.expander("📊 Лимиты"):
-            st.write(f"**Договоров/день:** {perms['contracts_per_day']}")
-            st.write(f"**LLM запросов/день:** {perms['llm_requests_per_day']}")
-            st.write(f"**Макс. размер файла:** {perms['max_file_size_mb']} MB")
+        with st.sidebar.expander("📊 Лимиты и возможности"):
+            contracts_limit = perms['contracts_per_day']
+            if contracts_limit == float('inf'):
+                st.write("**Договоров/день:** ♾️ Безлимит")
+            else:
+                st.write(f"**Договоров/день:** {contracts_limit}")
 
-        if st.sidebar.button("🚪 Выйти"):
-            logout_user()
-            st.rerun()
+            llm_limit = perms['llm_requests_per_day']
+            if llm_limit == float('inf'):
+                st.write("**LLM запросов/день:** ♾️ Безлимит")
+            else:
+                st.write(f"**LLM запросов/день:** {llm_limit}")
+
+            file_size = perms['max_file_size_mb']
+            if file_size == float('inf'):
+                st.write("**Макс. размер файла:** ♾️ Безлимит")
+            else:
+                st.write(f"**Макс. размер файла:** {file_size} MB")
+
+            st.write("---")
+            st.write("**Доступные функции:**")
+            if perms.get('can_export_pdf'):
+                st.write("✅ Экспорт в PDF")
+            if perms.get('can_export_xml'):
+                st.write("✅ Экспорт в XML")
+            if perms.get('can_use_rag'):
+                st.write("✅ RAG поиск")
+            if perms.get('priority_support'):
+                st.write("⭐ Приоритетная поддержка")
+
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            if st.button("🔄 Сменить", use_container_width=True):
+                logout_user()
+                st.session_state.current_page = 'login'
+                st.rerun()
+        with col2:
+            if st.button("🚪 Выйти", use_container_width=True):
+                logout_user()
+                st.rerun()
     else:
         st.sidebar.markdown("---")
-        st.sidebar.info("📝 Демо-режим")
-        if st.sidebar.button("🔐 Войти"):
+        st.sidebar.warning("⚠️ Демо-режим\n\nОграниченный функционал")
+        if st.sidebar.button("🔐 Войти", use_container_width=True):
             st.session_state.current_page = 'login'
             st.rerun()
 
