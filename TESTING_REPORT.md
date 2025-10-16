@@ -279,3 +279,86 @@ return AgentResult(
 **Подпись тестировщика:** Claude Code (Sonnet 4.5)
 **Дата:** 16.10.2025
 **Git commit:** 989cfd8
+
+---
+
+## Обновление от 16.10.2025 (Коммит b11c11e)
+
+### Найдена и исправлена критическая ошибка #2
+
+**Файл:** `app.py:330-338`
+**Тип:** TypeError at runtime
+**Проблема:** Использование несуществующих полей модели Contract
+
+#### Описание ошибки:
+
+При создании экземпляра Contract использовались несуществующие поля:
+- `user_id` (должно быть `assigned_to`)
+- `content` (должно быть `meta_info`)
+- Отсутствовали обязательные поля `file_name` и `document_type`
+
+#### Исправление:
+
+```python
+# До:
+contract = Contract(
+    user_id=user_id,
+    contract_type='unknown',
+    status='uploaded',
+    file_path=file_path,
+    content=parsed_xml
+)
+
+# После:
+contract = Contract(
+    file_name=os.path.basename(file_path),
+    file_path=file_path,
+    document_type='contract',
+    contract_type='unknown',
+    status='uploaded',
+    assigned_to=user_id,
+    meta_info=parsed_xml
+)
+```
+
+#### Правильная структура модели Contract:
+
+**Обязательные поля:**
+- `file_name: String(255)` - имя файла
+- `file_path: Text` - путь к файлу
+- `document_type: String(50)` - тип документа (contract/disagreement/tracked_changes)
+
+**Опциональные поля:**
+- `id: String(36)` - UUID (генерируется автоматически)
+- `contract_type: String(50)` - тип договора
+- `status: String(50)` - статус (default='pending')
+- `assigned_to: String(36)` - FK на users.id
+- `risk_level: String(20)` - уровень риска
+- `meta_info: Text` - метаданные/XML в JSON формате
+- `upload_date, created_at, updated_at: DateTime` - временные метки
+
+### Финальная проверка системы ✅
+
+После всех исправлений проведена финальная комплексная проверка:
+
+1. ✅ Все импорты работают
+2. ✅ Все поля моделей корректны
+3. ✅ DocumentParser работает (parse, parse_docx, parse_pdf)
+4. ✅ LLMGateway работает (call, _call_claude)
+5. ✅ Все агенты имеют execute методы
+6. ✅ app.py синтаксис корректен
+
+**Статус:** Система готова к запуску!
+
+---
+
+## Итоговая статистика всех исправлений
+
+| Коммит | Описание | Файл | Тип ошибки |
+|--------|----------|------|------------|
+| 989cfd8 | Missing data parameter | disagreement_processor_agent.py | TypeError (2 места) |
+| b11c11e | Wrong Contract field names | app.py | TypeError |
+
+**Всего найдено и исправлено:** 3 критические ошибки
+
+**Последняя проверка:** 16.10.2025, все тесты пройдены ✅
