@@ -30,6 +30,7 @@ class UserPermissions:
             "can_use_rag": False,
             "can_generate_contracts": True,
             "can_analyze_contracts": True,
+            "can_use_onboarding": False,
             "can_use_disagreements": False,
             "can_use_changes_analyzer": False,
             "llm_requests_per_day": 10,
@@ -43,6 +44,7 @@ class UserPermissions:
             "can_use_rag": True,
             "can_generate_contracts": True,
             "can_analyze_contracts": True,
+            "can_use_onboarding": True,
             "can_use_disagreements": True,
             "can_use_changes_analyzer": True,
             "llm_requests_per_day": 100,
@@ -56,6 +58,7 @@ class UserPermissions:
             "can_use_rag": True,
             "can_generate_contracts": True,
             "can_analyze_contracts": True,
+            "can_use_onboarding": True,
             "can_use_disagreements": True,
             "can_use_changes_analyzer": True,
             "llm_requests_per_day": 1000,
@@ -70,11 +73,13 @@ class UserPermissions:
             "can_use_rag": True,
             "can_generate_contracts": True,
             "can_analyze_contracts": True,
+            "can_use_onboarding": True,
             "can_use_disagreements": True,
             "can_use_changes_analyzer": True,
             "llm_requests_per_day": float('inf'),
             "can_manage_users": True,
             "can_manage_templates": True,
+            "can_view_logs": True,
             "priority_support": True,
         }
     }
@@ -237,12 +242,16 @@ def show_login_form():
         |---------|------|------|-----|-------|
         | Договоров/день | 3 | 50 | 1000 | ♾️ |
         | LLM запросов/день | 10 | 100 | 1000 | ♾️ |
+        | Генерация договоров | ✅ | ✅ | ✅ | ✅ |
+        | Анализ договоров | ✅ | ✅ | ✅ | ✅ |
+        | Обработка запросов | ❌ | ✅ | ✅ | ✅ |
+        | Возражения | ❌ | ✅ | ✅ | ✅ |
+        | Анализ изменений | ❌ | ✅ | ✅ | ✅ |
         | Экспорт PDF | ❌ | ✅ | ✅ | ✅ |
         | Экспорт XML | ❌ | ✅ | ✅ | ✅ |
         | RAG поиск | ❌ | ✅ | ✅ | ✅ |
-        | Возражения | ❌ | ✅ | ✅ | ✅ |
-        | Анализ изменений | ❌ | ✅ | ✅ | ✅ |
         | Приоритет поддержки | ❌ | ❌ | ✅ | ✅ |
+        | Просмотр логов | ❌ | ❌ | ❌ | ✅ |
         | Управление | ❌ | ❌ | ❌ | ✅ |
         """)
 
