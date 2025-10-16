@@ -115,6 +115,7 @@ References: Use RAG sources when available (precedents, similar cases, legal nor
             if not analysis:
                 return AgentResult(
                     success=False,
+                    data={},
                     error=f"Analysis {analysis_id} not found"
                 )
 
@@ -127,6 +128,7 @@ References: Use RAG sources when available (precedents, similar cases, legal nor
                 logger.warning(f"No risks found for analysis {analysis_id}")
                 return AgentResult(
                     success=False,
+                    data={},
                     error="No risks identified - nothing to object to"
                 )
 
