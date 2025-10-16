@@ -104,6 +104,10 @@ def sidebar_navigation():
         'settings': '⚙️ Настройки'
     }
 
+    # Add logs page for admins
+    if check_feature_access('can_view_logs'):
+        pages['logs'] = '📋 Логи системы'
+
     for key, label in pages.items():
         if st.sidebar.button(label, key=f"nav_{key}"):
             st.session_state.current_page = key
@@ -561,6 +565,124 @@ def page_login():
     show_login_form()
 
 
+def page_logs():
+    """System logs page (admin only)"""
+    st.title("📋 Логи системы")
+
+    # Check admin access
+    if not check_feature_access('can_view_logs'):
+        st.error("⛔ Доступ запрещён. Только для администраторов.")
+        return
+
+    st.markdown("### Мониторинг активности системы")
+
+    # Tabs for different log types
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Системные логи", "🤖 LLM запросы", "👥 Активность пользователей", "⚠️ Ошибки"])
+
+    with tab1:
+        st.subheader("Системные логи")
+
+        # Real-time toggle
+        realtime = st.checkbox("Режим реального времени", value=False)
+
+        # Filter options
+        col1, col2 = st.columns(2)
+        with col1:
+            log_level = st.selectbox("Уровень", ["ALL", "INFO", "WARNING", "ERROR"])
+        with col2:
+            lines = st.number_input("Показать строк", 10, 1000, 100)
+
+        if st.button("🔄 Обновить логи") or realtime:
+            try:
+                # Read log file
+                log_file = "streamlit.log"
+                if os.path.exists(log_file):
+                    with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        all_lines = f.readlines()
+                        # Get last N lines
+                        recent_lines = all_lines[-lines:]
+
+                        # Filter by level
+                        if log_level != "ALL":
+                            recent_lines = [l for l in recent_lines if log_level in l]
+
+                        log_text = ''.join(recent_lines)
+                        st.text_area("Логи", log_text, height=400)
+                else:
+                    st.warning("Файл логов не найден")
+            except Exception as e:
+                st.error(f"Ошибка чтения логов: {e}")
+
+    with tab2:
+        st.subheader("LLM запросы")
+
+        if AGENTS_AVAILABLE:
+            st.info("История запросов к LLM")
+            # This would query database for LLM requests
+            st.markdown("""
+            **Статистика:**
+            - Всего запросов сегодня: -
+            - Успешных: -
+            - Ошибок: -
+            - Средняя задержка: - мс
+            """)
+        else:
+            st.warning("Данные недоступны")
+
+    with tab3:
+        st.subheader("Активность пользователей")
+
+        if AGENTS_AVAILABLE:
+            from src.models import User
+            db = SessionLocal()
+            try:
+                users = db.query(User).all()
+
+                st.markdown(f"**Всего пользователей:** {len(users)}")
+
+                # User table
+                user_data = []
+                for u in users:
+                    user_data.append({
+                        "Email": u.email,
+                        "Имя": u.name,
+                        "Роль": u.role,
+                        "Активен": "✅" if u.active else "❌"
+                    })
+
+                if user_data:
+                    import pandas as pd
+                    df = pd.DataFrame(user_data)
+                    st.dataframe(df, use_container_width=True)
+            finally:
+                db.close()
+        else:
+            st.warning("База данных недоступна")
+
+    with tab4:
+        st.subheader("Журнал ошибок")
+
+        # Last errors
+        st.markdown("**Последние ошибки:**")
+        try:
+            log_file = "streamlit.log"
+            if os.path.exists(log_file):
+                with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    all_lines = f.readlines()
+                    error_lines = [l for l in all_lines if 'ERROR' in l or 'Exception' in l]
+                    recent_errors = error_lines[-50:]
+
+                    if recent_errors:
+                        error_text = ''.join(recent_errors)
+                        st.text_area("Ошибки", error_text, height=400)
+                    else:
+                        st.success("✅ Ошибок не обнаружено")
+            else:
+                st.warning("Файл логов не найден")
+        except Exception as e:
+            st.error(f"Ошибка чтения логов: {e}")
+
+
 def page_settings():
     """Settings page"""
     st.title("⚙️ Настройки")
@@ -612,6 +734,8 @@ def main():
         page_export()
     elif page == 'knowledge_base':
         page_knowledge_base()  # Add knowledge base page
+    elif page == 'logs':
+        page_logs()  # Admin logs page
     elif page == 'settings':
         page_settings()
 

@@ -118,6 +118,7 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
             if not contract_id or not parsed_xml:
                 return AgentResult(
                     success=False,
+                    data={},
                     error="Missing contract_id or parsed_xml"
                 )
 
@@ -131,6 +132,7 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
             if not contract:
                 return AgentResult(
                     success=False,
+                    data={},
                     error=f"Contract {contract_id} not found"
                 )
 
@@ -223,6 +225,7 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
             traceback.print_exc()
             return AgentResult(
                 success=False,
+                data={},
                 error=str(e)
             )
 
