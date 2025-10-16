@@ -328,11 +328,13 @@ def page_analyzer():
                 # Create contract in database
                 st.info("💾 Создание записи в БД...")
                 contract = Contract(
-                    user_id=user_id,
+                    file_name=os.path.basename(file_path),
+                    file_path=file_path,
+                    document_type='contract',
                     contract_type='unknown',  # Will be determined by analyzer
                     status='uploaded',
-                    file_path=file_path,
-                    content=parsed_xml
+                    assigned_to=user_id,
+                    meta_info=parsed_xml  # Store XML in meta_info
                 )
                 st.session_state.db_session.add(contract)
                 st.session_state.db_session.commit()
