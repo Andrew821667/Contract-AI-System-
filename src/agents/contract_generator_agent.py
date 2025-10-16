@@ -208,7 +208,7 @@ Be precise, thorough, and legally accurate."""
                 # Try to get template by ID from metadata
                 template_id = results[0].get('metadata', {}).get('template_id')
                 if template_id:
-                    template = self.db_session.query(Template).filter(Template.id == template_id).first()
+                    template = self.db.query(Template).filter(Template.id == template_id).first()
                     if template:
                         logger.info(f"Template found via RAG: {template.name}")
                         return template

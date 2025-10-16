@@ -256,7 +256,7 @@ References: Use RAG sources when available (precedents, similar cases, legal nor
             prompt = self._build_objection_prompt(risk, recommendations, rag_context, tone)
 
             # Call LLM
-            response = self.llm_gateway.chat(
+            response = self.llm.chat(
                 messages=[
                     {"role": "system", "content": self.get_system_prompt()},
                     {"role": "user", "content": prompt}
