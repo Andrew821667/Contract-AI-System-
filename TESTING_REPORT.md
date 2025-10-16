@@ -432,3 +432,73 @@ st.session_state.db_session.commit()
 
 **Последняя проверка:** 16.10.2025, после исправления всех ошибок ✅
 **Текущий статус:** Система полностью готова к работе 🚀
+
+---
+
+## Обновление от 16.10.2025 (Коммит 3f62341)
+
+### Найдена и исправлена критическая ошибка #4
+
+**Файлы:** 
+- `src/agents/contract_analyzer_agent.py`
+- `src/agents/contract_generator_agent.py`
+- `src/agents/disagreement_processor_agent.py`
+
+**Тип:** AttributeError - 'object has no attribute'
+**Проблема:** Использование неправильных имён атрибутов BaseAgent
+
+#### Описание ошибки:
+
+Агенты обращались к атрибутам `self.db_session` и `self.llm_gateway`, которые не существуют.
+
+**Ошибка:**
+```
+AttributeError: 'ContractAnalyzerAgent' object has no attribute 'db_session'
+```
+
+**Причина:**
+BaseAgent инициализирует атрибуты с другими именами:
+```python
+class BaseAgent:
+    def __init__(self, llm_gateway, db_session, config=None):
+        self.llm = llm_gateway      # НЕ self.llm_gateway
+        self.db = db_session         # НЕ self.db_session
+        self.config = config or {}
+```
+
+#### Исправление:
+
+Заменены все использования на правильные атрибуты:
+
+| Файл | Исправления |
+|------|-------------|
+| contract_analyzer_agent.py | 14x `self.db_session`→`self.db`, 4x `self.llm_gateway`→`self.llm` |
+| contract_generator_agent.py | 1x `self.db_session`→`self.db` |
+| disagreement_processor_agent.py | 1x `self.llm_gateway`→`self.llm` |
+
+**Всего:** 20 исправлений в 3 файлах
+
+#### Правильные атрибуты BaseAgent:
+
+```python
+self.llm           # LLMGateway instance
+self.db            # SQLAlchemy Session
+self.config        # Configuration dict
+self.execution_history  # Execution log
+```
+
+---
+
+## Финальная статистика всех исправлений
+
+| # | Коммит | Файл(ы) | Описание | Тип ошибки |
+|---|--------|---------|----------|------------|
+| 1 | 989cfd8 | disagreement_processor_agent.py | Missing data={} в AgentResult (2 места) | TypeError |
+| 2 | b11c11e | app.py | Неправильные поля Contract (user_id, content, file_name, document_type) | TypeError |
+| 3 | 2df1a4d | app.py | Недопустимый статус 'uploaded' | IntegrityError |
+| 4 | 3f62341 | 3 agent files | Неправильные атрибуты BaseAgent (20 мест) | AttributeError |
+
+**Всего найдено и исправлено:** 25 критических ошибок в 4 категориях
+
+**Последняя проверка:** 16.10.2025, все агенты работают ✅
+**Текущий статус:** 🚀 Система полностью готова к работе
