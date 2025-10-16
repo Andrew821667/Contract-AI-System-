@@ -332,7 +332,7 @@ def page_analyzer():
                     file_path=file_path,
                     document_type='contract',
                     contract_type='unknown',  # Will be determined by analyzer
-                    status='uploaded',
+                    status='pending',  # Valid values: pending, analyzing, reviewing, completed, error
                     assigned_to=user_id,
                     meta_info=parsed_xml  # Store XML in meta_info
                 )
@@ -342,6 +342,10 @@ def page_analyzer():
 
                 # Analyze contract
                 st.info("🔍 Анализ договора...")
+                # Update status to analyzing
+                contract.status = 'analyzing'
+                st.session_state.db_session.commit()
+
                 agent = ContractAnalyzerAgent(
                     llm_gateway=st.session_state.llm_gateway,
                     db_session=st.session_state.db_session
@@ -358,6 +362,10 @@ def page_analyzer():
                 })
                 
                 if result.success:
+                    # Update status to completed
+                    contract.status = 'completed'
+                    st.session_state.db_session.commit()
+
                     st.success("✅ Анализ завершен")
 
                     # Determine risk level from risks
@@ -385,18 +393,25 @@ def page_analyzer():
                                 st.write(f"**Раздел:** {risk.get('section_name', 'N/A')}")
                     else:
                         st.info("Риски не обнаружены")
-                    
+
                     # Recommendations
                     st.subheader("Рекомендации")
                     recommendations = result.data.get('recommendations', [])
                     if recommendations:
                         for rec in recommendations:
                             st.write(f"- {rec.get('recommendation_text', 'N/A')}")
-                    
+
                 else:
+                    # Update status to error
+                    contract.status = 'error'
+                    st.session_state.db_session.commit()
                     st.error(f"Ошибка: {result.error}")
-            
+
             except Exception as e:
+                # Update status to error if contract exists
+                if 'contract' in locals():
+                    contract.status = 'error'
+                    st.session_state.db_session.commit()
                 st.error(f"Ошибка: {e}")
 
 
