@@ -125,7 +125,7 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
             logger.info(f"Starting analysis for contract {contract_id}")
 
             # 1. Get contract from DB
-            contract = self.db_session.query(Contract).filter(
+            contract = self.db.query(Contract).filter(
                 Contract.id == contract_id
             ).first()
 
@@ -194,8 +194,8 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
                 'template_comparison': template_comparison,
                 'counterparty_checked': counterparty_data is not None
             }
-            self.db_session.commit()
-            self.db_session.refresh(analysis)
+            self.db.commit()
+            self.db.refresh(analysis)
 
             # 13. Determine next action
             next_action = self._determine_next_action(risks, dispute_prediction)
@@ -236,9 +236,9 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
             status='in_progress',
             result_data={}
         )
-        self.db_session.add(analysis)
-        self.db_session.commit()
-        self.db_session.refresh(analysis)
+        self.db.add(analysis)
+        self.db.commit()
+        self.db.refresh(analysis)
         return analysis
 
     def _extract_structure(self, xml_content: str) -> Dict[str, Any]:
@@ -380,7 +380,7 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
             )
 
             # Call LLM
-            response = self.llm_gateway.chat(
+            response = self.llm.chat(
                 messages=[
                     {"role": "system", "content": self.get_system_prompt()},
                     {"role": "user", "content": prompt}
@@ -517,7 +517,7 @@ Return JSON:
 
 Return ONLY valid JSON."""
 
-            response = self.llm_gateway.chat(
+            response = self.llm.chat(
                 messages=[
                     {"role": "system", "content": self.get_system_prompt()},
                     {"role": "user", "content": prompt}
@@ -594,7 +594,7 @@ Return ONLY valid JSON."""
 
 Return ONLY valid JSON."""
 
-            response = self.llm_gateway.chat(
+            response = self.llm.chat(
                 messages=[
                     {"role": "system", "content": self.get_system_prompt()},
                     {"role": "user", "content": prompt}
@@ -698,7 +698,7 @@ Return JSON:
 
 Return ONLY valid JSON."""
 
-            response = self.llm_gateway.chat(
+            response = self.llm.chat(
                 messages=[
                     {"role": "system", "content": self.get_system_prompt()},
                     {"role": "user", "content": prompt}
@@ -769,8 +769,8 @@ Return ONLY valid JSON."""
         for risk in risks:
             risk.analysis_id = analysis_id
             risk.contract_id = contract_id
-            self.db_session.add(risk)
-        self.db_session.commit()
+            self.db.add(risk)
+        self.db.commit()
 
     def _save_recommendations(
         self, analysis_id: str, contract_id: str, recommendations: List[ContractRecommendation]
@@ -779,8 +779,8 @@ Return ONLY valid JSON."""
         for rec in recommendations:
             rec.analysis_id = analysis_id
             rec.contract_id = contract_id
-            self.db_session.add(rec)
-        self.db_session.commit()
+            self.db.add(rec)
+        self.db.commit()
 
     def _save_suggested_changes(
         self, analysis_id: str, contract_id: str, changes: List[ContractSuggestedChange]
@@ -789,8 +789,8 @@ Return ONLY valid JSON."""
         for change in changes:
             change.analysis_id = analysis_id
             change.contract_id = contract_id
-            self.db_session.add(change)
-        self.db_session.commit()
+            self.db.add(change)
+        self.db.commit()
 
     def _save_annotations(
         self, analysis_id: str, contract_id: str, annotations: List[ContractAnnotation]
@@ -799,8 +799,8 @@ Return ONLY valid JSON."""
         for annotation in annotations:
             annotation.analysis_id = analysis_id
             annotation.contract_id = contract_id
-            self.db_session.add(annotation)
-        self.db_session.commit()
+            self.db.add(annotation)
+        self.db.commit()
 
     def _risk_to_dict(self, risk: ContractRisk) -> Dict[str, Any]:
         """Convert ContractRisk to dict"""
