@@ -181,7 +181,7 @@ References: Use RAG sources when available (precedents, similar cases, legal nor
                     'by_priority': self._count_by_priority(objections)
                 },
                 next_action='review',
-                message=f"Generated {len(objections)} objections - ready for lawyer review"
+                metadata={'message': f"Generated {len(objections)} objections - ready for lawyer review"}
             )
 
         except Exception as e:
@@ -462,7 +462,7 @@ Return ONLY valid JSON, no additional text."""
                     'selected_count': len(selected_objection_ids)
                 },
                 next_action='approve',
-                message=f"Selected {len(selected_objection_ids)} objections for review"
+                metadata={'message': f"Selected {len(selected_objection_ids)} objections for review"}
             )
 
         except Exception as e:
@@ -528,7 +528,7 @@ Return ONLY valid JSON, no additional text."""
                     'objection_count': len(sorted_objections)
                 },
                 next_action='export',
-                message="XML document generated"
+                metadata={'message': "XML document generated"}
             )
 
         except Exception as e:

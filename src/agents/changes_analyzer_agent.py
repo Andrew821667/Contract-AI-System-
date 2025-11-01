@@ -107,7 +107,7 @@ Be objective, precise, and focus on legal and business implications.
                     'report_path': report_path
                 },
                 next_action='review',
-                message=f"Detected {len(change_records)} changes"
+                metadata={'message': f"Detected {len(change_records)} changes"}
             )
 
         except Exception as e:
