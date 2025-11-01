@@ -295,5 +295,31 @@ __all__ = [
     "ReviewTask",
     "LegalDocument",
     "ExportLog",
-    "ContractFeedback"
+    "ContractFeedback",
+    "LLMCache"
 ]
+
+
+class LLMCache(Base):
+    """Кэш LLM запросов для экономии токенов"""
+    __tablename__ = "llm_cache"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    prompt_hash = Column(String(64), nullable=False, index=True, unique=True)  # SHA256 хэш промпта
+    provider = Column(String(50), nullable=False)  # openai, claude, etc
+    model = Column(String(100), nullable=False)  # gpt-4o-mini, gpt-4o, etc
+    prompt = Column(Text, nullable=False)  # Оригинальный промпт
+    system_prompt = Column(Text)  # System prompt если есть
+    response = Column(Text, nullable=False)  # Ответ от LLM
+    response_format = Column(String(20), nullable=False)  # text или json
+    temperature = Column(Float)  # Температура генерации
+    max_tokens = Column(Integer)  # Макс токенов
+    input_tokens = Column(Integer)  # Использовано input токенов
+    output_tokens = Column(Integer)  # Использовано output токенов
+    cost_usd = Column(Float)  # Стоимость запроса в USD
+    hit_count = Column(Integer, default=0)  # Сколько раз использован из кэша
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    last_accessed = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<LLMCache(id={self.id}, model={self.model}, hits={self.hit_count})>"

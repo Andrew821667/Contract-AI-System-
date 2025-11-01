@@ -52,7 +52,7 @@ class ContractRisk(Base):
             name='check_risk_type'
         ),
         CheckConstraint(
-            "severity IN ('critical', 'significant', 'minor')",
+            "severity IN ('critical', 'high', 'significant', 'medium', 'minor', 'low')",
             name='check_severity'
         ),
         CheckConstraint(

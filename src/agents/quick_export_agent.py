@@ -110,7 +110,7 @@ class QuickExportAgent(BaseAgent):
                     'file_paths': file_paths,
                     'export_log_id': export_log.id if export_log else None
                 },
-                message=f"Exported to {len(file_paths)} format(s)"
+                metadata={'message': f"Exported to {len(file_paths)} format(s)"}
             )
 
         except Exception as e:

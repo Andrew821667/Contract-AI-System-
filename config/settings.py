@@ -53,6 +53,27 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 4000
     llm_timeout: int = 120
 
+    # Test Mode - экономия токенов
+    llm_test_mode: bool = True  # Переключатель: True = тестовый режим, False = продакшн
+
+    # Two-level analysis system
+    llm_quick_model: str = "gpt-4o-mini"  # Быстрый анализ (Уровень 1)
+    llm_deep_model: str = "gpt-4o"        # Глубокий анализ (Уровень 2)
+
+    # Batch analysis settings
+    llm_batch_size: int = 5  # Сколько пунктов анализировать в одном запросе
+
+    # Token limits for test mode
+    llm_test_max_tokens: int = 800       # Для тестового режима
+    llm_test_max_clauses: int = 10       # Макс. пунктов для анализа в тесте
+
+    # Model pricing (per 1M tokens) для расчёта стоимости
+    llm_pricing: dict = {
+        "gpt-4o-mini": {"input": 0.15, "output": 0.60},
+        "gpt-4o": {"input": 2.50, "output": 10.00},
+        "gpt-4-turbo": {"input": 10.00, "output": 30.00},
+    }
+
     # RAG Settings
     rag_top_k: int = 5
     embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
