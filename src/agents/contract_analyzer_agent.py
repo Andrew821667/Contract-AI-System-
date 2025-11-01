@@ -17,6 +17,7 @@ from ..models.analyzer_models import (
     ContractSuggestedChange
 )
 from ..models.database import Contract, AnalysisResult
+from config.settings import settings
 
 # Optional RAG import
 try:
@@ -42,12 +43,17 @@ class ContractAnalyzerAgent(BaseAgent):
 
     def __init__(
         self,
-        llm_gateway: LLMGateway,
-        db_session,
+        llm_gateway: LLMGateway = None,
+        db_session = None,
         template_manager: Optional[TemplateManager] = None,
         rag_system: Optional['RAGSystem'] = None,
         counterparty_service: Optional[CounterpartyService] = None
     ):
+        # Если LLM не передан, создаём с быстрой моделью для первого уровня
+        if llm_gateway is None:
+            from config.settings import settings
+            llm_gateway = LLMGateway(model=settings.llm_quick_model)
+        
         super().__init__(llm_gateway, db_session)
         self.template_manager = template_manager or TemplateManager(db_session)
         self.rag_system = rag_system
@@ -184,16 +190,17 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
                 parsed_xml, metadata.get('contract_type')
             )
 
-            # 12. Update analysis record
-            analysis.status = 'completed'
-            analysis.result_data = {
+            # 12. Update analysis record with results
+            # Store metadata in risks_by_category as JSON
+            import json
+            analysis.risks_by_category = json.dumps({
                 'risk_count': len(risks),
                 'recommendation_count': len(recommendations),
                 'suggested_changes_count': len(suggested_changes),
                 'dispute_probability': dispute_prediction.get('score'),
                 'template_comparison': template_comparison,
                 'counterparty_checked': counterparty_data is not None
-            }
+            }, ensure_ascii=False)
             self.db.commit()
             self.db.refresh(analysis)
 
@@ -201,6 +208,9 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
             next_action = self._determine_next_action(risks, dispute_prediction)
 
             logger.info(f"Analysis completed: {len(risks)} risks, {len(recommendations)} recommendations")
+
+            # Get detailed clause analyses if available
+            clause_analyses = getattr(self, '_clause_analyses', [])
 
             return AgentResult(
                 success=True,
@@ -213,10 +223,13 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
                     'annotations': [self._annotation_to_dict(a) for a in annotations],
                     'dispute_prediction': dispute_prediction,
                     'template_comparison': template_comparison,
-                    'counterparty_data': counterparty_data
+                    'counterparty_data': counterparty_data,
+                    'clause_analyses': clause_analyses  # Детальный анализ каждого пункта
                 },
                 next_action=next_action,
-                message=f"Analysis completed: {len(risks)} risks identified, {len(recommendations)} recommendations"
+                metadata={
+                    'message': f"Analysis completed: {len(risks)} risks identified, {len(recommendations)} recommendations, {len(clause_analyses)} clauses analyzed"
+                }
             )
 
         except Exception as e:
@@ -233,8 +246,12 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
         """Create analysis result record"""
         analysis = AnalysisResult(
             contract_id=contract.id,
-            status='in_progress',
-            result_data={}
+            entities='{}',
+            compliance_issues='{}',
+            legal_issues='{}',
+            risks_by_category='{}',
+            recommendations='{}',
+            version=1
         )
         self.db.add(analysis)
         self.db.commit()
@@ -286,13 +303,19 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
                     'xpath': f'//{term_elem.tag}'
                 }
 
-            # Extract all sections
+            # Extract all sections with detailed info
             for elem in root.iter():
                 if elem.tag not in ['contract', 'party', 'price', 'term']:
+                    text_content = elem.text or ''
+                    # Also capture text from child elements
+                    full_text = ''.join(elem.itertext()).strip()
+
                     structure['sections'].append({
                         'tag': elem.tag,
-                        'text': elem.text or '',
-                        'xpath': f'//{elem.tag}'
+                        'text': text_content,
+                        'full_text': full_text,
+                        'xpath': f'//{elem.tag}',
+                        'attributes': dict(elem.attrib)
                     })
 
             return structure
@@ -302,6 +325,216 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
             import traceback
             traceback.print_exc()
             return {}
+
+    def _extract_contract_clauses(self, xml_content: str) -> List[Dict[str, Any]]:
+        """
+        Extract individual contract clauses for detailed analysis
+        Разбивает договор на отдельные пункты для детального анализа
+        """
+        try:
+            logger.info("Starting clause extraction from XML...")
+            tree = etree.fromstring(xml_content.encode('utf-8'))
+            root = tree
+
+            logger.info(f"Root tag: {root.tag}, children: {len(list(root))}")
+
+            clauses = []
+            clause_counter = 1
+
+            # Рекурсивная функция для извлечения пунктов
+            def extract_recursive(element, parent_path="", level=0):
+                nonlocal clause_counter
+
+                # Пропускаем только contract и metadata на верхнем уровне
+                if level == 0 and element.tag in ['contract', 'document', 'root']:
+                    logger.info(f"Processing root element: {element.tag}")
+                    for child in element:
+                        extract_recursive(child, element.tag, level + 1)
+                    return
+
+                # Получаем текст элемента
+                elem_text = (element.text or '').strip()
+
+                # Собираем весь текст из дочерних элементов
+                full_text = ''.join(element.itertext()).strip()
+
+                # Определяем тип пункта
+                clause_type = self._determine_clause_type(element.tag, full_text)
+
+                # Путь к пункту
+                current_path = f"{parent_path}/{element.tag}" if parent_path else element.tag
+
+                # Если есть содержательный текст - это пункт договора
+                # Снижаем порог до 5 символов для захвата коротких пунктов
+                if full_text and len(full_text) > 5:
+                    clause = {
+                        'id': f"clause_{clause_counter}",
+                        'number': clause_counter,
+                        'tag': element.tag,
+                        'path': current_path,
+                        'xpath': current_path,  # Use path instead of getpath
+                        'title': self._extract_clause_title(element.tag, full_text),
+                        'text': full_text[:2000],  # Ограничиваем текст 2000 символов
+                        'type': clause_type,
+                        'level': level,
+                        'attributes': dict(element.attrib),
+                        'children_count': len(list(element))
+                    }
+                    clauses.append(clause)
+                    logger.debug(f"Clause {clause_counter}: {element.tag} - {full_text[:50]}")
+                    clause_counter += 1
+
+                    # Если у элемента нет детей - не идём дальше
+                    if len(list(element)) == 0:
+                        return
+
+                # Рекурсивно обрабатываем дочерние элементы
+                for child in element:
+                    extract_recursive(child, current_path, level + 1)
+
+            extract_recursive(root)
+
+            logger.info(f"✓ Extracted {len(clauses)} contract clauses for detailed analysis")
+
+            # Если не нашли пунктов - попробуем альтернативный метод
+            if len(clauses) == 0:
+                logger.warning("No clauses found with standard extraction, trying alternative method...")
+                clauses = self._extract_clauses_alternative(xml_content)
+                logger.info(f"Alternative method found {len(clauses)} clauses")
+
+            return clauses
+
+        except Exception as e:
+            logger.error(f"Clause extraction failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    def _extract_clauses_alternative(self, xml_content: str) -> List[Dict[str, Any]]:
+        """
+        Alternative method: split contract into sections based on XML structure
+        Специально для DocumentParser который создаёт <clauses><clause>...</clause></clauses>
+        """
+        try:
+            tree = etree.fromstring(xml_content.encode('utf-8'))
+            clauses = []
+
+            # СНАЧАЛА пробуем найти <clauses><clause> структуру от DocumentParser
+            clauses_container = tree.find('.//clauses')
+            if clauses_container is not None:
+                logger.info("Found <clauses> container from DocumentParser")
+                clause_elements = clauses_container.findall('clause')
+                logger.info(f"Found {len(clause_elements)} clause elements")
+
+                for idx, clause_elem in enumerate(clause_elements, 1):
+                    # Извлекаем title и content
+                    title_elem = clause_elem.find('title')
+                    content_elem = clause_elem.find('content')
+
+                    title = title_elem.text if title_elem is not None and title_elem.text else f"Пункт {idx}"
+
+                    # Собираем весь текст из content
+                    if content_elem is not None:
+                        paragraphs = content_elem.findall('paragraph')
+                        full_text = '\n'.join([p.text for p in paragraphs if p.text])
+                    else:
+                        full_text = ''.join(clause_elem.itertext()).strip()
+
+                    if full_text and len(full_text) > 10:
+                        clause = {
+                            'id': clause_elem.get('id', f"clause_{idx}"),
+                            'number': idx,
+                            'tag': 'clause',
+                            'path': f"/clauses/clause[{idx}]",
+                            'xpath': f"/clauses/clause[{idx}]",  # Use path instead of getpath
+                            'title': title,
+                            'text': full_text[:2000],
+                            'type': clause_elem.get('type', self._determine_clause_type(title, full_text)),
+                            'level': 0,
+                            'attributes': dict(clause_elem.attrib),
+                            'children_count': len(list(clause_elem))
+                        }
+                        clauses.append(clause)
+                        logger.info(f"✓ Extracted clause {idx}: {title[:50]}")
+
+                if len(clauses) > 0:
+                    logger.info(f"✅ Successfully extracted {len(clauses)} clauses from DocumentParser format")
+                    return clauses[:50]  # Limit to 50
+
+            # FALLBACK: если нет <clauses>, берём все элементы с текстом
+            logger.info("No <clauses> found, trying generic element extraction...")
+            all_elements = list(tree.iter())
+            logger.info(f"Found {len(all_elements)} total XML elements")
+
+            clause_counter = 1
+            for elem in all_elements:
+                full_text = ''.join(elem.itertext()).strip()
+
+                # Берём элементы с текстом длиннее 10 символов
+                if full_text and len(full_text) > 10:
+                    # Пропускаем элементы, чей текст полностью совпадает с родителем
+                    parent = elem.getparent()
+                    if parent is not None:
+                        parent_text = ''.join(parent.itertext()).strip()
+                        if full_text == parent_text:
+                            continue
+
+                    clause = {
+                        'id': f"clause_{clause_counter}",
+                        'number': clause_counter,
+                        'tag': elem.tag,
+                        'path': f"/{elem.tag}",
+                        'xpath': f"/{elem.tag}",  # Use path instead of getpath
+                        'title': self._extract_clause_title(elem.tag, full_text),
+                        'text': full_text[:2000],
+                        'type': self._determine_clause_type(elem.tag, full_text),
+                        'level': 0,
+                        'attributes': dict(elem.attrib),
+                        'children_count': len(list(elem))
+                    }
+                    clauses.append(clause)
+                    clause_counter += 1
+
+            return clauses[:50]  # Ограничиваем до 50 пунктов для разумного времени анализа
+
+        except Exception as e:
+            logger.error(f"Alternative extraction failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
+
+    def _determine_clause_type(self, tag: str, text: str) -> str:
+        """Определяет тип пункта договора"""
+        tag_lower = tag.lower()
+        text_lower = text.lower()
+
+        if any(word in tag_lower for word in ['price', 'payment', 'cost', 'цена', 'оплата', 'стоимость']):
+            return 'financial'
+        elif any(word in tag_lower for word in ['term', 'deadline', 'срок', 'период']):
+            return 'temporal'
+        elif any(word in tag_lower for word in ['party', 'сторон', 'контрагент']):
+            return 'parties'
+        elif any(word in tag_lower for word in ['liability', 'penalty', 'ответственность', 'штраф', 'пеня']):
+            return 'liability'
+        elif any(word in tag_lower for word in ['dispute', 'arbitration', 'спор', 'арбитраж']):
+            return 'dispute'
+        elif any(word in tag_lower for word in ['subject', 'предмет', 'объект']):
+            return 'subject'
+        elif any(word in tag_lower for word in ['termination', 'расторжение']):
+            return 'termination'
+        else:
+            return 'general'
+
+    def _extract_clause_title(self, tag: str, text: str) -> str:
+        """Извлекает заголовок пункта"""
+        # Берём первые 100 символов или до первой точки
+        lines = text.split('\n')
+        first_line = lines[0].strip() if lines else text
+
+        if len(first_line) > 80:
+            return first_line[:80] + "..."
+
+        return first_line or tag
 
     def _check_counterparties(
         self, xml_content: str, metadata: Dict[str, Any]
@@ -333,37 +566,543 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
     def _get_rag_context(
         self, xml_content: str, metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """Get RAG context (analogues + precedents + legal norms)"""
-        if not self.rag_system:
-            return {'sources': [], 'context': ''}
-
+        """Get RAG context (analogues + precedents + legal norms) + contract summary"""
         try:
-            # Extract key terms for RAG query
+            # Извлекаем базовую информацию о договоре из XML
+            from lxml import etree
+            tree = etree.fromstring(xml_content.encode('utf-8'))
+
+            # Извлекаем стороны
+            parties = []
+            for party in tree.findall('.//party'):
+                parties.append({
+                    'name': party.findtext('name', 'Не указано'),
+                    'role': party.get('role', 'unknown'),
+                    'inn': party.findtext('inn', '')
+                })
+
+            # Извлекаем тип договора из тега или метаданных
             contract_type = metadata.get('contract_type', 'unknown')
+            if contract_type == 'unknown':
+                # Пытаемся определить из содержимого
+                root_tag = tree.tag if hasattr(tree, 'tag') else 'contract'
+                contract_type = root_tag.replace('_', ' ').replace('contract', 'договор')
+
+            # Извлекаем предмет договора
             subject = metadata.get('subject', '')
+            if not subject:
+                # Ищем в first paragraph или description
+                desc_elem = tree.find('.//description')
+                if desc_elem is not None and desc_elem.text:
+                    subject = desc_elem.text[:200]
+                else:
+                    subject = "Не указан явно"
 
-            query = f"Договор {contract_type}: {subject}"
+            contract_summary = {
+                'type': contract_type,
+                'parties': parties,
+                'subject': subject,
+                'party_count': len(parties)
+            }
 
-            # Search RAG
-            results = self.rag_system.search(
-                query=query,
-                n_results=10,
-                filter_metadata={'type': ['analogue', 'precedent', 'legal_norm']}
-            )
+            # Search RAG if available
+            rag_results = []
+            rag_context = ""
 
-            context = "\n\n".join([
-                f"[{r['metadata'].get('type', 'unknown')}] {r['text']}"
-                for r in results
-            ])
+            if self.rag_system:
+                query = f"Договор {contract_type}: {subject}"
+                rag_results = self.rag_system.search(
+                    query=query,
+                    n_results=10,
+                    filter_metadata={'type': ['analogue', 'precedent', 'legal_norm']}
+                )
+                rag_context = "\n\n".join([
+                    f"[{r['metadata'].get('type', 'unknown')}] {r['text']}"
+                    for r in rag_results
+                ])
 
             return {
-                'sources': results,
-                'context': context
+                'sources': rag_results,
+                'context': rag_context,
+                'contract_summary': contract_summary
             }
 
         except Exception as e:
             logger.error(f"RAG context retrieval failed: {e}")
-            return {'sources': [], 'context': ''}
+            # Возвращаем минимальный контекст
+            return {
+                'sources': [],
+                'context': '',
+                'contract_summary': {
+                    'type': metadata.get('contract_type', 'неизвестный'),
+                    'parties': [],
+                    'subject': metadata.get('subject', 'не указан')
+                }
+            }
+
+
+    def _analyze_clauses_batch(
+        self, clauses: List[Dict[str, Any]], rag_context: Dict[str, Any], batch_size: int = 5
+    ) -> List[Dict[str, Any]]:
+        """
+        Батч-анализ нескольких пунктов договора за один LLM вызов
+        Экономит токены на system prompt
+
+        Args:
+            clauses: Список пунктов для анализа
+            rag_context: Контекст из RAG
+            batch_size: Сколько пунктов анализировать за раз
+
+        Returns:
+            Список результатов анализа
+        """
+        all_analyses = []
+
+        # Извлекаем контекст договора из RAG
+        contract_summary = rag_context.get('contract_summary', {})
+        contract_type = contract_summary.get('type', 'неизвестный')
+        parties = contract_summary.get('parties', [])
+        subject = contract_summary.get('subject', 'не указан')
+
+        # Разбиваем на батчи
+        for i in range(0, len(clauses), batch_size):
+            batch = clauses[i:i + batch_size]
+
+            logger.info(f"Analyzing batch {i//batch_size + 1}: clauses {i+1}-{i+len(batch)}")
+
+            # Формируем промпт для батча
+            clauses_text = ""
+            for idx, clause in enumerate(batch, 1):
+                clauses_text += f"""
+[ПУНКТ {clause['number']}]
+Заголовок: {clause['title']}
+Текст: {clause['text'][:300]}{'...' if len(clause['text']) > 300 else ''}
+---
+"""
+
+            prompt = f"""Ты - опытный юрист-эксперт по договорному праву РФ.
+
+КОНТЕКСТ ДОГОВОРА:
+- Тип договора: {contract_type}
+- Стороны: {', '.join([p.get('name', '') for p in parties]) if parties else 'не указаны'}
+- Предмет: {subject}
+
+ЗАДАЧА: Проанализируй {len(batch)} пунктов договора как профессиональный юрист.
+
+{clauses_text}
+
+Для КАЖДОГО пункта проведи детальную юридическую экспертизу и верни JSON в массиве:
+[
+  {{
+    "clause_number": <номер пункта>,
+    "clarity_score": <0-10, где 10 - идеально чёткая формулировка>,
+    "legal_compliance": {{
+      "score": <0-10, где 10 - полное соответствие ГК РФ>,
+      "issues": ["конкретная проблема со ссылкой на статью ГК РФ"],
+      "relevant_laws": ["ст. 421 ГК РФ - свобода договора"]
+    }},
+    "risks": [
+      {{
+        "risk_type": "legal|financial|operational|reputational",
+        "severity": "high|medium|low",
+        "probability": "high|medium|low",
+        "title": "Краткое название риска",
+        "description": "Подробное описание риска и его последствий",
+        "consequences": "Конкретные последствия для вашей компании"
+      }}
+    ],
+    "recommendations": [
+      {{
+        "priority": "critical|high|medium|low",
+        "category": "legal_compliance|risk_mitigation|financial_optimization|clarity_improvement",
+        "title": "Краткое название рекомендации",
+        "description": "Конкретная рекомендация с обоснованием",
+        "reasoning": "Почему это важно",
+        "expected_benefit": "Ожидаемая польза от внедрения"
+      }}
+    ],
+    "ambiguities": ["Конкретная двусмысленность в формулировке"],
+    "missing_elements": ["Отсутствующий элемент, обязательный по ГК РФ"]
+  }}
+]
+
+ТРЕБОВАНИЯ К АНАЛИЗУ:
+1. **ВАЖНО:** Не ставь оценки 0/10 или 1/10 без КРАЙНЕ веской причины. Минимальная оценка для обычного текста - 3/10. Оценка 0/10 допустима ТОЛЬКО если:
+   - Текст полностью отсутствует или нечитаем
+   - Пункт содержит прямое нарушение закона
+   - Формулировка абсолютно непригодна для использования
+2. Оценивай реальный текст по существу, а не формально
+3. В legal_compliance указывай конкретные статьи ГК РФ (ст. 309, 310, 330, 421, 431, 450, 451, 702, 708 и др.)
+4. В risks описывай РЕАЛЬНЫЕ юридические риски с конкретными последствиями
+5. В recommendations давай КОНКРЕТНЫЕ применимые советы, не общие фразы
+6. Если пункт действительно проблемный - укажи это с детальным обоснованием"""
+
+            try:
+                # Используем быструю модель для первого уровня
+                logger.info(f"🔍 DEBUG: Using model = {self.llm.model}, provider = {self.llm.provider}")
+                logger.info(f"🔍 DEBUG: Prompt length = {len(prompt)} characters (batch of {len(batch)} clauses)")
+                response = self.llm.call(
+                    prompt=prompt,
+                    system_prompt="""Ты - ведущий эксперт по договорному праву РФ с 15-летним опытом.
+
+ТВОЯ РОЛЬ: Анализируй договоры как профессиональный юрист, выявляя РЕАЛЬНЫЕ риски и давая КОНКРЕТНЫЕ рекомендации.
+
+КРИТИЧЕСКИ ВАЖНО:
+1. Отвечай СТРОГО в формате JSON массива
+2. Проводи РЕАЛЬНУЮ юридическую экспертизу, не формальную
+3. Ссылайся на конкретные статьи ГК РФ (ст. 309, 310, 330, 421, 431, 450, 451 и др.)
+4. Оценки давай по реальному качеству формулировок, не ставь 0/10 без причины
+5. Риски описывай с последствиями и вероятностью
+6. Рекомендации должны быть КОНКРЕТНЫМИ и ПРИМЕНИМЫМИ
+
+Твой анализ будет использован юристами компании для принятия решений!""",
+                    response_format="json",
+                    temperature=0.2,
+                    max_tokens=settings.llm_test_max_tokens if settings.llm_test_mode else settings.llm_max_tokens
+                )
+
+                # Parse response
+                batch_analyses = response if isinstance(response, list) else []
+
+                # Валидация и исправление оценок 0/10
+                for analysis in batch_analyses:
+                    # Исправляем оценку чёткости если 0
+                    if analysis.get('clarity_score', 0) == 0:
+                        logger.warning(f"Clause {analysis.get('clause_number')} has clarity_score=0, setting to 3 (needs review)")
+                        analysis['clarity_score'] = 3
+
+                    # Исправляем оценку соответствия если 0
+                    if isinstance(analysis.get('legal_compliance'), dict):
+                        if analysis['legal_compliance'].get('score', 0) == 0:
+                            logger.warning(f"Clause {analysis.get('clause_number')} has legal_compliance=0, setting to 3 (needs review)")
+                            analysis['legal_compliance']['score'] = 3
+                            if not analysis['legal_compliance'].get('issues'):
+                                analysis['legal_compliance']['issues'] = ['Требуется дополнительная правовая экспертиза']
+
+                if not batch_analyses:
+                    logger.warning(f"Batch analysis returned empty/invalid response, falling back to individual analysis")
+                    # Fallback: analyze individually
+                    for clause in batch:
+                        try:
+                            analysis = self._analyze_clause_detailed(clause, rag_context)
+                            all_analyses.append(analysis)
+                        except Exception as e:
+                            logger.error(f"Individual analysis failed for clause {clause['number']}: {e}")
+                            all_analyses.append(self._get_fallback_analysis(clause))
+                else:
+                    # Add xpath from original clauses
+                    for analysis in batch_analyses:
+                        clause_num = analysis.get('clause_number')
+                        # Find matching clause
+                        for clause in batch:
+                            if clause['number'] == clause_num:
+                                analysis['clause_xpath'] = clause['xpath']
+                                analysis['clause_title'] = clause['title']
+                                break
+                        all_analyses.append(analysis)
+
+                logger.info(f"✓ Batch {i//batch_size + 1} analyzed: {len(batch_analyses)} clauses")
+
+            except Exception as e:
+                logger.error(f"Batch analysis failed: {e}, falling back to individual analysis")
+                # Fallback: analyze individually
+                for clause in batch:
+                    try:
+                        analysis = self._analyze_clause_detailed(clause, rag_context)
+                        all_analyses.append(analysis)
+                    except Exception as e2:
+                        logger.error(f"Individual analysis failed for clause {clause['number']}: {e2}")
+                        all_analyses.append(self._get_fallback_analysis(clause))
+
+        return all_analyses
+
+    def analyze_deep(self, clause_ids: list, contract_id: str, xml_content: str, rag_context: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Глубокий анализ конкретных пунктов с использованием gpt-4o (Уровень 2)
+        
+        Args:
+            clause_ids: Список ID пунктов для глубокого анализа
+            contract_id: ID договора
+            xml_content: XML контент договора
+            rag_context: Контекст из RAG
+            
+        Returns:
+            Список детальных анализов пунктов с прецедентами и рекомендациями
+        """
+        from config.settings import settings
+        from ..services.llm_gateway import LLMGateway
+        
+        logger.info(f"Starting DEEP analysis (Level 2) for {len(clause_ids)} clauses with {settings.llm_deep_model}")
+        
+        # Create deep LLM with gpt-4o
+        deep_llm = LLMGateway(model=settings.llm_deep_model)
+        
+        # Extract clauses
+        all_clauses = self._extract_contract_clauses(xml_content)
+        selected_clauses = [c for c in all_clauses if c['id'] in clause_ids or c['number'] in clause_ids]
+        
+        if not selected_clauses:
+            logger.warning(f"No clauses found for deep analysis with ids: {clause_ids}")
+            return []
+        
+        deep_analyses = []
+        
+        for clause in selected_clauses:
+            logger.info(f"Deep analyzing clause {clause['number']}: {clause['title'][:60]}")
+            
+            # Detailed prompt for deep analysis
+            prompt = f"""Выполни ГЛУБОКИЙ юридический анализ пункта договора.
+
+ПУНКТ №{clause['number']}: {clause['title']}
+ТЕКСТ:
+{clause['text']}
+
+КОНТЕКСТ ИЗ БАЗЫ ЗНАНИЙ:
+{rag_context.get('context', '')[:1000]}
+
+Проведи детальную экспертизу:
+
+1. ЮРИДИЧЕСКИЙ АНАЛИЗ:
+   - Соответствие ГК РФ, специальным законам
+   - Ссылки на конкретные статьи законов
+   - Выявление юридических коллизий
+   - Анализ исполнимости через суд
+
+2. РИСКИ С ПРЕЦЕДЕНТАМИ:
+   - Конкретные судебные дела (номера, даты, суды)
+   - Статистика споров по аналогичным пунктам
+   - Финансовые последствия (диапазоны сумм)
+   - Вероятность возникновения спора (%)
+
+3. АЛЬТЕРНАТИВНЫЕ ФОРМУЛИРОВКИ:
+   - 2-3 варианта улучшенных формулировок
+   - Обоснование каждого варианта
+   - Ссылки на best practices
+
+4. РЕКОМЕНДАЦИИ ЭКСПЕРТОВ:
+   - Позиция ВС РФ по аналогичным вопросам
+   - Мнения ведущих юристов
+   - Отраслевые стандарты
+
+Верни JSON:
+{{
+  "clause_number": {clause['number']},
+  "deep_legal_analysis": {{
+    "compliance_score": 0-10,
+    "relevant_laws": [
+      {{
+        "law": "ГК РФ",
+        "article": "ст. 421",
+        "relevance": "объяснение применимости",
+        "compliance_status": "compliant|non_compliant|unclear"
+      }}
+    ],
+    "legal_conflicts": ["конфликт 1", "конфликт 2"],
+    "enforceability_score": 0-10,
+    "enforceability_notes": "анализ исполнимости"
+  }},
+  "risks_with_precedents": [
+    {{
+      "risk_type": "тип",
+      "severity": "critical|high|medium|low",
+      "probability_percent": 0-100,
+      "description": "детальное описание",
+      "financial_impact_range": "от X до Y рублей",
+      "precedents": [
+        {{
+          "case_number": "номер дела",
+          "court": "суд",
+          "date": "дата",
+          "outcome": "исход",
+          "relevance": "почему релевантно"
+        }}
+      ],
+      "mitigation": "как минимизировать"
+    }}
+  ],
+  "alternative_formulations": [
+    {{
+      "variant_number": 1,
+      "formulation": "текст формулировки",
+      "advantages": ["преимущество 1", "преимущество 2"],
+      "legal_basis": "обоснование",
+      "best_practice_reference": "ссылка на практику"
+    }}
+  ],
+  "expert_recommendations": [
+    {{
+      "source": "ВС РФ / эксперт",
+      "recommendation": "рекомендация",
+      "citation": "ссылка на источник"
+    }}
+  ],
+  "overall_risk_score": 0-100,
+  "priority": "critical|high|medium|low",
+  "summary": "краткое резюме глубокого анализа"
+}}"""
+
+            try:
+                response = deep_llm.call(
+                    prompt=prompt,
+                    system_prompt="Ты ведущий эксперт по договорному праву РФ. Проводишь детальную экспертизу на уровне старшего партнёра юридической фирмы. Используешь конкретные ссылки на законы, судебную практику и прецеденты.",
+                    response_format="json",
+                    temperature=0.3,
+                    max_tokens=settings.llm_max_tokens,
+                    use_cache=True,
+                    db_session=self.db
+                )
+                
+                response['clause_id'] = clause['id']
+                response['clause_xpath'] = clause['xpath']
+                response['clause_title'] = clause['title']
+                response['analysis_level'] = 'deep'
+                response['model_used'] = settings.llm_deep_model
+                
+                deep_analyses.append(response)
+                logger.info(f"✓ Deep analysis complete for clause {clause['number']}: {response.get('overall_risk_score', 'N/A')}/100 risk score")
+                
+            except Exception as e:
+                logger.error(f"Deep analysis failed for clause {clause['number']}: {e}")
+                # Fallback
+                deep_analyses.append({
+                    'clause_number': clause['number'],
+                    'clause_id': clause['id'],
+                    'error': str(e),
+                    'analysis_level': 'deep',
+                    'summary': 'Глубокий анализ не удался из-за ошибки'
+                })
+        
+        logger.info(f"Deep analysis complete: {len(deep_analyses)} clauses analyzed with {settings.llm_deep_model}")
+        return deep_analyses
+
+    def _analyze_clause_detailed(
+        self, clause: Dict[str, Any], rag_context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Детальный LLM-анализ отдельного пункта договора
+        Returns detailed analysis including risks, issues, recommendations
+        """
+        try:
+            # Сокращённый промпт для избежания переполнения
+            prompt = f"""Проанализируй пункт договора:
+
+ПУНКТ №{clause['number']}: {clause['title']}
+ТЕКСТ: {clause['text']}
+
+Оцени:
+1. Чёткость формулировки (0-10)
+2. Правовое соответствие (0-10)
+3. Риски (тип, серьёзность, описание)
+4. Рекомендации по улучшению
+5. Двусмысленности
+6. Отсутствующие элементы
+
+JSON формат:
+{{
+  "clause_id": "{clause['id']}",
+  "clarity_score": 0-10,
+  "clarity_assessment": "подробная оценка чёткости формулировки",
+  "legal_compliance": {{
+    "score": 0-10,
+    "issues": ["проблема 1", "проблема 2"],
+    "relevant_laws": ["ГК РФ ст. XXX", "закон Y"]
+  }},
+  "risks": [
+    {{
+      "risk_type": "financial|legal|operational|reputational",
+      "severity": "critical|significant|minor",
+      "probability": "high|medium|low",
+      "title": "краткое название риска",
+      "description": "ПОДРОБНОЕ описание риска",
+      "consequences": "возможные последствия",
+      "affected_party": "кто пострадает"
+    }}
+  ],
+  "ambiguities": ["двусмысленность 1", "двусмысленность 2"],
+  "missing_elements": ["что отсутствует в пункте"],
+  "recommendations": [
+    {{
+      "priority": "critical|high|medium|low",
+      "recommendation": "что сделать",
+      "reasoning": "почему это важно",
+      "suggested_text": "предлагаемая формулировка (если применимо)"
+    }}
+  ],
+  "precedents": ["судебная практика"],
+  "overall_assessment": "общая оценка",
+  "improvement_priority": "critical|high|medium|low"
+}}"""
+
+            logger.info(f"Analyzing clause {clause['number']}: {clause['title'][:50]}")
+
+            # Try with JSON format first
+            try:
+                response = self.llm.call(
+                    prompt=prompt,
+                    system_prompt=self.get_system_prompt(),
+                    response_format="json",
+                    temperature=0.2
+                )
+
+                # Parse JSON response (already parsed if response_format='json')
+                analysis = response if isinstance(response, dict) else json.loads(response)
+
+            except (json.JSONDecodeError, ValueError) as e:
+                # Fallback: try with text format and parse manually
+                logger.warning(f"JSON format failed for clause {clause['number']}, trying text format: {e}")
+
+                try:
+                    response = self.llm.call(
+                        prompt=prompt + "\n\nВерни ТОЛЬКО JSON, без дополнительного текста.",
+                        system_prompt=self.get_system_prompt(),
+                        response_format="text",
+                        temperature=0.2
+                    )
+
+                    # Try to extract JSON from response
+                    import re
+                    json_match = re.search(r'\{.*\}', response, re.DOTALL)
+                    if json_match:
+                        analysis = json.loads(json_match.group(0))
+                    else:
+                        logger.error(f"No JSON found in text response for clause {clause['number']}")
+                        return self._get_fallback_analysis(clause)
+
+                except Exception as e2:
+                    logger.error(f"Text format also failed for clause {clause['number']}: {e2}")
+                    return self._get_fallback_analysis(clause)
+
+            analysis['clause_number'] = clause['number']
+            analysis['clause_xpath'] = clause['xpath']
+
+            logger.info(f"✓ Clause {clause['number']} analyzed: {len(analysis.get('risks', []))} risks, {len(analysis.get('recommendations', []))} recommendations")
+
+            return analysis
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse LLM response for clause {clause['number']}: {e}")
+            return self._get_fallback_analysis(clause)
+        except Exception as e:
+            logger.error(f"Clause analysis failed for {clause['number']}: {e}")
+            return self._get_fallback_analysis(clause)
+
+    def _get_fallback_analysis(self, clause: Dict[str, Any]) -> Dict[str, Any]:
+        """Fallback analysis if LLM fails"""
+        return {
+            'clause_id': clause['id'],
+            'clause_number': clause['number'],
+            'clause_xpath': clause['xpath'],
+            'clarity_score': 5,
+            'clarity_assessment': 'Анализ не выполнен из-за ошибки',
+            'legal_compliance': {'score': 5, 'issues': [], 'relevant_laws': []},
+            'risks': [],
+            'ambiguities': [],
+            'missing_elements': [],
+            'recommendations': [],
+            'precedents': [],
+            'overall_assessment': 'Требуется повторный анализ',
+            'improvement_priority': 'medium'
+        }
 
     def _identify_risks(
         self,
@@ -372,7 +1111,91 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
         rag_context: Dict[str, Any],
         counterparty_data: Optional[Dict[str, Any]]
     ) -> List[ContractRisk]:
-        """Identify contract risks using LLM"""
+        """Identify contract risks using detailed clause-by-clause LLM analysis"""
+        logger.info("🔍 DEBUG: _identify_risks called (NEW method with batching)")
+        try:
+            logger.info("Starting detailed clause-by-clause risk identification...")
+
+            # Извлекаем все пункты договора
+            clauses = self._extract_contract_clauses(xml_content)
+            logger.info(f"Extracted {len(clauses)} clauses for analysis")
+
+            if not clauses:
+                logger.warning("No clauses extracted, falling back to legacy method")
+                return self._identify_risks_legacy(xml_content, structure, rag_context, counterparty_data)
+
+            all_risks = []
+            all_clause_analyses = []
+
+            # BATCH ANALYSIS - анализируем пунктами по 5 за раз
+            # Ограничиваем количество пунктов в тестовом режиме
+            from config.settings import settings
+            max_clauses = settings.llm_test_max_clauses if settings.llm_test_mode else len(clauses)
+            batch_size = settings.llm_batch_size
+            
+            logger.info(f"Will analyze {min(len(clauses), max_clauses)} clauses in batches of {batch_size}")
+
+            # Используем батч-анализ
+            logger.info(f"🔍 DEBUG: Starting batch analysis for {len(clauses[:max_clauses])} clauses")
+            all_clause_analyses = self._analyze_clauses_batch(
+                clauses[:max_clauses],
+                rag_context,
+                batch_size=batch_size
+            )
+            logger.info(f"🔍 DEBUG: Batch analysis returned {len(all_clause_analyses)} results")
+
+            # Извлекаем риски из анализов
+            logger.info(f"🔍 DEBUG: Extracting risks from {len(all_clause_analyses)} clause analyses")
+            for clause_analysis in all_clause_analyses:
+                risks_in_clause = clause_analysis.get('risks', [])
+                logger.info(f"🔍 DEBUG: Clause {clause_analysis.get('clause_number')} has {len(risks_in_clause)} risks")
+                for risk_dict in risks_in_clause:
+                    risk = ContractRisk(
+                        risk_type=risk_dict.get('risk_type', 'legal'),
+                        severity=risk_dict.get('severity', 'minor'),
+                        probability=risk_dict.get('probability', 'medium'),
+                        title=risk_dict.get('title', 'Неизвестный риск'),
+                        description=risk_dict.get('description', ''),
+                        consequences=risk_dict.get('consequences'),
+                        xpath_location=clause_analysis.get('clause_xpath', ''),
+                        section_name=clause_analysis.get('clause_title', f"Пункт {clause_analysis.get('clause_number')}"),
+                        rag_sources=[]
+                    )
+                    all_risks.append(risk)
+
+            # Сохраняем детальные анализы пунктов для отображения в UI
+            if all_clause_analyses:
+                self._store_clause_analyses(all_clause_analyses)
+                logger.info(f"Detailed analysis complete: {len(all_risks)} risks from {len(all_clause_analyses)} clauses")
+            else:
+                logger.warning("No clauses were successfully analyzed, using legacy method")
+                return self._identify_risks_legacy(xml_content, structure, rag_context, counterparty_data)
+
+            return all_risks
+
+        except Exception as e:
+            logger.error(f"Detailed risk identification failed: {e}")
+            import traceback
+            traceback.print_exc()
+            # Fallback to legacy method
+            return self._identify_risks_legacy(xml_content, structure, rag_context, counterparty_data)
+
+    def _store_clause_analyses(self, analyses: List[Dict[str, Any]]):
+        """Store detailed clause analyses for UI display"""
+        # Сохраняем в памяти для передачи в результат
+        if not hasattr(self, '_clause_analyses'):
+            self._clause_analyses = []
+        self._clause_analyses = analyses
+
+    def _identify_risks_legacy(
+        self,
+        xml_content: str,
+        structure: Dict[str, Any],
+        rag_context: Dict[str, Any],
+        counterparty_data: Optional[Dict[str, Any]]
+    ) -> List[ContractRisk]:
+        logger.info("⚠️ DEBUG: _identify_risks_legacy called (OLD method, NO batching, EXPENSIVE!)")
+        """Legacy risk identification method (fallback)"""
         try:
             # Prepare prompt
             prompt = self._build_risk_identification_prompt(
@@ -380,16 +1203,15 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
             )
 
             # Call LLM
-            response = self.llm.chat(
-                messages=[
-                    {"role": "system", "content": self.get_system_prompt()},
-                    {"role": "user", "content": prompt}
-                ],
+            response = self.llm.call(
+                prompt=prompt,
+                system_prompt=self.get_system_prompt(),
+                response_format="json",
                 temperature=0.3
             )
 
             # Parse JSON response
-            risks_data = json.loads(response)
+            risks_data = response if isinstance(response, dict) else json.loads(response)
 
             # Convert to ContractRisk objects
             risks = []
@@ -410,7 +1232,7 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
             return risks
 
         except Exception as e:
-            logger.error(f"Risk identification failed: {e}")
+            logger.error(f"Legacy risk identification failed: {e}")
             return []
 
     def _build_risk_identification_prompt(
@@ -517,15 +1339,14 @@ Return JSON:
 
 Return ONLY valid JSON."""
 
-            response = self.llm.chat(
-                messages=[
-                    {"role": "system", "content": self.get_system_prompt()},
-                    {"role": "user", "content": prompt}
-                ],
+            response = self.llm.call(
+                prompt=prompt,
+                system_prompt=self.get_system_prompt(),
+                response_format="json",
                 temperature=0.3
             )
 
-            recommendations_data = json.loads(response)
+            recommendations_data = response if isinstance(response, dict) else json.loads(response)
 
             recommendations = []
             for rec_dict in recommendations_data.get('recommendations', []):
@@ -594,15 +1415,14 @@ Return ONLY valid JSON."""
 
 Return ONLY valid JSON."""
 
-            response = self.llm.chat(
-                messages=[
-                    {"role": "system", "content": self.get_system_prompt()},
-                    {"role": "user", "content": prompt}
-                ],
+            response = self.llm.call(
+                prompt=prompt,
+                system_prompt=self.get_system_prompt(),
+                response_format="json",
                 temperature=0.4
             )
 
-            changes_data = json.loads(response)
+            changes_data = response if isinstance(response, dict) else json.loads(response)
 
             changes = []
             for change_dict in changes_data.get('changes', []):
@@ -698,15 +1518,14 @@ Return JSON:
 
 Return ONLY valid JSON."""
 
-            response = self.llm.chat(
-                messages=[
-                    {"role": "system", "content": self.get_system_prompt()},
-                    {"role": "user", "content": prompt}
-                ],
+            response = self.llm.call(
+                prompt=prompt,
+                system_prompt=self.get_system_prompt(),
+                response_format="json",
                 temperature=0.3
             )
 
-            return json.loads(response)
+            return response if isinstance(response, dict) else json.loads(response)
 
         except Exception as e:
             logger.error(f"Dispute prediction failed: {e}")
