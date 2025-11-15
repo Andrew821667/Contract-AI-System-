@@ -21,6 +21,7 @@ from .database import Base, generate_uuid
 class User(Base):
     """Extended user model with comprehensive security features"""
     __tablename__ = "users"
+    __table_args__ = {"extend_existing": True}
 
     # Core fields
     id = Column(String(36), primary_key=True, default=generate_uuid)
