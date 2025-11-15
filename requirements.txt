@@ -52,6 +52,14 @@ jinja2==3.1.3
 streamlit==1.30.0
 fastapi==0.109.2
 uvicorn==0.27.0
+python-multipart==0.0.6  # For FastAPI form data
+
+# Authentication & Security
+bcrypt==4.1.2
+pyjwt==2.8.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+qrcode==7.4.2  # For demo link QR codes
 
 # Utilities
 python-dotenv==1.0.0
