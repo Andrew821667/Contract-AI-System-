@@ -95,6 +95,54 @@
 - ✅ Приостановка и возобновление workflow
 - ✅ История выполнения
 
+### 🔐 **8. Authentication & Authorization System** (NEW!)
+Полноценная система аутентификации с demo-доступом
+
+**Auth Features:**
+- ✅ **JWT токены** (access + refresh) с bcrypt password hashing
+- ✅ **Demo-доступ по ссылкам** - генерация уникальных ссылок для trial пользователей
+- ✅ **Админ-панель** (Streamlit) - управление пользователями, ролями, demo-токенами
+- ✅ **Роли**: admin, senior_lawyer, lawyer, junior_lawyer, demo
+- ✅ **Лимиты**: contracts/day, LLM requests/day по тарифам (demo, basic, pro, enterprise)
+- ✅ **Security**: Rate limiting, IP filtering, security headers, audit logs
+- ✅ **Email verification** & password reset (готово к интеграции)
+- ✅ **2FA support** (TOTP, backup codes)
+
+**API Endpoints:**
+```
+POST /api/v1/auth/register        # Регистрация
+POST /api/v1/auth/login           # Вход (JWT)
+POST /api/v1/auth/demo-activate   # Активация demo по ссылке
+POST /api/v1/auth/admin/demo-link # Генерация demo-ссылки (admin)
+GET  /api/v1/auth/admin/users     # Список пользователей (admin)
+GET  /api/v1/auth/admin/analytics # Аналитика системы (admin)
+```
+
+**Demo Link Flow:**
+```
+Admin → Генерирует ссылку → Пользователь переходит → Вводит email →
+→ Автоматически создается DEMO аккаунт → Мгновенный доступ на 24 часа
+```
+
+### ⚛️ **9. React Frontend** (NEW!)
+Современный веб-интерфейс на React/Next.js
+
+**Tech Stack:**
+- Next.js 14 (App Router)
+- TypeScript
+- Tailwind CSS
+- React Query (data fetching)
+- Zustand (state management)
+- Socket.io (real-time updates)
+
+**Features:**
+- 🎨 Modern UI/UX with Tailwind CSS
+- 📱 Mobile-first responsive design
+- ⚡ Fast page loads (SPA)
+- 🔄 Real-time updates via WebSocket
+- 🎯 TypeScript для type safety
+- 🧪 Jest + Testing Library
+
 ---
 
 ## 🏗️ Архитектура

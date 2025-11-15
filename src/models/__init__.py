@@ -4,7 +4,11 @@ Database models and connection management
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from config.settings import settings
-from .database import Base, User, Template, Contract, AnalysisResult, ReviewTask, LegalDocument, ExportLog, ContractFeedback
+from .database import Base, Template, Contract, AnalysisResult, ReviewTask, LegalDocument, ExportLog, ContractFeedback
+from .auth_models import (
+    User, UserSession, DemoToken, AuditLog,
+    PasswordResetRequest, EmailVerification, LoginAttempt
+)
 from .analyzer_models import ContractRisk, ContractRecommendation, ContractAnnotation, ContractSuggestedChange, AnalysisFeedback
 from .disagreement_models import Disagreement, DisagreementObjection, DisagreementExportLog, DisagreementFeedback
 from .changes_models import ContractVersion, ContractChange, ChangeAnalysisResult, ChangeReviewFeedback
@@ -54,7 +58,15 @@ __all__ = [
     "init_db",
     "get_db",
     "Base",
+    # Auth models
     "User",
+    "UserSession",
+    "DemoToken",
+    "AuditLog",
+    "PasswordResetRequest",
+    "EmailVerification",
+    "LoginAttempt",
+    # Core models
     "Template",
     "Contract",
     "AnalysisResult",
@@ -62,15 +74,18 @@ __all__ = [
     "LegalDocument",
     "ExportLog",
     "ContractFeedback",
+    # Analyzer models
     "ContractRisk",
     "ContractRecommendation",
     "ContractAnnotation",
     "ContractSuggestedChange",
     "AnalysisFeedback",
+    # Disagreement models
     "Disagreement",
     "DisagreementObjection",
     "DisagreementExportLog",
     "DisagreementFeedback",
+    # Changes models
     "ContractVersion",
     "ContractChange",
     "ChangeAnalysisResult",
