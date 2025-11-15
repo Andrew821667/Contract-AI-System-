@@ -19,6 +19,7 @@ from loguru import logger
 from ..agents.base_agent import BaseAgent, AgentResult
 from ..services.template_manager import TemplateManager
 from ..models.database import Template, Contract
+from ..utils.xml_security import parse_xml_safely, XMLSecurityError
 
 # Optional RAG import
 try:
@@ -311,11 +312,10 @@ Be precise, thorough, and legally accurate."""
             'warnings': []
         }
 
-        # Check 1: XML structure
+        # Check 1: XML structure (with XXE protection)
         try:
-            from lxml import etree
-            etree.fromstring(contract_xml.encode('utf-8'))
-        except Exception as e:
+            parse_xml_safely(contract_xml)
+        except (XMLSecurityError, Exception) as e:
             validation['errors'].append(f"Invalid XML structure: {e}")
             validation['passed'] = False
 

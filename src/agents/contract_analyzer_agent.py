@@ -17,6 +17,7 @@ from ..models.analyzer_models import (
     ContractSuggestedChange
 )
 from ..models.database import Contract, AnalysisResult
+from ..utils.xml_security import parse_xml_safely, XMLSecurityError
 from config.settings import settings
 
 # Optional RAG import
@@ -261,7 +262,7 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
     def _extract_structure(self, xml_content: str) -> Dict[str, Any]:
         """Extract contract structure for analysis"""
         try:
-            tree = etree.fromstring(xml_content.encode('utf-8'))
+            tree = parse_xml_safely(xml_content)
             root = tree
 
             structure = {
@@ -333,7 +334,7 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
         """
         try:
             logger.info("Starting clause extraction from XML...")
-            tree = etree.fromstring(xml_content.encode('utf-8'))
+            tree = parse_xml_safely(xml_content)
             root = tree
 
             logger.info(f"Root tag: {root.tag}, children: {len(list(root))}")
@@ -416,7 +417,7 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
         Специально для DocumentParser который создаёт <clauses><clause>...</clause></clauses>
         """
         try:
-            tree = etree.fromstring(xml_content.encode('utf-8'))
+            tree = parse_xml_safely(xml_content)
             clauses = []
 
             # СНАЧАЛА пробуем найти <clauses><clause> структуру от DocumentParser
@@ -541,7 +542,7 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
     ) -> Dict[str, Any]:
         """Check counterparty information via APIs"""
         try:
-            root = etree.fromstring(xml_content.encode('utf-8'))
+            root = parse_xml_safely(xml_content)
             parties = root.findall('.//party')
 
             results = {}
@@ -570,7 +571,7 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
         try:
             # Извлекаем базовую информацию о договоре из XML
             from lxml import etree
-            tree = etree.fromstring(xml_content.encode('utf-8'))
+            tree = parse_xml_safely(xml_content)
 
             # Извлекаем стороны
             parties = []
@@ -642,7 +643,7 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
 
 
     def _analyze_clauses_batch(
-        self, clauses: List[Dict[str, Any]], rag_context: Dict[str, Any], batch_size: int = 5
+        self, clauses: List[Dict[str, Any]], rag_context: Dict[str, Any], batch_size: int = 15
     ) -> List[Dict[str, Any]]:
         """
         Батч-анализ нескольких пунктов договора за один LLM вызов
@@ -651,7 +652,7 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
         Args:
             clauses: Список пунктов для анализа
             rag_context: Контекст из RAG
-            batch_size: Сколько пунктов анализировать за раз
+            batch_size: Сколько пунктов анализировать за раз (оптимально 10-15 для gpt-4o-mini)
 
         Returns:
             Список результатов анализа
@@ -1549,7 +1550,7 @@ Return ONLY valid JSON."""
             if not template:
                 return {'compared': False, 'reason': f'No template for type {contract_type}'}
 
-            root = etree.fromstring(xml_content.encode('utf-8'))
+            root = parse_xml_safely(xml_content)
             template_root = etree.fromstring(template.xml_content.encode('utf-8'))
 
             contract_tags = set([elem.tag for elem in root.iter()])
