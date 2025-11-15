@@ -1,6 +1,6 @@
 """
-LLM Gateway - 48=0O B>G:0 4>ABC?0 :> 2A5< LLM ?@>20945@0<
->445@6:0: Claude, GPT-4, Perplexity, YandexGPT, GigaChat, DeepSeek, Qwen
+LLM Gateway - Единая точка доступа ко всем LLM провайдерам
+Поддержка: Claude, GPT-4, Perplexity, YandexGPT, GigaChat, DeepSeek, Qwen
 """
 import json
 import hashlib
@@ -35,7 +35,7 @@ class LLMGateway:
         self.rate_limiter = get_global_rate_limiter()
 
     def _initialize_client(self):
-        """=8F80;878@C5B :;85=B0 4;O 2K1@0==>3> ?@>20945@0"""
+        """Инициализирует клиента для выбранного провайдера"""
         if self.provider == "claude":
             from anthropic import Anthropic
             self._client = Anthropic(api_key=settings.anthropic_api_key)
@@ -162,7 +162,7 @@ class LLMGateway:
         **kwargs
     ) -> str | Dict[str, Any]:
         """
-        #=825@A0;L=K9 2K7>2 LLM
+        Универсальный вызов LLM
 
         Args:
             prompt: "5:AB 70?@>A0
@@ -210,7 +210,7 @@ class LLMGateway:
             # No rate limiting
             response = self._make_api_call(prompt, system_prompt, temperature, max_tokens, **kwargs)
 
-            # 0@A8=3 JSON 5A;8 B@51C5BAO
+            # Парсинг JSON если требуется
             if response_format == "json":
                 try:
                     # Clean markdown code blocks if present
@@ -276,7 +276,7 @@ class LLMGateway:
         return input_cost + output_cost
 
     def _call_claude(self, prompt: str, system_prompt: Optional[str], temperature: float, max_tokens: int, **kwargs) -> str:
-        """K7>2 Claude API"""
+        """Вызов Claude API"""
         messages = [{"role": "user", "content": prompt}]
 
         params = {
@@ -293,7 +293,7 @@ class LLMGateway:
         return response.content[0].text
 
     def _call_openai_compatible(self, prompt: str, system_prompt: Optional[str], temperature: float, max_tokens: int, **kwargs) -> str:
-        """K7>2 OpenAI-A>2<5AB8<>3> API (OpenAI, Perplexity, DeepSeek)"""
+        """Вызов OpenAI-совместимого API (OpenAI, Perplexity, DeepSeek)"""
         messages = []
 
         if system_prompt:
@@ -331,7 +331,7 @@ class LLMGateway:
         return response.choices[0].message.content
 
     def _call_yandex(self, prompt: str, system_prompt: Optional[str], temperature: float, max_tokens: int, **kwargs) -> str:
-        """K7>2 YandexGPT API"""
+        """Вызов YandexGPT API"""
         model = self._client.models.completions("yandexgpt")
 
         messages = []
