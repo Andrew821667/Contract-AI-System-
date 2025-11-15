@@ -18,6 +18,8 @@ import PyPDF2
 import pdfplumber
 from loguru import logger
 
+from ..utils.xml_security import parse_xml_safely, XMLSecurityError
+
 
 class DocumentParser:
     """Парсер документов в XML формат"""
@@ -532,9 +534,9 @@ class DocumentParser:
             True если валидна
         """
         try:
-            etree.fromstring(xml_str.encode('utf-8'))
+            parse_xml_safely(xml_str)
             return True
-        except etree.XMLSyntaxError as e:
+        except (etree.XMLSyntaxError, XMLSecurityError) as e:
             logger.error(f"XML validation failed: {e}")
             return False
 
