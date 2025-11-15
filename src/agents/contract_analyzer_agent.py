@@ -12,6 +12,10 @@ from .base_agent import BaseAgent, AgentResult
 from ..services.llm_gateway import LLMGateway
 from ..services.template_manager import TemplateManager
 from ..services.counterparty_service import CounterpartyService
+from ..services.clause_extractor import ClauseExtractor
+from ..services.risk_analyzer import RiskAnalyzer
+from ..services.recommendation_generator import RecommendationGenerator
+from ..services.metadata_analyzer import MetadataAnalyzer
 from ..models.analyzer_models import (
     ContractRisk, ContractRecommendation, ContractAnnotation,
     ContractSuggestedChange
@@ -54,11 +58,25 @@ class ContractAnalyzerAgent(BaseAgent):
         if llm_gateway is None:
             from config.settings import settings
             llm_gateway = LLMGateway(model=settings.llm_quick_model)
-        
+
         super().__init__(llm_gateway, db_session)
         self.template_manager = template_manager or TemplateManager(db_session)
         self.rag_system = rag_system
         self.counterparty_service = counterparty_service or CounterpartyService()
+
+        # Initialize refactored service modules
+        self.clause_extractor = ClauseExtractor()
+        self.risk_analyzer = RiskAnalyzer(llm_gateway)
+        self.recommendation_generator = RecommendationGenerator(
+            llm_gateway,
+            system_prompt=self.get_system_prompt()
+        )
+        self.metadata_analyzer = MetadataAnalyzer(
+            llm_gateway,
+            counterparty_service=self.counterparty_service,
+            template_manager=self.template_manager,
+            system_prompt=self.get_system_prompt()
+        )
 
     def get_name(self) -> str:
         return "ContractAnalyzerAgent"
@@ -147,12 +165,12 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
             analysis = self._create_analysis_record(contract)
 
             # 3. Extract contract structure
-            structure = self._extract_structure(parsed_xml)
+            structure = self.clause_extractor.extract_structure(parsed_xml)
 
             # 4. Optional: Check counterparty
             counterparty_data = None
             if check_counterparty:
-                counterparty_data = self._check_counterparties(parsed_xml, metadata)
+                counterparty_data = self.metadata_analyzer.check_counterparties(parsed_xml, metadata)
 
             # 5. Analyze with RAG context
             rag_context = self._get_rag_context(parsed_xml, metadata)
@@ -164,30 +182,30 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
             self._save_risks(analysis.id, contract.id, risks)
 
             # 7. Generate recommendations
-            recommendations = self._generate_recommendations(
-                parsed_xml, structure, risks, rag_context
+            recommendations = self.recommendation_generator.generate_recommendations(
+                risks, rag_context
             )
             self._save_recommendations(analysis.id, contract.id, recommendations)
 
             # 8. Generate suggested changes (LLM)
-            suggested_changes = self._generate_suggested_changes(
+            suggested_changes = self.recommendation_generator.generate_suggested_changes(
                 parsed_xml, structure, risks, recommendations, rag_context
             )
             self._save_suggested_changes(analysis.id, contract.id, suggested_changes)
 
             # 9. Generate annotations
-            annotations = self._generate_annotations(
+            annotations = self.recommendation_generator.generate_annotations(
                 risks, recommendations, suggested_changes
             )
             self._save_annotations(analysis.id, contract.id, annotations)
 
             # 10. Predict dispute probability
-            dispute_prediction = self._predict_disputes(
+            dispute_prediction = self.metadata_analyzer.predict_disputes(
                 parsed_xml, risks, rag_context
             )
 
             # 11. Compare with templates (if available)
-            template_comparison = self._compare_with_templates(
+            template_comparison = self.metadata_analyzer.compare_with_templates(
                 parsed_xml, metadata.get('contract_type')
             )
 
@@ -206,7 +224,7 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
             self.db.refresh(analysis)
 
             # 13. Determine next action
-            next_action = self._determine_next_action(risks, dispute_prediction)
+            next_action = self.metadata_analyzer.determine_next_action(risks, dispute_prediction)
 
             logger.info(f"Analysis completed: {len(risks)} risks, {len(recommendations)} recommendations")
 
@@ -1117,52 +1135,34 @@ JSON формат:
         try:
             logger.info("Starting detailed clause-by-clause risk identification...")
 
-            # Извлекаем все пункты договора
-            clauses = self._extract_contract_clauses(xml_content)
+            # Извлекаем все пункты договора с помощью ClauseExtractor
+            clauses = self.clause_extractor.extract_clauses(xml_content)
             logger.info(f"Extracted {len(clauses)} clauses for analysis")
 
             if not clauses:
                 logger.warning("No clauses extracted, falling back to legacy method")
                 return self._identify_risks_legacy(xml_content, structure, rag_context, counterparty_data)
 
-            all_risks = []
-            all_clause_analyses = []
-
-            # BATCH ANALYSIS - анализируем пунктами по 5 за раз
+            # BATCH ANALYSIS - анализируем пунктами по batch_size за раз
             # Ограничиваем количество пунктов в тестовом режиме
             from config.settings import settings
             max_clauses = settings.llm_test_max_clauses if settings.llm_test_mode else len(clauses)
             batch_size = settings.llm_batch_size
-            
+
             logger.info(f"Will analyze {min(len(clauses), max_clauses)} clauses in batches of {batch_size}")
 
-            # Используем батч-анализ
+            # Используем RiskAnalyzer для батч-анализа
             logger.info(f"🔍 DEBUG: Starting batch analysis for {len(clauses[:max_clauses])} clauses")
-            all_clause_analyses = self._analyze_clauses_batch(
+            all_clause_analyses = self.risk_analyzer.analyze_clauses_batch(
                 clauses[:max_clauses],
                 rag_context,
                 batch_size=batch_size
             )
             logger.info(f"🔍 DEBUG: Batch analysis returned {len(all_clause_analyses)} results")
 
-            # Извлекаем риски из анализов
+            # Извлекаем риски из анализов с помощью RiskAnalyzer
             logger.info(f"🔍 DEBUG: Extracting risks from {len(all_clause_analyses)} clause analyses")
-            for clause_analysis in all_clause_analyses:
-                risks_in_clause = clause_analysis.get('risks', [])
-                logger.info(f"🔍 DEBUG: Clause {clause_analysis.get('clause_number')} has {len(risks_in_clause)} risks")
-                for risk_dict in risks_in_clause:
-                    risk = ContractRisk(
-                        risk_type=risk_dict.get('risk_type', 'legal'),
-                        severity=risk_dict.get('severity', 'minor'),
-                        probability=risk_dict.get('probability', 'medium'),
-                        title=risk_dict.get('title', 'Неизвестный риск'),
-                        description=risk_dict.get('description', ''),
-                        consequences=risk_dict.get('consequences'),
-                        xpath_location=clause_analysis.get('clause_xpath', ''),
-                        section_name=clause_analysis.get('clause_title', f"Пункт {clause_analysis.get('clause_number')}"),
-                        rag_sources=[]
-                    )
-                    all_risks.append(risk)
+            all_risks = self.risk_analyzer.identify_risks(all_clause_analyses)
 
             # Сохраняем детальные анализы пунктов для отображения в UI
             if all_clause_analyses:
