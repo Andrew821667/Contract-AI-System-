@@ -147,6 +147,24 @@ class ContractFeatureExtractor:
         month = contract_data.get('signed_month', 1)
         features['signed_in_dec'] = 1.0 if month == 12 else 0.0  # Year-end rush
 
+        # Risk indicators (derived features)
+        features['risk_indicator_score'] = (
+            features['counterparty_risk'] * 0.3 +
+            (1.0 - min(features['counterparty_age'], 10) / 10) * 0.2 +
+            features['historical_disputes'] * 0.3 +
+            (1.0 if not features['has_liability_limit'] else 0.0) * 0.2
+        )
+
+        # Completeness score (how complete is the contract)
+        completeness_features = [
+            features['has_force_majeure'],
+            features['has_liability_limit'],
+            features['has_confidentiality'],
+            features['has_dispute_resolution'],
+            features['has_termination_clause']
+        ]
+        features['completeness_score'] = sum(completeness_features) / len(completeness_features)
+
         return features
 
     def _encode_contract_type(self, contract_type: str) -> float:
@@ -176,7 +194,14 @@ class MLRiskPredictor:
 
     def __init__(self, model_path: Optional[str] = None):
         self.model_path = model_path or "models/risk_predictor.pkl"
-        self.scaler_path = model_path or "models/risk_scaler.pkl"
+
+        # Derive scaler path from model path
+        if model_path:
+            base_path = model_path.rsplit('.', 1)[0]  # Remove .pkl extension
+            self.scaler_path = f"{base_path}_scaler.pkl"
+        else:
+            self.scaler_path = "models/risk_scaler.pkl"
+
         self.model_version = "1.0.0"
 
         self.feature_extractor = ContractFeatureExtractor()
@@ -261,9 +286,13 @@ class MLRiskPredictor:
         # Convert features to array
         feature_values = np.array([list(features.values())]).reshape(1, -1)
 
-        # Scale features
-        if hasattr(self.model, 'predict_proba'):
-            # Model is trained
+        # Check if model and scaler are fitted
+        try:
+            from sklearn.utils.validation import check_is_fitted
+            check_is_fitted(self.model)
+            check_is_fitted(self.scaler)
+
+            # Scale features
             feature_values = self.scaler.transform(feature_values)
 
             # Get prediction probabilities
@@ -274,8 +303,9 @@ class MLRiskPredictor:
             # Convert class to risk level
             risk_level = self._class_to_risk_level(predicted_class)
             risk_score = self._calculate_risk_score(probabilities)
-        else:
+        except Exception as e:
             # Model not trained yet - use rules
+            logger.debug(f"ML model not ready, using rules: {e}")
             return self._predict_with_rules(features)
 
         # Determine if LLM analysis is needed
@@ -304,9 +334,26 @@ class MLRiskPredictor:
         - Missing key clauses = MEDIUM risk
         - Long duration + no termination clause = MEDIUM risk
         - Historical disputes = risk multiplier
+        - NDA and similar contracts = LOW risk (simple, low financial impact)
         """
         risk_score = 0.0
         risk_factors = []
+
+        # Special handling for low-risk contract types
+        contract_type_code = features.get('contract_type_code', 0)
+        amount_log = features.get('amount_log', 0)
+
+        # NDA (code=7.0) and other low-financial-impact contracts with amount near 0
+        if contract_type_code == 7.0 and amount_log < 1:  # NDA with minimal amount
+            return RiskPrediction(
+                risk_level=RiskLevel.LOW,
+                confidence=0.7,
+                risk_score=15.0,
+                should_use_llm=False,
+                features_used=features,
+                prediction_time_ms=0.0,
+                model_version=self.model_version
+            )
 
         # Amount-based risk
         amount_log = features.get('amount_log', 0)
@@ -451,8 +498,14 @@ class MLRiskPredictor:
 
         # Detailed evaluation
         y_pred = self.model.predict(X_test_scaled)
+
+        # Get unique labels present in the data
+        unique_labels = sorted(set(y_test) | set(y_pred))
+        target_name_map = {0: 'minimal', 1: 'low', 2: 'medium', 3: 'high', 4: 'critical'}
+        target_names = [target_name_map.get(label, f'class_{label}') for label in unique_labels]
+
         logger.info("\n" + classification_report(y_test, y_pred,
-            target_names=['minimal', 'low', 'medium', 'high', 'critical']))
+            labels=unique_labels, target_names=target_names))
 
         # Save model
         self.save_model()

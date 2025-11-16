@@ -164,7 +164,7 @@ class AnalyticsService:
                 'end': end_date.isoformat(),
                 'days': period_days
             },
-            'headline_metrics': headline,
+            'headline_metrics': {k: asdict(v) for k, v in headline.items()},
             'risk_trends': [asdict(t) for t in risk_trends],
             'cost_analysis': asdict(costs),
             'productivity': asdict(productivity),
@@ -619,11 +619,11 @@ class AnalyticsService:
                 writer.writerow(['Metric', 'Value', 'Unit', 'Trend', 'Trend %'])
                 for metric in dashboard_data['headline_metrics'].values():
                     writer.writerow([
-                        metric.name,
-                        metric.value,
-                        metric.unit,
-                        metric.trend,
-                        metric.trend_percentage
+                        metric['name'],
+                        metric['value'],
+                        metric['unit'],
+                        metric.get('trend'),
+                        metric.get('trend_percentage')
                     ])
 
         elif format == 'pdf':
