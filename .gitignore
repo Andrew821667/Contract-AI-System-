@@ -66,6 +66,13 @@ data/templates/*
 chroma_data/
 *.chroma
 
+# ML Models (generated during training/testing)
+models/
+*.pkl
+
+# Generated Reports
+reports/
+
 # Pytest
 .pytest_cache/
 .coverage

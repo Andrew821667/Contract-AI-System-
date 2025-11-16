@@ -21,33 +21,34 @@ def generate_uuid():
     return str(uuid.uuid4())
 
 
-class User(Base):
-    """>45;L ?>;L7>20B5;O"""
-    __tablename__ = "users"
-
-    id = Column(String(36), primary_key=True, default=generate_uuid)
-    email = Column(String(255), unique=True, nullable=False, index=True)
-    name = Column(String(255), nullable=False)
-    role = Column(String(50), nullable=False)  # admin, senior_lawyer, lawyer, junior_lawyer
-    active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    # Relationships
-    templates = relationship("Template", back_populates="creator")
-    assigned_tasks = relationship("ReviewTask", foreign_keys="ReviewTask.assigned_to", back_populates="assignee")
-    export_logs = relationship("ExportLog", back_populates="user")
-
-    __table_args__ = (
-        CheckConstraint(
-            role.in_(['admin', 'senior_lawyer', 'lawyer', 'junior_lawyer']),
-            name='check_user_role'
-        ),
-    )
-
-    def __repr__(self):
-        return f"<User(id={self.id}, email={self.email}, role={self.role})>"
-
-
+# class User(Base):  # MOVED TO auth_models.py
+#     """>45;L ?>;L7>20B5;O"""
+#     __tablename__ = "users"
+#     __table_args__ = {"extend_existing": True}
+# 
+#     id = Column(String(36), primary_key=True, default=generate_uuid)
+#     email = Column(String(255), unique=True, nullable=False, index=True)
+#     name = Column(String(255), nullable=False)
+#     role = Column(String(50), nullable=False)  # admin, senior_lawyer, lawyer, junior_lawyer
+#     active = Column(Boolean, default=True)
+#     created_at = Column(DateTime, default=datetime.utcnow)
+# 
+#     # Relationships
+#     templates = relationship("Template", back_populates="creator")
+#     assigned_tasks = relationship("ReviewTask", foreign_keys="ReviewTask.assigned_to", back_populates="assignee")
+#     export_logs = relationship("ExportLog", back_populates="user")
+# 
+#     __table_args__ = (
+#         CheckConstraint(
+#             role.in_(['admin', 'senior_lawyer', 'lawyer', 'junior_lawyer']),
+#             name='check_user_role'
+#         ),
+#     )
+# 
+#     def __repr__(self):
+#         return f"<User(id={self.id}, email={self.email}, role={self.role})>"
+# 
+# 
 class Template(Base):
     """>45;L H01;>=0 4>3>2>@0"""
     __tablename__ = "templates"
@@ -323,3 +324,46 @@ class LLMCache(Base):
 
     def __repr__(self):
         return f"<LLMCache(id={self.id}, model={self.model}, hits={self.hit_count})>"
+
+
+# ==================== DATABASE CONNECTION ====================
+import os
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+# Get database URL from environment
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./database/contracts.db")
+
+# Create engine
+# For SQLite, we need to enable check_same_thread=False to allow FastAPI to use it
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False},
+        echo=False  # Set to True for SQL query logging
+    )
+else:
+    # For PostgreSQL or other databases
+    engine = create_engine(DATABASE_URL, echo=False)
+
+# Create session factory
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def get_db():
+    """
+    Dependency for FastAPI to get database session
+
+    Usage:
+    ```python
+    @app.get("/users")
+    def get_users(db: Session = Depends(get_db)):
+        users = db.query(User).all()
+        return users
+    ```
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

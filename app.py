@@ -4,6 +4,7 @@ Streamlit UI for Contract AI System
 """
 import streamlit as st
 import os
+import atexit
 from datetime import datetime
 from typing import Optional
 
@@ -84,6 +85,17 @@ except ImportError as e:
     AGENTS_AVAILABLE = False
 
 
+def cleanup_db_session():
+    """Cleanup database session on exit to prevent memory leaks"""
+    try:
+        if 'db_session' in st.session_state:
+            logger.info("Closing database session...")
+            st.session_state.db_session.close()
+            logger.info("Database session closed successfully")
+    except Exception as e:
+        logger.error(f"Error closing database session: {e}")
+
+
 def init_session_state():
     """Initialize session state"""
     # Initialize auth state
@@ -99,6 +111,10 @@ def init_session_state():
         st.session_state.llm_gateway = LLMGateway(model=settings.llm_quick_model)
     if 'db_session' not in st.session_state and AGENTS_AVAILABLE:
         st.session_state.db_session = SessionLocal()
+        # Register cleanup handler for database session
+        if 'db_cleanup_registered' not in st.session_state:
+            atexit.register(cleanup_db_session)
+            st.session_state.db_cleanup_registered = True
 
     # Initialize knowledge base
     if 'kb_manager' not in st.session_state:
@@ -332,12 +348,23 @@ def page_analyzer():
             try:
                 from src.models import Contract
                 from src.services.document_parser import DocumentParser
+                from src.utils.file_validator import (
+                    save_uploaded_file_securely,
+                    FileValidationError
+                )
 
-                # Save uploaded file
-                file_path = os.path.join("data/contracts", uploaded_file.name)
-                os.makedirs(os.path.dirname(file_path), exist_ok=True)
-                with open(file_path, 'wb') as f:
-                    f.write(uploaded_file.getbuffer())
+                # Validate and save uploaded file securely
+                try:
+                    file_data = uploaded_file.getbuffer().tobytes()
+                    file_path, safe_filename, file_size = save_uploaded_file_securely(
+                        file_data=file_data,
+                        filename=uploaded_file.name,
+                        upload_dir="data/contracts"
+                    )
+                    st.success(f"✅ Файл загружен: {safe_filename} ({file_size / 1024:.1f} KB)")
+                except FileValidationError as e:
+                    st.error(f"❌ Ошибка валидации файла: {e}")
+                    return
 
                 # Parse document to XML
                 st.info("📄 Парсинг документа...")
@@ -351,7 +378,7 @@ def page_analyzer():
                 # Create contract in database
                 st.info("💾 Создание записи в БД...")
                 contract = Contract(
-                    file_name=os.path.basename(file_path),
+                    file_name=safe_filename,
                     file_path=file_path,
                     document_type='contract',
                     contract_type='unknown',  # Will be determined by analyzer
@@ -387,8 +414,6 @@ def page_analyzer():
                     st.info("🔍 **Извлечение структуры договора...**")
                 progress_bar.progress(10)
 
-                st.write("🔍 DEBUG: Вызываем agent.execute...")
-
                 with status_placeholder.container():
                     st.info("🔍 **Анализ пунктов договора (батчинг по 5 пунктов)...**")
                     st.caption("📊 Используется gpt-4o-mini для быстрого анализа")
@@ -408,19 +433,12 @@ def page_analyzer():
                 progress_placeholder.empty()  # Убираем прогресс-бар
                 status_placeholder.empty()  # Убираем статус
 
-                st.write(f"🔍 DEBUG: result.success = {result.success}")
-                st.write(f"🔍 DEBUG: result.error = {result.error if hasattr(result, 'error') else 'N/A'}")
-
                 if result.success:
                     # Update status to completed
                     contract.status = 'completed'
                     st.session_state.db_session.commit()
 
                     st.success("✅ Анализ завершен успешно!")
-
-                    st.write("🔍 DEBUG: Анализ только что завершился, показываем результаты...")
-                    st.write(f"🔍 DEBUG: agent = {agent is not None}")
-                    st.write(f"🔍 DEBUG: agent.llm = {hasattr(agent, 'llm') if agent else 'N/A'}")
 
                     # Get analysis data
                     analysis_id = result.data.get('analysis_id')
@@ -516,12 +534,9 @@ def page_analyzer():
 
                     # Token usage and cost display
                     # Получаем статистику из агента (он использовал llm для анализа)
-                    st.write(f"DEBUG: agent exists = {agent is not None}, has llm = {hasattr(agent, 'llm') if agent else False}")
                     if agent and hasattr(agent, 'llm'):
                         try:
-                            st.write("DEBUG: Trying to get token stats...")
                             token_stats = agent.llm.get_token_stats()
-                            st.write(f"DEBUG: Got stats = {token_stats}")
                             
                             st.markdown("---")
                             st.markdown("### 💰 Использование токенов")
@@ -1064,11 +1079,8 @@ def page_analyzer():
                     contract.status = 'error'
                     st.session_state.db_session.commit()
 
-                    st.write("🔍 DEBUG: result.success = False!")
-                    st.write(f"🔍 DEBUG: result.error = {result.error}")
-                    st.write(f"🔍 DEBUG: result.data = {result.data if hasattr(result, 'data') else 'N/A'}")
-
-                    st.error(f"Ошибка: {result.error}")
+                    st.error(f"❌ Ошибка анализа: {result.error}")
+                    logger.error(f"Analysis failed: {result.error}")
 
             except Exception as e:
                 # Update status to error if contract exists
@@ -1076,12 +1088,8 @@ def page_analyzer():
                     contract.status = 'error'
                     st.session_state.db_session.commit()
 
-                st.error(f"❌ КРИТИЧЕСКАЯ ОШИБКА: {e}")
-                st.write(f"🔍 DEBUG: Тип ошибки: {type(e).__name__}")
-
-                # Show full traceback
-                import traceback
-                st.code(traceback.format_exc())
+                st.error(f"❌ Ошибка анализа: {e}")
+                logger.error(f"Analysis error: {type(e).__name__}: {e}", exc_info=True)
 
 
 def page_disagreements():

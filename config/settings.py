@@ -60,12 +60,12 @@ class Settings(BaseSettings):
     llm_quick_model: str = "gpt-4o-mini"  # Быстрый анализ (Уровень 1)
     llm_deep_model: str = "gpt-4o"        # Глубокий анализ (Уровень 2)
 
-    # Batch analysis settings
-    llm_batch_size: int = 5  # Сколько пунктов анализировать в одном запросе
+    # Batch analysis settings (оптимизировано для производительности)
+    llm_batch_size: int = 15  # Сколько пунктов анализировать в одном запросе (оптимально для gpt-4o-mini)
 
     # Token limits for test mode
     llm_test_max_tokens: int = 800       # Для тестового режима
-    llm_test_max_clauses: int = 10       # Макс. пунктов для анализа в тесте
+    llm_test_max_clauses: int = 20       # Макс. пунктов для анализа в тесте (увеличено для эффективности)
 
     # Model pricing (per 1M tokens) для расчёта стоимости
     llm_pricing: dict = {
