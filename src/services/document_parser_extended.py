@@ -67,18 +67,122 @@ class ExtendedDocumentParser(BaseDocumentParser):
         """
         Parse PDF with OCR support
 
+        Strategy:
+        1. Try standard PDF text extraction first (fast)
+        2. If fails or low text content, use OCR (slow but works on scans)
+
         Note: OCR requires tesseract installed on system
-        For now, falls back to base PDF parser
         """
         try:
-            # Try base parser first
-            return self.parse_pdf(file_path)
+            # Try base parser first (fast for text-based PDFs)
+            xml_content = self.parse_pdf(file_path)
+
+            # Check if we got meaningful content
+            if len(xml_content) > 200:  # Minimum reasonable content
+                logger.info("✓ Text-based PDF parsed successfully")
+                return xml_content
+
+            # If content is too short, might be scanned
+            if enable_ocr:
+                logger.warning("PDF has low text content, trying OCR...")
+                return self._parse_pdf_with_ocr(file_path)
+            else:
+                logger.warning("PDF has low text content but OCR disabled")
+                return xml_content
+
         except Exception as e:
             if enable_ocr:
-                logger.warning(f"Base PDF parser failed, OCR needed but not yet implemented: {e}")
-                # TODO: Implement OCR with pytesseract + pdf2image
-                # This requires tesseract system binary
-            raise
+                logger.warning(f"Base PDF parser failed: {e}, trying OCR...")
+                return self._parse_pdf_with_ocr(file_path)
+            else:
+                logger.error(f"PDF parsing failed and OCR disabled: {e}")
+                raise
+
+    def _parse_pdf_with_ocr(self, file_path: str) -> str:
+        """
+        Parse scanned PDF using OCR
+
+        Args:
+            file_path: Path to PDF
+
+        Returns:
+            XML string with extracted text
+        """
+        try:
+            from .ocr_service import OCRService
+            from lxml import etree
+
+            logger.info(f"Starting OCR extraction for: {file_path}")
+
+            # Initialize OCR service
+            ocr = OCRService(language='rus+eng', dpi=300)
+
+            # Check if PDF is scanned
+            is_scanned, reason = ocr.detect_if_scanned(file_path)
+            logger.info(f"PDF scan detection: {reason}")
+
+            # Extract text with OCR
+            text = ocr.extract_text_from_pdf(file_path, max_pages=None)
+
+            if not text or len(text) < 50:
+                logger.warning(f"OCR extracted minimal text ({len(text)} chars)")
+                # Create minimal XML
+                root = etree.Element("contract")
+                content_elem = etree.SubElement(root, "content")
+                content_elem.text = text or "No text extracted"
+
+                xml_str = '<?xml version="1.0" encoding="UTF-8"?>\n'
+                xml_str += etree.tostring(root, encoding='unicode', pretty_print=True)
+                return xml_str
+
+            # Convert extracted text to XML structure
+            root = etree.Element("contract")
+            metadata = etree.SubElement(root, "metadata")
+            etree.SubElement(metadata, "source").text = "OCR"
+            etree.SubElement(metadata, "original_file").text = os.path.basename(file_path)
+
+            # Add content
+            content = etree.SubElement(root, "content")
+
+            # Split by page markers
+            pages = text.split('--- Page ')
+            for page_text in pages:
+                if not page_text.strip():
+                    continue
+
+                # Extract page number if present
+                lines = page_text.split('\n', 1)
+                if len(lines) > 1:
+                    page_elem = etree.SubElement(content, "page")
+                    page_elem.text = lines[1].strip()
+                else:
+                    page_elem = etree.SubElement(content, "page")
+                    page_elem.text = page_text.strip()
+
+            xml_str = '<?xml version="1.0" encoding="UTF-8"?>\n'
+            xml_str += etree.tostring(root, encoding='unicode', pretty_print=True)
+
+            logger.info(f"✓ OCR completed: {len(text)} characters extracted")
+            return xml_str
+
+        except ImportError as e:
+            logger.error(f"OCR dependencies not installed: {e}")
+            logger.error("Install: pip install pytesseract pdf2image Pillow")
+            logger.error("System: apt-get install tesseract-ocr tesseract-ocr-rus poppler-utils")
+
+            # Return minimal XML with error message
+            from lxml import etree
+            root = etree.Element("contract")
+            error = etree.SubElement(root, "error")
+            error.text = f"OCR not available: {str(e)}"
+
+            xml_str = '<?xml version="1.0" encoding="UTF-8"?>\n'
+            xml_str += etree.tostring(root, encoding='unicode', pretty_print=True)
+            return xml_str
+
+        except Exception as e:
+            logger.error(f"OCR extraction failed: {e}")
+            raise RuntimeError(f"OCR failed: {e}")
 
     def _parse_rtf(self, file_path: str) -> str:
         """

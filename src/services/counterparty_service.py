@@ -26,7 +26,18 @@ class CounterpartyService:
     - Kontur.Focus
     """
 
-    def __init__(self):
+    def __init__(self, fns_api_key: Optional[str] = None, use_dadata: bool = False):
+        """
+        Initialize counterparty service
+
+        Args:
+            fns_api_key: Optional API key for Dadata.ru (premium FNS data)
+            use_dadata: Use Dadata.ru API if api_key provided
+        """
+        # Initialize FNS API client
+        from .fns_api import FNSAPIClient
+        self.fns_client = FNSAPIClient(api_key=fns_api_key, use_dadata=use_dadata)
+
         # API endpoints
         self.fns_api_url = "https://egrul.nalog.ru"
         self.fedresurs_api_url = "https://fedresurs.ru/backend/companies"
@@ -117,33 +128,66 @@ class CounterpartyService:
         """
         Check FNS (Federal Tax Service) API
 
-        Note: Real FNS API requires special access.
-        This is a simplified stub implementation.
+        Uses FNS API client with fallback to stub data
         """
         logger.info(f"Checking FNS for INN: {inn}")
 
-        # TODO: Implement real FNS API integration
-        # For now, return stub data
+        try:
+            # Validate INN format first
+            validation = self.fns_client.check_inn_format(inn)
+            if not validation['valid']:
+                logger.warning(f"Invalid INN format: {inn} - {validation['errors']}")
+                return {
+                    'found': False,
+                    'inn': inn,
+                    'error': f"Invalid INN: {', '.join(validation['errors'])}",
+                    'data_source': 'Validation'
+                }
 
-        # Stub implementation
-        result = {
-            'found': True,
-            'inn': inn,
-            'name': f'ООО "Компания {inn}"',
-            'ogrn': '1234567890123',
-            'registration_date': '2020-01-15',
-            'active': True,
-            'legal_address': 'г. Москва, ул. Примерная, д. 1',
-            'ceo': 'Иванов И.И.',
-            'authorized_capital': 10000,
-            'data_source': 'FNS API (stub)'
-        }
+            # Get company info from FNS
+            company_info = self.fns_client.get_company_info(inn)
 
-        # In real implementation, would make API request:
-        # response = requests.get(f"{self.fns_api_url}/search", params={'inn': inn})
-        # result = response.json()
+            # Normalize response format
+            if company_info.get('found'):
+                name_data = company_info.get('name', {})
+                result = {
+                    'found': True,
+                    'inn': inn,
+                    'name': name_data.get('full') or name_data.get('short', f'Компания {inn}'),
+                    'short_name': name_data.get('short'),
+                    'ogrn': company_info.get('ogrn'),
+                    'kpp': company_info.get('kpp'),
+                    'registration_date': company_info.get('registration_date'),
+                    'active': company_info.get('active', False),
+                    'status': company_info.get('status', 'UNKNOWN'),
+                    'legal_address': company_info.get('legal_address'),
+                    'ceo': company_info.get('ceo'),
+                    'authorized_capital': company_info.get('authorized_capital'),
+                    'opf': company_info.get('opf'),  # Org form
+                    'okved': company_info.get('okved'),  # Activity type
+                    'data_source': company_info.get('data_source', 'FNS API')
+                }
+                logger.info(f"✓ FNS: Found {result['name']}")
+            else:
+                result = {
+                    'found': False,
+                    'inn': inn,
+                    'error': company_info.get('error', 'Not found'),
+                    'data_source': company_info.get('data_source', 'FNS API')
+                }
+                logger.warning(f"✗ FNS: Company not found for INN {inn}")
 
-        return result
+            return result
+
+        except Exception as e:
+            logger.error(f"FNS API error: {e}")
+            # Return error result
+            return {
+                'found': False,
+                'inn': inn,
+                'error': str(e),
+                'data_source': 'FNS API (error)'
+            }
 
     def _check_fedresurs(self, inn: str) -> Dict[str, Any]:
         """

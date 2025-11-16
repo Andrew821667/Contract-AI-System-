@@ -44,7 +44,7 @@ class ChangeReportGenerator:
             Path to generated PDF
         """
         try:
-            logger.info("Generating change analysis report")
+            logger.info("Generating change analysis report PDF")
 
             if not output_filename:
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -52,21 +52,118 @@ class ChangeReportGenerator:
 
             output_path = os.path.join(self.output_dir, output_filename)
 
-            # Stub: Generate text report instead of PDF
-            report_content = self._generate_text_report(analysis_result, changes)
+            # Use PDFGenerator for professional PDF
+            try:
+                from ..utils.pdf_generator import PDFGenerator
 
-            # Save as text (stub)
-            with open(output_path.replace('.pdf', '.txt'), 'w', encoding='utf-8') as f:
-                f.write(report_content)
+                # Prepare data for PDF
+                pdf_data = {
+                    'summary': analysis_result.get('executive_summary', 'Анализ изменений договора'),
+                    'statistics': self._prepare_statistics(analysis_result),
+                    'risks': self._prepare_risks_from_changes(changes),
+                    'recommendations': self._prepare_recommendations(analysis_result)
+                }
 
-            logger.info(f"Report generated: {output_path}")
-            logger.warning("[STUB] PDF generation not fully implemented - saved as .txt")
+                # Metadata
+                metadata = {
+                    'Тип отчёта': 'Анализ изменений договора',
+                    'Дата создания': datetime.now().strftime('%d.%m.%Y %H:%M'),
+                    'Всего изменений': analysis_result.get('total_changes', 0),
+                    'Общая оценка': analysis_result.get('overall_assessment', 'N/A')
+                }
 
-            return output_path.replace('.pdf', '.txt')
+                # Generate PDF
+                generator = PDFGenerator()
+                generator.generate_contract_report(
+                    output_path=output_path,
+                    title='Отчёт об изменениях в договоре',
+                    data=pdf_data,
+                    metadata=metadata
+                )
+
+                logger.info(f"PDF report generated successfully: {output_path}")
+                return output_path
+
+            except ImportError as ie:
+                logger.warning(f"PDFGenerator not available: {ie}. Falling back to text report.")
+                # Fallback to text report
+                report_content = self._generate_text_report(analysis_result, changes)
+                text_path = output_path.replace('.pdf', '.txt')
+                with open(text_path, 'w', encoding='utf-8') as f:
+                    f.write(report_content)
+                logger.info(f"Text report generated: {text_path}")
+                return text_path
 
         except Exception as e:
             logger.error(f"Report generation failed: {e}")
             raise
+
+    def _prepare_statistics(self, analysis_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Prepare statistics for PDF"""
+        stats = {
+            'Общая оценка': analysis_result.get('overall_assessment', 'N/A'),
+            'Изменение рисков': analysis_result.get('overall_risk_change', 'N/A'),
+            'Всего изменений': analysis_result.get('total_changes', 0),
+        }
+
+        # Add by_type statistics
+        by_type = analysis_result.get('by_type', {})
+        for change_type, count in by_type.items():
+            stats[f'Тип "{change_type}"'] = count
+
+        # Add by_impact statistics
+        by_impact = analysis_result.get('by_impact', {})
+        for impact, count in by_impact.items():
+            stats[f'Влияние "{impact}"'] = count
+
+        # Add objections tracking if present
+        if analysis_result.get('accepted_objections', 0) > 0:
+            stats['Принято возражений'] = analysis_result.get('accepted_objections', 0)
+            stats['Отклонено возражений'] = analysis_result.get('rejected_objections', 0)
+            stats['Частично принято'] = analysis_result.get('partial_objections', 0)
+
+        return stats
+
+    def _prepare_risks_from_changes(self, changes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Extract risks from changes for PDF"""
+        risks = []
+
+        for change in changes[:20]:  # Limit to 20
+            impact = change.get('impact_assessment', {})
+            if impact and impact.get('severity') in ['high', 'critical']:
+                risks.append({
+                    'severity': impact.get('severity', 'medium'),
+                    'type': change.get('change_category', 'general'),
+                    'description': change.get('semantic_description', 'Нет описания'),
+                    'impact': f"Направление: {impact.get('direction', 'N/A')}",
+                    'recommendation': impact.get('recommendation', '')
+                })
+
+        return risks
+
+    def _prepare_recommendations(self, analysis_result: Dict[str, Any]) -> List[str]:
+        """Prepare recommendations for PDF"""
+        recommendations = []
+
+        # Main recommendations
+        if analysis_result.get('recommendations'):
+            recommendations.append(analysis_result['recommendations'])
+
+        # Critical changes
+        critical = analysis_result.get('critical_changes', [])
+        if critical:
+            recommendations.append(
+                f'Обратите особое внимание на {len(critical)} критических изменений'
+            )
+
+        # Risk change
+        risk_change = analysis_result.get('overall_risk_change', '')
+        if 'увеличение' in risk_change.lower() or 'increase' in risk_change.lower():
+            recommendations.append(
+                'Общий уровень рисков увеличился - рекомендуется детальная проверка юристом'
+            )
+
+        return recommendations if recommendations else ['Специальных рекомендаций нет']
 
     def _generate_text_report(
         self,

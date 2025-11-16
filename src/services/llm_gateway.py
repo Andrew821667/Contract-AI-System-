@@ -1,6 +1,6 @@
 """
-LLM Gateway - 48=0O B>G:0 4>ABC?0 :> 2A5< LLM ?@>20945@0<
->445@6:0: Claude, GPT-4, Perplexity, YandexGPT, GigaChat, DeepSeek, Qwen
+LLM Gateway - Единая точка доступа ко всем LLM провайдерам
+Поддержка: Claude, GPT-4, Perplexity, YandexGPT, GigaChat, DeepSeek, Qwen
 """
 import json
 import hashlib
@@ -10,6 +10,7 @@ from loguru import logger
 from datetime import datetime
 
 from config.settings import settings
+from ..utils.rate_limiter import get_global_rate_limiter, RateLimitExceeded
 
 
 class LLMGateway:
@@ -29,8 +30,12 @@ class LLMGateway:
         self.total_input_tokens = 0
         self.total_output_tokens = 0
 
+        # Rate limiting
+        self.use_rate_limiter = True
+        self.rate_limiter = get_global_rate_limiter()
+
     def _initialize_client(self):
-        """=8F80;878@C5B :;85=B0 4;O 2K1@0==>3> ?@>20945@0"""
+        """Инициализирует клиента для выбранного провайдера"""
         if self.provider == "claude":
             from anthropic import Anthropic
             self._client = Anthropic(api_key=settings.anthropic_api_key)
@@ -157,7 +162,7 @@ class LLMGateway:
         **kwargs
     ) -> str | Dict[str, Any]:
         """
-        #=825@A0;L=K9 2K7>2 LLM
+        Универсальный вызов LLM
 
         Args:
             prompt: "5:AB 70?@>A0
@@ -188,21 +193,24 @@ class LLMGateway:
                         pass
                 return cached_response
 
-        try:
-            if self.provider == "claude":
-                response = self._call_claude(prompt, system_prompt, temperature, max_tokens, **kwargs)
-            elif self.provider in ["openai", "perplexity", "deepseek"]:
-                response = self._call_openai_compatible(prompt, system_prompt, temperature, max_tokens, **kwargs)
-            elif self.provider == "yandex":
-                response = self._call_yandex(prompt, system_prompt, temperature, max_tokens, **kwargs)
-            elif self.provider == "gigachat":
-                response = self._call_gigachat(prompt, system_prompt, temperature, max_tokens, **kwargs)
-            elif self.provider == "qwen":
-                response = self._call_qwen(prompt, system_prompt, temperature, max_tokens, **kwargs)
-            else:
-                raise ValueError(f"Provider {self.provider} not implemented")
+        # Rate limiting check
+        estimated_tokens = len(prompt) // 4 + (len(system_prompt) // 4 if system_prompt else 0) + max_tokens
+        estimated_cost = self._estimate_cost(estimated_tokens)
 
-            # 0@A8=3 JSON 5A;8 B@51C5BAO
+        if self.use_rate_limiter and self.rate_limiter:
+            try:
+                # Acquire rate limit (will raise exception if exceeded)
+                with self.rate_limiter.acquire(tokens=estimated_tokens, cost=estimated_cost):
+                    # Make API call within rate limit context
+                    response = self._make_api_call(prompt, system_prompt, temperature, max_tokens, **kwargs)
+            except RateLimitExceeded as e:
+                logger.error(f"Rate limit exceeded: {e}")
+                raise
+        else:
+            # No rate limiting
+            response = self._make_api_call(prompt, system_prompt, temperature, max_tokens, **kwargs)
+
+            # Парсинг JSON если требуется
             if response_format == "json":
                 try:
                     # Clean markdown code blocks if present
@@ -236,12 +244,39 @@ class LLMGateway:
 
             return response
 
-        except Exception as e:
-            logger.error(f"LLM call failed: {e}")
-            raise
+        return response
+
+    def _make_api_call(self, prompt: str, system_prompt: Optional[str], temperature: float, max_tokens: int, **kwargs) -> str:
+        """Execute actual API call to LLM provider"""
+        if self.provider == "claude":
+            return self._call_claude(prompt, system_prompt, temperature, max_tokens, **kwargs)
+        elif self.provider in ["openai", "perplexity", "deepseek"]:
+            return self._call_openai_compatible(prompt, system_prompt, temperature, max_tokens, **kwargs)
+        elif self.provider == "yandex":
+            return self._call_yandex(prompt, system_prompt, temperature, max_tokens, **kwargs)
+        elif self.provider == "gigachat":
+            return self._call_gigachat(prompt, system_prompt, temperature, max_tokens, **kwargs)
+        elif self.provider == "qwen":
+            return self._call_qwen(prompt, system_prompt, temperature, max_tokens, **kwargs)
+        else:
+            raise ValueError(f"Provider {self.provider} not implemented")
+
+    def _estimate_cost(self, tokens: int) -> float:
+        """Estimate cost based on tokens (rough approximation)"""
+        model = self.model or "gpt-4o-mini"
+        pricing = settings.llm_pricing.get(model, {"input": 0.15, "output": 0.60})
+
+        # Assume 60% input, 40% output split
+        input_tokens = int(tokens * 0.6)
+        output_tokens = int(tokens * 0.4)
+
+        input_cost = (input_tokens / 1_000_000) * pricing["input"]
+        output_cost = (output_tokens / 1_000_000) * pricing["output"]
+
+        return input_cost + output_cost
 
     def _call_claude(self, prompt: str, system_prompt: Optional[str], temperature: float, max_tokens: int, **kwargs) -> str:
-        """K7>2 Claude API"""
+        """Вызов Claude API"""
         messages = [{"role": "user", "content": prompt}]
 
         params = {
@@ -258,7 +293,7 @@ class LLMGateway:
         return response.content[0].text
 
     def _call_openai_compatible(self, prompt: str, system_prompt: Optional[str], temperature: float, max_tokens: int, **kwargs) -> str:
-        """K7>2 OpenAI-A>2<5AB8<>3> API (OpenAI, Perplexity, DeepSeek)"""
+        """Вызов OpenAI-совместимого API (OpenAI, Perplexity, DeepSeek)"""
         messages = []
 
         if system_prompt:
@@ -296,7 +331,7 @@ class LLMGateway:
         return response.choices[0].message.content
 
     def _call_yandex(self, prompt: str, system_prompt: Optional[str], temperature: float, max_tokens: int, **kwargs) -> str:
-        """K7>2 YandexGPT API"""
+        """Вызов YandexGPT API"""
         model = self._client.models.completions("yandexgpt")
 
         messages = []

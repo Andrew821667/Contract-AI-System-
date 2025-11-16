@@ -143,32 +143,166 @@ class QuickExportAgent(BaseAgent):
             raise ValueError(f"Unsupported format: {format}")
 
     def _export_docx(self, contract: Contract, base_name: str, include_analysis: bool) -> str:
-        """Export to DOCX (stub)"""
+        """Export to DOCX with proper formatting"""
         output_path = os.path.join(self.export_dir, f"{base_name}.docx")
 
-        # Stub: Real implementation would use python-docx
-        # Copy original file for now
-        import shutil
-        if os.path.exists(contract.file_path):
-            shutil.copy(contract.file_path, output_path)
-        else:
-            # Create placeholder
-            with open(output_path, 'w') as f:
-                f.write(f"Contract: {contract.file_name}\n")
+        try:
+            from docx import Document
+            from docx.shared import Inches, Pt, RGBColor
+            from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-        logger.info(f"[STUB] DOCX export: {output_path}")
-        return output_path
+            # Create document
+            doc = Document()
+
+            # Title
+            title = doc.add_heading(f'Экспорт договора: {contract.file_name}', 0)
+            title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            # Metadata section
+            doc.add_heading('Информация о документе', 1)
+            metadata_table = doc.add_table(rows=5, cols=2)
+            metadata_table.style = 'Light Grid Accent 1'
+
+            metadata_rows = [
+                ('Файл:', contract.file_name),
+                ('Тип документа:', contract.document_type or 'Не определён'),
+                ('Тип договора:', contract.contract_type or 'Не определён'),
+                ('Дата загрузки:', contract.upload_date.strftime('%d.%m.%Y %H:%M') if contract.upload_date else 'N/A'),
+                ('Статус:', contract.status or 'Не определён'),
+            ]
+
+            for i, (label, value) in enumerate(metadata_rows):
+                row = metadata_table.rows[i]
+                row.cells[0].text = label
+                row.cells[1].text = str(value)
+
+            # Analysis results if requested
+            if include_analysis and contract.analysis_results:
+                doc.add_page_break()
+                doc.add_heading('Результаты анализа', 1)
+
+                for analysis in contract.analysis_results:
+                    doc.add_heading(f'Анализ версии {getattr(analysis, "version", "N/A")}', 2)
+
+                    if hasattr(analysis, 'risks'):
+                        doc.add_heading('Выявленные риски', 3)
+
+                        for risk in analysis.risks[:10]:  # Limit to 10
+                            p = doc.add_paragraph(style='List Bullet')
+                            severity = getattr(risk, 'severity', 'unknown').upper()
+                            risk_type = getattr(risk, 'risk_type', 'general')
+                            description = getattr(risk, 'description', 'Нет описания')
+
+                            run = p.add_run(f'[{severity}] {risk_type}: ')
+                            run.bold = True
+
+                            # Color code by severity
+                            if severity == 'CRITICAL':
+                                run.font.color.rgb = RGBColor(220, 53, 69)  # Red
+                            elif severity == 'HIGH':
+                                run.font.color.rgb = RGBColor(253, 126, 20)  # Orange
+                            elif severity == 'MEDIUM':
+                                run.font.color.rgb = RGBColor(255, 193, 7)  # Yellow
+                            else:
+                                run.font.color.rgb = RGBColor(40, 167, 69)  # Green
+
+                            p.add_run(description)
+
+            # Footer
+            doc.add_page_break()
+            footer_para = doc.add_paragraph()
+            footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            footer_run = footer_para.add_run(
+                f'Документ создан автоматически системой Contract AI\n'
+                f'{datetime.now().strftime("%d.%m.%Y %H:%M")}'
+            )
+            footer_run.font.size = Pt(9)
+            footer_run.font.color.rgb = RGBColor(128, 128, 128)
+
+            # Save document
+            doc.save(output_path)
+
+            logger.info(f"DOCX export completed: {output_path}")
+            return output_path
+
+        except Exception as e:
+            logger.error(f"DOCX export failed: {e}")
+            # Fallback: copy original file if exists
+            import shutil
+            if os.path.exists(contract.file_path):
+                try:
+                    shutil.copy(contract.file_path, output_path)
+                    logger.info(f"DOCX export fallback: copied original file")
+                    return output_path
+                except:
+                    pass
+
+            # Last resort: create placeholder
+            with open(output_path.replace('.docx', '.txt'), 'w', encoding='utf-8') as f:
+                f.write(f"DOCX Export Failed: {str(e)}\n")
+                f.write(f"Contract: {contract.file_name}\n")
+            return output_path.replace('.docx', '.txt')
 
     def _export_pdf(self, contract: Contract, base_name: str, include_analysis: bool) -> str:
-        """Export to PDF (stub)"""
+        """Export to PDF with professional formatting"""
         output_path = os.path.join(self.export_dir, f"{base_name}.pdf")
 
-        # Stub: Real implementation would use reportlab or convert DOCX to PDF
-        with open(output_path, 'w') as f:
-            f.write(f"PDF: Contract {contract.file_name}\n")
+        try:
+            from ..utils.pdf_generator import PDFGenerator
 
-        logger.info(f"[STUB] PDF export: {output_path}")
-        return output_path
+            # Prepare data for PDF
+            data = {
+                'summary': f'Договор: {contract.file_name}',
+                'statistics': {
+                    'Тип документа': contract.document_type or 'Не определён',
+                    'Тип договора': contract.contract_type or 'Не определён',
+                    'Дата загрузки': contract.upload_date.strftime('%d.%m.%Y %H:%M') if contract.upload_date else 'N/A',
+                    'Статус': contract.status or 'Не определён',
+                    'Уровень риска': contract.risk_level or 'Не оценен',
+                },
+                'risks': [],
+                'recommendations': []
+            }
+
+            # Add analysis results if requested
+            if include_analysis and contract.analysis_results:
+                for analysis in contract.analysis_results:
+                    if hasattr(analysis, 'risks'):
+                        for risk in analysis.risks[:10]:  # Limit to 10 risks
+                            data['risks'].append({
+                                'severity': getattr(risk, 'severity', 'unknown'),
+                                'type': getattr(risk, 'risk_type', 'general'),
+                                'description': getattr(risk, 'description', ''),
+                                'impact': getattr(risk, 'impact', ''),
+                                'recommendation': getattr(risk, 'recommendation', '')
+                            })
+
+            # Metadata
+            metadata = {
+                'Файл': contract.file_name,
+                'ID': str(contract.id),
+                'Экспортировано': datetime.now().strftime('%d.%m.%Y %H:%M')
+            }
+
+            # Generate PDF
+            generator = PDFGenerator()
+            generator.generate_contract_report(
+                output_path=output_path,
+                title=f'Экспорт договора: {contract.file_name}',
+                data=data,
+                metadata=metadata
+            )
+
+            logger.info(f"PDF export completed: {output_path}")
+            return output_path
+
+        except Exception as e:
+            logger.error(f"PDF export failed: {e}")
+            # Fallback to simple text file
+            with open(output_path.replace('.pdf', '.txt'), 'w', encoding='utf-8') as f:
+                f.write(f"PDF Export Failed: {str(e)}\n")
+                f.write(f"Contract: {contract.file_name}\n")
+            return output_path.replace('.pdf', '.txt')
 
     def _export_txt(self, contract: Contract, base_name: str, include_analysis: bool) -> str:
         """Export to plain text"""

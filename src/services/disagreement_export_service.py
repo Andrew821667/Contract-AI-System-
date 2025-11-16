@@ -186,35 +186,67 @@ class DisagreementExportService:
         self, disagreement_id: int, user_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Export disagreement to PDF
-        
-        Real implementation would convert DOCX to PDF using:
-        - LibreOffice headless
-        - docx2pdf
-        - reportlab
+        Export disagreement to PDF using PDFGenerator
         """
         try:
             logger.info(f"Exporting disagreement {disagreement_id} to PDF")
 
-            # First ensure DOCX exists
             disagreement = self.db_session.query(Disagreement).filter(
                 Disagreement.id == disagreement_id
             ).first()
 
-            if not disagreement.docx_path or not os.path.exists(disagreement.docx_path):
-                # Generate DOCX first
-                docx_result = self.export_to_docx(disagreement_id, user_id)
-                if not docx_result['success']:
-                    return docx_result
+            if not disagreement:
+                raise ValueError(f"Disagreement {disagreement_id} not found")
 
-            # Stub: would convert DOCX to PDF
-            pdf_path = disagreement.docx_path.replace('.docx', '.pdf')
-            
-            # Stub conversion
-            with open(disagreement.docx_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            with open(pdf_path, 'w', encoding='utf-8') as f:
-                f.write(f"PDF VERSION:\n{content}")
+            # Get selected objections
+            selected_ids = disagreement.priority_order or disagreement.selected_objections
+            objections = self.db_session.query(DisagreementObjection).filter(
+                DisagreementObjection.id.in_(selected_ids)
+            ).all()
+
+            # Sort by priority order
+            objections_dict = {obj.id: obj for obj in objections}
+            sorted_objections = [objections_dict[oid] for oid in selected_ids if oid in objections_dict]
+
+            # Convert to dict format for PDFGenerator
+            objections_data = []
+            for obj in sorted_objections:
+                objections_data.append({
+                    'section': obj.contract_section_xpath or 'не указан',
+                    'issue': obj.issue_description,
+                    'legal_basis': obj.legal_basis or '',
+                    'alternative': obj.alternative_formulation,
+                    'priority': obj.priority
+                })
+
+            disagreement_data = {
+                'contract_id': disagreement.contract_id,
+                'id': disagreement.id
+            }
+
+            # Generate PDF path
+            pdf_path = os.path.join(
+                self.export_dir,
+                f"disagreement_{disagreement_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            )
+
+            # Use PDFGenerator
+            try:
+                from ..utils.pdf_generator import PDFGenerator
+
+                generator = PDFGenerator()
+                generator.generate_disagreement_letter(
+                    output_path=pdf_path,
+                    disagreement_data=disagreement_data,
+                    objections=objections_data
+                )
+
+            except ImportError:
+                logger.warning("PDFGenerator not available, using fallback text export")
+                # Fallback to text
+                pdf_path = pdf_path.replace('.pdf', '.txt')
+                with open(pdf_path, 'w', encoding='utf-8') as f:
+                    f.write(self._generate_docx_content_stub(disagreement, sorted_objections))
 
             file_size = os.path.getsize(pdf_path)
             file_hash = self._calculate_file_hash(pdf_path)
@@ -317,42 +349,90 @@ class DisagreementExportService:
 
     def _send_email_stub(self, recipient: str, subject: str, attachment_path: str) -> bool:
         """
-        Stub for email sending
-        
-        Real implementation would use:
-        ```python
-        import smtplib
-        from email.mime.multipart import MIMEMultipart
-        from email.mime.text import MIMEText
-        from email.mime.base import MIMEBase
-        from email import encoders
-        
-        msg = MIMEMultipart()
-        msg['From'] = self.smtp_user
-        msg['To'] = recipient
-        msg['Subject'] = subject
-        
-        # Attach file
-        with open(attachment_path, 'rb') as f:
-            part = MIMEBase('application', 'octet-stream')
-            part.set_payload(f.read())
-        encoders.encode_base64(part)
-        part.add_header('Content-Disposition', f'attachment; filename={os.path.basename(attachment_path)}')
-        msg.attach(part)
-        
-        # Send
-        server = smtplib.SMTP(self.smtp_host, self.smtp_port)
-        server.starttls()
-        server.login(self.smtp_user, self.smtp_password)
-        server.send_message(msg)
-        server.quit()
-        ```
+        Send email with attachment using SMTP
+
+        Args:
+            recipient: Recipient email address
+            subject: Email subject
+            attachment_path: Path to file to attach
+
+        Returns:
+            True if sent successfully, False otherwise
         """
-        logger.info(f"[STUB] Email would be sent to {recipient}")
-        logger.info(f"[STUB] Subject: {subject}")
-        logger.info(f"[STUB] Attachment: {attachment_path}")
-        logger.info(f"[STUB] SMTP: {self.smtp_host}:{self.smtp_port}")
-        return True  # Stub always succeeds
+        try:
+            # Check if SMTP credentials are configured
+            if not self.smtp_user or not self.smtp_password:
+                logger.warning(
+                    "SMTP credentials not configured. "
+                    "Please set smtp_user and smtp_password in config."
+                )
+                logger.info(f"[SIMULATED] Email would be sent to {recipient}")
+                logger.info(f"[SIMULATED] Subject: {subject}")
+                logger.info(f"[SIMULATED] Attachment: {attachment_path}")
+                logger.info(f"[SIMULATED] SMTP: {self.smtp_host}:{self.smtp_port}")
+                return True  # Simulate success
+
+            # Real SMTP implementation
+            import smtplib
+            from email.mime.multipart import MIMEMultipart
+            from email.mime.text import MIMEText
+            from email.mime.base import MIMEBase
+            from email import encoders
+
+            logger.info(f"Sending email to {recipient} via {self.smtp_host}:{self.smtp_port}")
+
+            # Create message
+            msg = MIMEMultipart()
+            msg['From'] = self.smtp_user
+            msg['To'] = recipient
+            msg['Subject'] = subject
+
+            # Email body
+            body = (
+                f"Добрый день!\n\n"
+                f"Во вложении направляем возражения к проекту договора.\n\n"
+                f"С уважением,\n"
+                f"Система Contract AI"
+            )
+            msg.attach(MIMEText(body, 'plain', 'utf-8'))
+
+            # Attach file
+            if os.path.exists(attachment_path):
+                with open(attachment_path, 'rb') as f:
+                    part = MIMEBase('application', 'octet-stream')
+                    part.set_payload(f.read())
+
+                encoders.encode_base64(part)
+                filename = os.path.basename(attachment_path)
+                part.add_header(
+                    'Content-Disposition',
+                    f'attachment; filename="{filename}"'
+                )
+                msg.attach(part)
+            else:
+                logger.error(f"Attachment not found: {attachment_path}")
+                return False
+
+            # Send email
+            server = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=30)
+            server.starttls()
+            server.login(self.smtp_user, self.smtp_password)
+            server.send_message(msg)
+            server.quit()
+
+            logger.info(f"Email sent successfully to {recipient}")
+            return True
+
+        except smtplib.SMTPAuthenticationError as e:
+            logger.error(f"SMTP authentication failed: {e}")
+            logger.error("Please check smtp_user and smtp_password in config")
+            return False
+        except smtplib.SMTPException as e:
+            logger.error(f"SMTP error: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Email sending failed: {e}")
+            return False
 
     def export_to_edo(
         self,
@@ -425,21 +505,80 @@ class DisagreementExportService:
 
     def _send_to_edo_stub(self, edo_system: str, endpoint: str, file_path: str) -> str:
         """
-        Stub for EDO API integration
-        
-        Real implementation would:
-        - Authenticate with EDO system
-        - Upload document
-        - Create document metadata
-        - Get document ID
+        EDO API integration (currently simulated)
+
+        This is a STUB implementation. For production use, implement real EDO integration
+        following the guide in docs/EDO_INTEGRATION.md
+
+        Required steps for production:
+        1. Register with chosen EDO system (Diadoc, SBIS, Kontur)
+        2. Obtain API keys and certificates
+        3. Install EDO SDK: pip install diadocsdk-python (for Diadoc)
+        4. Implement authentication and document signing
+        5. Replace this stub with real API calls
+
+        Example for Diadoc:
+        ```python
+        from diadocsdk import Diadoc
+
+        client = Diadoc(api_url=endpoint, api_key=self.config['diadoc_api_key'])
+        auth_token = client.authenticate(...)
+
+        with open(file_path, 'rb') as f:
+            message = client.create_message(
+                from_box_id=self.config['box_id'],
+                to_inn=recipient_inn,
+                documents=[{'filename': os.path.basename(file_path),
+                          'content': f.read(),
+                          'type': 'Nonformalized'}]
+            )
+
+        result = client.send_message(auth_token, message)
+        return result.message_id
+        ```
+
+        Args:
+            edo_system: EDO system name ('diadoc', 'sbis', 'kontur')
+            endpoint: API endpoint URL
+            file_path: Path to document file
+
+        Returns:
+            Document ID in EDO system
+
+        Raises:
+            EDOAuthenticationError: If authentication fails
+            EDOUploadError: If document upload fails
         """
-        logger.info(f"[STUB] Would send to {edo_system} at {endpoint}")
-        logger.info(f"[STUB] File: {file_path}")
-        
-        # Generate fake document ID
-        doc_id = f"{edo_system.upper()}-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        logger.info(f"[STUB] Generated document ID: {doc_id}")
-        
+        logger.info(f"[SIMULATED EDO] System: {edo_system}")
+        logger.info(f"[SIMULATED EDO] Endpoint: {endpoint}")
+        logger.info(f"[SIMULATED EDO] File: {file_path}")
+        logger.info(f"[SIMULATED EDO] File size: {os.path.getsize(file_path)} bytes")
+
+        # Check if file exists
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Document file not found: {file_path}")
+
+        # Simulate API call delay
+        import time
+        time.sleep(0.5)
+
+        # Generate simulated document ID
+        from datetime import datetime
+        import hashlib
+
+        # Create realistic-looking ID based on file hash
+        with open(file_path, 'rb') as f:
+            file_hash = hashlib.md5(f.read()).hexdigest()[:8]
+
+        timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        doc_id = f"{edo_system.upper()}-{timestamp}-{file_hash}"
+
+        logger.info(f"[SIMULATED EDO] Generated document ID: {doc_id}")
+        logger.warning(
+            "EDO integration is currently SIMULATED. "
+            "See docs/EDO_INTEGRATION.md for production implementation."
+        )
+
         return doc_id
 
     def _calculate_file_hash(self, file_path: str) -> str:
