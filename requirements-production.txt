@@ -1,0 +1,70 @@
+# ==============================================
+# PRODUCTION Requirements (Optimized for 1GB RAM)
+# ==============================================
+# Убраны тяжелые зависимости: ChromaDB, sentence-transformers, ML модели
+# Используются внешние API для AI: OpenAI, Anthropic, YandexGPT
+
+# LangChain (базовые пакеты)
+langchain==0.1.20
+langgraph==0.0.40
+langchain-community==0.0.38
+
+# LLM APIs (используем внешние API вместо локальных моделей)
+anthropic==0.18.1
+openai==1.12.0
+yandex-cloud-ml-sdk==0.2.0
+gigachat==0.1.15
+dashscope==1.14.0
+
+# Data validation
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Database (SQLite вместо PostgreSQL для экономии памяти)
+sqlalchemy==2.0.25
+alembic==1.13.1
+# psycopg2-binary - ОТКЛЮЧЕН, используем SQLite
+
+# Document processing (только базовые)
+python-docx==1.1.0
+PyPDF2==3.0.1
+pdfplumber==0.10.3
+reportlab==4.0.9
+lxml==5.1.0
+python-magic==0.4.27
+
+# Template processing
+jinja2==3.1.3
+
+# Web framework
+fastapi==0.109.2
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+websockets==12.0
+
+# Authentication & Security
+bcrypt==4.1.2
+pyjwt==2.8.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Utilities
+python-dotenv==1.0.0
+requests==2.31.0
+tenacity==8.2.3
+python-dateutil==2.8.2
+
+# Logging
+loguru==0.7.2
+
+# Опционально (если нужно)
+# redis==5.0.1  # Можно отключить если не нужен кэш
+
+# ========== ИСКЛЮЧЕНЫ ДЛЯ ЭКОНОМИИ RAM ==========
+# chromadb - 200-300 MB RAM
+# sentence-transformers - 300-500 MB RAM
+# scikit-learn - 50-100 MB RAM
+# numpy, scipy - 50 MB RAM
+# pytesseract, pdf2image - OCR не нужен в продакшене
+# streamlit - используется только для админки локально
+# pandas, plotly - визуализация не нужна в API

@@ -2,6 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  output: 'standalone', // Optimize for Docker deployment
 
   // API proxy
   async rewrites() {

@@ -126,3 +126,43 @@ data/contracts/*.doc
 ФИНАЛЬНАЯ_*.md
 ИСПРАВЛЕНИЕ_*.md
 КРИТИЧЕСКИЕ_*.md
+
+# ========================================
+# Production Deployment Files
+# ========================================
+
+# Production environment (содержит секреты!)
+.env.production
+
+# SSL Certificates
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt
+
+# Backups
+/backup/
+*.sql.gz
+*.tar.gz
+*_backup_*.sql
+*_backup_*.tar
+
+# Docker volumes data
+database/
+postgres_data/
+redis_data/
+chroma_data/
+ml_models/
+
+# Monitoring data
+monitoring/prometheus_data/
+
+# Node modules (frontend)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# Production logs
+api.log
+nginx.log
+*.log.*
