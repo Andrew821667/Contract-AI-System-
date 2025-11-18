@@ -9,10 +9,10 @@ FROM node:18-alpine AS deps
 WORKDIR /app
 
 # Copy package files
-COPY frontend/package.json frontend/package-lock.json* ./
+COPY frontend/package.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm install --only=production
 
 # Stage 2: Builder
 FROM node:18-alpine AS builder
