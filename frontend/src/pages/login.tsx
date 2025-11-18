@@ -163,7 +163,7 @@ export default function LoginPage() {
             <div className="grid grid-cols-2 gap-2 text-xs">
               <button
                 onClick={() => {
-                  handleSubmit(onSubmit)({ email: 'demo@example.com', password: 'demo' });
+                  onSubmit({ email: 'demo@example.com', password: 'demopass123' });
                 }}
                 className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded text-gray-700"
               >
@@ -171,7 +171,7 @@ export default function LoginPage() {
               </button>
               <button
                 onClick={() => {
-                  handleSubmit(onSubmit)({ email: 'admin@example.com', password: 'admin' });
+                  onSubmit({ email: 'admin@example.com', password: 'adminpass123' });
                 }}
                 className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded text-gray-700"
               >
