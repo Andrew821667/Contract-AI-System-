@@ -20,6 +20,8 @@ export interface User {
   last_login?: string;
   contracts_today: number;
   llm_requests_today: number;
+  max_contracts_per_day: number;
+  max_llm_requests_per_day: number;
   demo_expires?: string;
 }
 

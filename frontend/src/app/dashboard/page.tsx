@@ -3,20 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
-import api from '@/services/api'
+import api, { User } from '@/services/api'
 import toast from 'react-hot-toast'
-
-interface User {
-  id: string
-  name: string
-  email: string
-  role: string
-  subscription_tier: string
-  contracts_today: number
-  llm_requests_today: number
-  max_contracts_per_day: number
-  max_llm_requests_per_day: number
-}
 
 interface Contract {
   id: string
