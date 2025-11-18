@@ -10,8 +10,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME_BACKEND: ${{ github.repository }}/backend
-  IMAGE_NAME_FRONTEND: ${{ github.repository }}/frontend
 
 jobs:
   build-and-push:
@@ -32,25 +30,34 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 🏷️ Extract metadata for Backend
-        id: meta-backend
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
+      - name: 🔧 Prepare image tags (lowercase)
+        id: prep
+        run: |
+          # Convert repository name and branch to lowercase
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          BRANCH=$(echo "${{ github.ref_name }}" | tr '[:upper:]' '[:lower:]' | sed 's/\//-/g')
+          SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
 
-      - name: 🏷️ Extract metadata for Frontend
-        id: meta-frontend
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
+          # Image names
+          BACKEND_IMAGE="${{ env.REGISTRY }}/${REPO}/backend"
+          FRONTEND_IMAGE="${{ env.REGISTRY }}/${REPO}/frontend"
+
+          # Tags
+          BACKEND_TAGS="${BACKEND_IMAGE}:${BRANCH},${BACKEND_IMAGE}:${SHA_SHORT}"
+          FRONTEND_TAGS="${FRONTEND_IMAGE}:${BRANCH},${FRONTEND_IMAGE}:${SHA_SHORT}"
+
+          # Add 'latest' tag for default branch
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]] || [[ "${{ github.ref }}" == "refs/heads/master" ]]; then
+            BACKEND_TAGS="${BACKEND_TAGS},${BACKEND_IMAGE}:latest"
+            FRONTEND_TAGS="${FRONTEND_TAGS},${FRONTEND_IMAGE}:latest"
+          fi
+
+          echo "backend_tags=${BACKEND_TAGS}" >> $GITHUB_OUTPUT
+          echo "frontend_tags=${FRONTEND_TAGS}" >> $GITHUB_OUTPUT
+          echo "branch_tag=${BRANCH}" >> $GITHUB_OUTPUT
+
+          echo "Backend tags: ${BACKEND_TAGS}"
+          echo "Frontend tags: ${FRONTEND_TAGS}"
 
       - name: 🏗️ Build and push Backend image
         uses: docker/build-push-action@v5
@@ -58,8 +65,10 @@ jobs:
           context: .
           file: ./Dockerfile.backend
           push: true
-          tags: ${{ steps.meta-backend.outputs.tags }}
-          labels: ${{ steps.meta-backend.outputs.labels }}
+          tags: ${{ steps.prep.outputs.backend_tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
 
       - name: 🏗️ Build and push Frontend image
         uses: docker/build-push-action@v5
@@ -67,14 +76,17 @@ jobs:
           context: .
           file: ./Dockerfile.frontend
           push: true
-          tags: ${{ steps.meta-frontend.outputs.tags }}
-          labels: ${{ steps.meta-frontend.outputs.labels }}
+          tags: ${{ steps.prep.outputs.frontend_tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
 
       - name: ✅ Build complete
         run: |
           echo "🎉 Images built and pushed successfully!"
-          echo "Backend: ${{ steps.meta-backend.outputs.tags }}"
-          echo "Frontend: ${{ steps.meta-frontend.outputs.tags }}"
+          echo "Backend: ${{ steps.prep.outputs.backend_tags }}"
+          echo "Frontend: ${{ steps.prep.outputs.frontend_tags }}"
+          echo "Branch tag: ${{ steps.prep.outputs.branch_tag }}"
 
   deploy:
     name: Deploy to VPS
