@@ -42,9 +42,9 @@ export default function DashboardPage() {
   const { data: userData, isLoading: userLoading } = useQuery({
     queryKey: ['currentUser'],
     queryFn: async () => {
-      const response = await api.getCurrentUser()
-      setUser(response.data)
-      return response.data
+      const data = await api.getCurrentUser()
+      setUser(data)
+      return data
     }
   })
 
@@ -52,8 +52,8 @@ export default function DashboardPage() {
   const { data: contractsData, isLoading: contractsLoading } = useQuery({
     queryKey: ['contracts', 'recent'],
     queryFn: async () => {
-      const response = await api.listContracts({ page: 1, page_size: 5 })
-      return response.data
+      const data = await api.listContracts({ page: 1, limit: 5 })
+      return data
     }
   })
 

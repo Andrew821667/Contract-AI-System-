@@ -324,6 +324,22 @@ class APIClient {
     );
     return response.data;
   }
+
+  // ==================== Pricing & Subscriptions ====================
+
+  async getPricing(): Promise<any> {
+    const response = await this.client.get('/api/v1/subscriptions/pricing');
+    return response.data;
+  }
+
+  async createCheckoutSession(data: {
+    tier: string;
+    success_url: string;
+    cancel_url: string;
+  }): Promise<string> {
+    const response = await this.client.post('/api/v1/subscriptions/checkout', data);
+    return response.data.checkout_url;
+  }
 }
 
 // Export singleton instance

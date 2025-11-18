@@ -13,8 +13,8 @@ export default function PricingPage() {
   const { data: pricing } = useQuery({
     queryKey: ['pricing'],
     queryFn: async () => {
-      const response = await api.getPricing()
-      return response.data
+      const data = await api.getPricing()
+      return data
     }
   })
 
