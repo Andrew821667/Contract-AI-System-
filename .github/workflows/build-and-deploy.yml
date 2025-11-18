@@ -33,8 +33,8 @@ jobs:
       - name: 🔧 Prepare image tags (lowercase)
         id: prep
         run: |
-          # Convert repository name and branch to lowercase
-          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          # Convert repository name and branch to lowercase, remove trailing dash
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]' | sed 's/-$//')
           BRANCH=$(echo "${{ github.ref_name }}" | tr '[:upper:]' '[:lower:]' | sed 's/\//-/g')
           SHA_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
 

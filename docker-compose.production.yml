@@ -61,7 +61,7 @@ services:
   # Backend API (FastAPI + ML + ChromaDB)
   # ===========================================
   backend:
-    image: ghcr.io/andrew821667/contract-ai-system-/backend:claude-deploy-web-interface-01a4fdjncfj2tzqmpy2w2xkg
+    image: ghcr.io/andrew821667/contract-ai-system/backend:claude-deploy-web-interface-01a4fdjncfj2tzqmpy2w2xkg
     container_name: contract-ai-backend
     restart: unless-stopped
     ports:
@@ -133,7 +133,7 @@ services:
   # Frontend (Next.js)
   # ===========================================
   frontend:
-    image: ghcr.io/andrew821667/contract-ai-system-/frontend:claude-deploy-web-interface-01a4fdjncfj2tzqmpy2w2xkg
+    image: ghcr.io/andrew821667/contract-ai-system/frontend:claude-deploy-web-interface-01a4fdjncfj2tzqmpy2w2xkg
     container_name: contract-ai-frontend
     restart: unless-stopped
     ports:
