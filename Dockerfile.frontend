@@ -11,8 +11,8 @@ WORKDIR /app
 # Copy package files
 COPY frontend/package.json ./
 
-# Install dependencies
-RUN npm install --only=production
+# Install ALL dependencies (needed for build)
+RUN npm install
 
 # Stage 2: Builder
 FROM node:18-alpine AS builder
