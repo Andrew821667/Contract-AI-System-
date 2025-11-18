@@ -1,6 +1,6 @@
 # ============================================
 # Dockerfile for Contract AI System Backend
-# Full version with ML, ChromaDB, and all features
+# Production version with ML analytics (no ChromaDB/sentence-transformers)
 # ============================================
 
 FROM python:3.11-slim as base
@@ -60,12 +60,7 @@ RUN mkdir -p \
     data/reports \
     data/exports \
     data/templates \
-    database \
-    chroma_data \
-    ml_models
-
-# Download ML models (sentence-transformers)
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
+    database
 
 # Create non-root user
 RUN useradd -m -u 1000 appuser && \
