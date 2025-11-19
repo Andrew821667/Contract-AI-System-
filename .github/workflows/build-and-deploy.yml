@@ -125,8 +125,11 @@ jobs:
             echo "🔐 Login to GitHub Container Registry..."
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+            echo "📝 Setting up environment variables..."
+            cp .env.production .env
+
             echo "🛑 Stopping services..."
-            docker-compose -f docker-compose.production.yml down || true
+            docker-compose -f docker-compose.production.yml down -v || true
 
             echo "📥 Pulling new images..."
             docker-compose -f docker-compose.production.yml pull
