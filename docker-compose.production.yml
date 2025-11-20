@@ -107,8 +107,6 @@ services:
       - ./data:/app/data
       - ./database:/app/database
       - ./logs:/app/logs
-      - chroma_data:/app/chroma_data
-      - ml_models:/app/ml_models
     depends_on:
       postgres:
         condition: service_healthy
@@ -219,10 +217,6 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
-    driver: local
-  chroma_data:
-    driver: local
-  ml_models:
     driver: local
   prometheus_data:
     driver: local
