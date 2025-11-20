@@ -58,7 +58,7 @@ services:
       - contract-ai-network
 
   # ===========================================
-  # Backend API (FastAPI + ML + ChromaDB)
+  # Backend API (FastAPI + ML)
   # ===========================================
   backend:
     image: ghcr.io/andrew821667/contract-ai-system/backend:claude-deploy-web-interface-01a4fdjncfj2tzqmpy2w2xkg
@@ -89,12 +89,8 @@ services:
       - QWEN_API_KEY=${QWEN_API_KEY}
       - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
 
-      # ChromaDB
-      - CHROMA_PERSIST_DIRECTORY=/app/chroma_data
-
-      # RAG settings
+      # RAG settings (using OpenAI Embeddings API)
       - RAG_TOP_K=5
-      - EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
 
       # File paths
       - UPLOAD_DIR=/app/data/uploads
@@ -115,15 +111,15 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1024M  # 1GB для backend + ML + ChromaDB
+          memory: 768M  # Оптимизировано после удаления ChromaDB и локальных моделей
         reservations:
-          memory: 512M
+          memory: 384M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s  # Больше времени для загрузки ML моделей
+      start_period: 40s  # Оптимизировано после удаления локальных ML моделей
     networks:
       - contract-ai-network
 
