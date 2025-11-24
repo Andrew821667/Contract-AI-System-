@@ -31,7 +31,6 @@ def test_import():
         "openai": settings.openai_api_key,
         "perplexity": settings.perplexity_api_key,
         "yandex": settings.yandex_api_key,
-        "gigachat": settings.gigachat_api_key,
         "deepseek": settings.deepseek_api_key,
         "qwen": settings.qwen_api_key
     }

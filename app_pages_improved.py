@@ -7,6 +7,8 @@ import streamlit as st
 from src.utils.auth import get_current_user, check_feature_access, show_upgrade_message
 from src.utils.contract_types import get_all_contract_names, get_contract_type_code
 from src.utils.knowledge_base import KnowledgeBaseCategory
+from src.services.rag_system import RAGSystem
+from src.models import get_db
 
 
 def page_generator_improved():
@@ -472,8 +474,61 @@ def page_knowledge_base():
 
     if st.button("Искать", type="primary"):
         if search_query:
-            with st.spinner("Поиск..."):
-                st.info("🔍 Поиск в разработке. Требуется интеграция с RAG системой.")
-                # TODO: Implement search
+            with st.spinner("Поиск в базе знаний..."):
+                try:
+                    # Map category names to collection types
+                    category_map = {
+                        'Гражданский кодекс РФ': RAGSystem.COLLECTION_LAWS,
+                        'Трудовой кодекс РФ': RAGSystem.COLLECTION_LAWS,
+                        'Налоговый кодекс РФ': RAGSystem.COLLECTION_LAWS,
+                        'Судебная практика': RAGSystem.COLLECTION_CASE_LAW,
+                        'Шаблоны договоров': RAGSystem.COLLECTION_TEMPLATES
+                    }
+
+                    # Initialize RAG system
+                    db = next(get_db())
+                    rag = RAGSystem(db_session=db)
+
+                    # Search in selected collections
+                    all_results = []
+                    for category in selected_categories:
+                        collection = category_map.get(category, RAGSystem.COLLECTION_KNOWLEDGE)
+                        try:
+                            results = rag.search(
+                                query=search_query,
+                                collection=collection,
+                                top_k=top_k,
+                                use_reranking=True
+                            )
+                            for doc in results:
+                                doc.metadata['category'] = category
+                            all_results.extend(results)
+                        except Exception as e:
+                            st.warning(f"⚠️ Ошибка поиска в категории {category}: {e}")
+
+                    if all_results:
+                        # Sort by score
+                        all_results.sort(key=lambda x: x.score, reverse=True)
+                        all_results = all_results[:top_k]
+
+                        st.success(f"✅ Найдено результатов: {len(all_results)}")
+
+                        for i, doc in enumerate(all_results, 1):
+                            with st.expander(f"📄 Результат {i} (релевантность: {doc.score:.2%})"):
+                                st.markdown(f"**Категория:** {doc.metadata.get('category', 'Не указано')}")
+                                st.markdown(f"**Источник:** {doc.metadata.get('source', 'Не указано')}")
+                                st.markdown("---")
+                                st.markdown(doc.content)
+
+                                if doc.metadata.get('article'):
+                                    st.info(f"📖 Статья: {doc.metadata['article']}")
+                                if doc.metadata.get('date'):
+                                    st.caption(f"🗓️ Дата: {doc.metadata['date']}")
+                    else:
+                        st.warning("❌ Ничего не найдено. Попробуйте изменить запрос.")
+
+                except Exception as e:
+                    st.error(f"❌ Ошибка поиска: {e}")
+                    st.info("💡 Убедитесь, что база знаний инициализирована. Используйте раздел 'Администрирование' для загрузки документов.")
         else:
             st.warning("Введите запрос для поиска")

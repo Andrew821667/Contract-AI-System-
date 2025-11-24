@@ -9,8 +9,6 @@ openai==1.12.0
 # Для Perplexity (использует OpenAI-совместимый API)
 # Для YandexGPT
 yandex-cloud-ml-sdk==0.2.0
-# Для GigaChat (Сбер)
-gigachat==0.1.15
 # DeepSeek (OpenAI-совместимый API)
 # Qwen (Alibaba Cloud) - использует dashscope SDK
 dashscope==1.14.0
@@ -81,6 +79,7 @@ python-dateutil==2.8.2
 
 # Visualization
 plotly==5.18.0
+kaleido==0.2.1  # For plotly static image export
 pandas==2.1.4
 
 # Caching (optional)

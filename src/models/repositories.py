@@ -8,9 +8,10 @@ from datetime import datetime
 import json
 
 from .database import (
-    User, Template, Contract, AnalysisResult,
+    Template, Contract, AnalysisResult,
     ReviewTask, LegalDocument, ExportLog
 )
+from .auth_models import User
 
 
 class BaseRepository:

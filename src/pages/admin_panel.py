@@ -344,12 +344,12 @@ def show_demo_links_tab(auth_service: AuthService, current_user: dict, db):
                     st.write(f"**Истекает:** {token.expires_at.strftime('%Y-%m-%d %H:%M')}")
                     st.write(f"**Макс. контрактов:** {token.max_contracts}")
 
-                    # Revoke button (TODO: implement revoke)
-                    # if not token.used and st.button("Отозвать", key=f"revoke_{token.id}"):
-                    #     token.expires_at = datetime.utcnow()
-                    #     db.commit()
-                    #     st.success("Токен отозван")
-                    #     st.rerun()
+                    # Revoke button
+                    if not token.used and st.button("🚫 Отозвать токен", key=f"revoke_{token.id}", type="secondary"):
+                        token.expires_at = datetime.utcnow()
+                        db.commit()
+                        st.success("✅ Токен успешно отозван")
+                        st.rerun()
         else:
             st.info("Нет активных токенов")
 
@@ -427,14 +427,29 @@ def show_analytics_tab(auth_service: AuthService, db):
         )
         st.plotly_chart(fig, use_container_width=True)
 
-    # Registration trend (mock data for now)
+    # Registration trend (real data from database)
     st.markdown("---")
     st.subheader("📈 Тренд Регистраций (последние 30 дней)")
 
-    # TODO: Get real registration stats from database
-    # For now, display mock data
-    dates = pd.date_range(end=datetime.now(), periods=30, freq='D')
-    registrations = [int(analytics['total_users'] / 30 * (1 + i * 0.1)) for i in range(30)]
+    # Get real registration stats from database
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=30)
+
+    # Query users grouped by registration date
+    users_in_period = db.query(User).filter(
+        User.created_at >= start_date,
+        User.created_at <= end_date
+    ).all()
+
+    # Count registrations per day
+    registration_counts = {}
+    for user in users_in_period:
+        date = user.created_at.date()
+        registration_counts[date] = registration_counts.get(date, 0) + 1
+
+    # Create complete date range and fill with zeros
+    dates = pd.date_range(start=start_date, end=end_date, freq='D')
+    registrations = [registration_counts.get(date.date(), 0) for date in dates]
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -452,6 +467,19 @@ def show_analytics_tab(auth_service: AuthService, db):
         hovermode='x unified'
     )
     st.plotly_chart(fig, use_container_width=True)
+
+    # Registration summary
+    total_registrations = sum(registrations)
+    avg_daily = total_registrations / 30 if total_registrations > 0 else 0
+    max_daily = max(registrations) if registrations else 0
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("📊 Всего за период", total_registrations)
+    with col2:
+        st.metric("📈 Среднее в день", f"{avg_daily:.1f}")
+    with col3:
+        st.metric("🔝 Максимум за день", max_daily)
 
 
 def show_audit_logs_tab(db):

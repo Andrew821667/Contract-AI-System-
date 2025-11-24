@@ -15,6 +15,7 @@ from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from sqlalchemy.orm import Session
+from loguru import logger
 
 from src.models import get_db, User
 from src.services.auth_service import AuthService
@@ -62,14 +63,14 @@ class CreateUserRequest(BaseModel):
     """Admin: Create user request"""
     email: EmailStr
     name: str = Field(..., min_length=2, max_length=255)
-    role: str = Field(..., regex="^(admin|senior_lawyer|lawyer|junior_lawyer|demo)$")
-    subscription_tier: str = Field(default="demo", regex="^(demo|basic|pro|enterprise)$")
+    role: str = Field(..., pattern="^(admin|senior_lawyer|lawyer|junior_lawyer|demo)$")
+    subscription_tier: str = Field(default="demo", pattern="^(demo|basic|pro|enterprise)$")
 
 
 class UpdateRoleRequest(BaseModel):
     """Admin: Update role request"""
-    role: str = Field(..., regex="^(admin|senior_lawyer|lawyer|junior_lawyer|demo)$")
-    subscription_tier: Optional[str] = Field(None, regex="^(demo|basic|pro|enterprise)$")
+    role: str = Field(..., pattern="^(admin|senior_lawyer|lawyer|junior_lawyer|demo)$")
+    subscription_tier: Optional[str] = Field(None, pattern="^(demo|basic|pro|enterprise)$")
 
 
 # ==================== OAuth2 Setup ====================
@@ -616,7 +617,71 @@ async def create_user_as_admin(
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
 
-    # TODO: Send invitation email with temp_password
+    # Send invitation email with temp_password
+    email_sent = False
+    try:
+        from config.settings import settings
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+
+        if settings.smtp_user and settings.smtp_password:
+            # Create email message
+            msg = MIMEMultipart('alternative')
+            msg['From'] = f"{settings.smtp_from_name} <{settings.smtp_from_email or settings.smtp_user}>"
+            msg['To'] = user.email
+            msg['Subject'] = "Приглашение в Contract AI System"
+
+            # Email body (HTML)
+            html = f"""
+            <html>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+                    <h2 style="color: #3B82F6;">Добро пожаловать в Contract AI System!</h2>
+
+                    <p>Здравствуйте, {user.name}!</p>
+
+                    <p>Для вас создан аккаунт в системе автоматизации работы с договорами.</p>
+
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                        <p><strong>Email:</strong> {user.email}</p>
+                        <p><strong>Временный пароль:</strong> <code style="background: #e9ecef; padding: 2px 6px; border-radius: 3px;">{temp_password}</code></p>
+                        <p><strong>Роль:</strong> {user.role}</p>
+                    </div>
+
+                    <p>⚠️ <strong>Важно:</strong> Пожалуйста, измените временный пароль после первого входа в систему.</p>
+
+                    <p style="margin-top: 30px;">
+                        <a href="{settings.app_url if hasattr(settings, 'app_url') else 'http://localhost:8501'}"
+                           style="background: #3B82F6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                            Войти в систему
+                        </a>
+                    </p>
+
+                    <p style="margin-top: 30px; font-size: 12px; color: #666;">
+                        С уважением,<br>
+                        Команда Contract AI System
+                    </p>
+                </div>
+            </body>
+            </html>
+            """
+
+            msg.attach(MIMEText(html, 'html', 'utf-8'))
+
+            # Send email
+            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30)
+            server.starttls()
+            server.login(settings.smtp_user, settings.smtp_password)
+            server.send_message(msg)
+            server.quit()
+
+            email_sent = True
+            logger.info(f"Invitation email sent to {user.email}")
+
+    except Exception as e:
+        logger.warning(f"Failed to send invitation email: {e}")
+        # Don't fail the request if email sending fails
 
     return {
         "user_id": user.id,

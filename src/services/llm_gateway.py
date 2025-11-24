@@ -1,6 +1,6 @@
 """
 LLM Gateway - Единая точка доступа ко всем LLM провайдерам
-Поддержка: Claude, GPT-4, Perplexity, YandexGPT, GigaChat, DeepSeek, Qwen
+Поддержка: Claude, GPT-4, Perplexity, YandexGPT, DeepSeek, Qwen
 """
 import json
 import hashlib
@@ -56,14 +56,6 @@ class LLMGateway:
             self._client = YCloudML(
                 folder_id=settings.yandex_folder_id,
                 auth=settings.yandex_api_key
-            )
-
-        elif self.provider == "gigachat":
-            from gigachat import GigaChat
-            self._client = GigaChat(
-                credentials=settings.gigachat_api_key,
-                scope=settings.gigachat_scope,
-                verify_ssl_certs=False  # ;O @07@01>B:8
             )
 
         elif self.provider == "deepseek":
@@ -254,8 +246,6 @@ class LLMGateway:
             return self._call_openai_compatible(prompt, system_prompt, temperature, max_tokens, **kwargs)
         elif self.provider == "yandex":
             return self._call_yandex(prompt, system_prompt, temperature, max_tokens, **kwargs)
-        elif self.provider == "gigachat":
-            return self._call_gigachat(prompt, system_prompt, temperature, max_tokens, **kwargs)
         elif self.provider == "qwen":
             return self._call_qwen(prompt, system_prompt, temperature, max_tokens, **kwargs)
         else:
@@ -347,22 +337,6 @@ class LLMGateway:
 
         return ""
 
-    def _call_gigachat(self, prompt: str, system_prompt: Optional[str], temperature: float, max_tokens: int, **kwargs) -> str:
-        """K7>2 GigaChat API"""
-        messages = []
-
-        if system_prompt:
-            messages.append({"role": "system", "content": system_prompt})
-
-        messages.append({"role": "user", "content": prompt})
-
-        response = self._client.chat(
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-
-        return response.choices[0].message.content
 
     def _call_qwen(self, prompt: str, system_prompt: Optional[str], temperature: float, max_tokens: int, **kwargs) -> str:
         """K7>2 Qwen API (Alibaba Cloud)"""
