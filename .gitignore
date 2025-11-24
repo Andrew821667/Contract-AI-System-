@@ -126,3 +126,11 @@ data/contracts/*.doc
 ФИНАЛЬНАЯ_*.md
 ИСПРАВЛЕНИЕ_*.md
 КРИТИЧЕСКИЕ_*.md
+
+# Next.js Frontend
+frontend/.next/
+frontend/out/
+frontend/node_modules/
+frontend/next-env.d.ts
+frontend/.next
+frontend/build
