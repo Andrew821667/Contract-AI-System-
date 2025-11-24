@@ -11,12 +11,12 @@ from sqlalchemy.orm import Session
 from loguru import logger
 
 from src.models.database import get_db
-from src.models import Contract, ContractAnalysis
+from src.models import Contract, AnalysisResult
 from src.services.auth_service import AuthService
 
 
 router = APIRouter()
-auth_service = AuthService()
+# AuthService will be initialized with DB in each endpoint that needs it
 
 
 class ConnectionManager:
@@ -153,8 +153,8 @@ async def websocket_analysis_updates(
             db.refresh(contract)
 
             # Get analysis if available
-            analysis = db.query(ContractAnalysis).filter(
-                ContractAnalysis.contract_id == contract_id
+            analysis = db.query(AnalysisResult).filter(
+                AnalysisResult.contract_id == contract_id
             ).first()
 
             # Calculate progress based on status

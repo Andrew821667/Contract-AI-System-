@@ -32,7 +32,7 @@ from config.settings import settings
 
 
 router = APIRouter()
-auth_service = AuthService()
+# AuthService will be initialized with DB in each endpoint that needs it
 
 
 # Dependency: Get current user from token

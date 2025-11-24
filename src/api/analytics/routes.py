@@ -29,7 +29,7 @@ from src.models.database import User, SessionLocal
 router = APIRouter(tags=["analytics"])
 
 # Auth service
-auth_service = AuthService()
+# AuthService will be initialized with DB in each endpoint that needs it
 
 
 # Request/Response Models
