@@ -121,15 +121,31 @@ class AnalyticsService:
 
     def _load_historical_metrics(self):
         """Load historical metrics from database"""
-        # TODO: Load from database
-        # Requirements for production implementation:
-        # 1. Create AnalyticsMetric database model (date, metric_name, value, user_id)
-        # 2. Create migration for new table
-        # 3. Add method to persist metrics after each operation
-        # 4. Load recent metrics on service initialization
-        # 5. Implement time-based aggregation (hourly/daily/monthly)
-        # For now, use in-memory cache
-        logger.info("📊 Analytics Service initialized")
+        try:
+            from ..models import AnalyticsMetricLog
+            from datetime import datetime, timedelta
+
+            # Load metrics from last 90 days
+            cutoff_date = datetime.utcnow() - timedelta(days=90)
+
+            recent_metrics = self.db_session.query(AnalyticsMetricLog).filter(
+                AnalyticsMetricLog.timestamp >= cutoff_date
+            ).order_by(AnalyticsMetricLog.timestamp.desc()).limit(10000).all()
+
+            # Group metrics by name
+            for metric in recent_metrics:
+                self.metrics_cache[metric.metric_name].append({
+                    'value': metric.value,
+                    'timestamp': metric.timestamp,
+                    'user_id': metric.user_id,
+                    'metadata': metric.metadata
+                })
+
+            logger.info(f"📊 Analytics Service initialized - loaded {len(recent_metrics)} historical metrics")
+
+        except Exception as e:
+            logger.warning(f"Could not load historical metrics: {e}")
+            logger.info("📊 Analytics Service initialized - using in-memory cache only")
 
     def get_dashboard_summary(
         self,
@@ -633,16 +649,189 @@ class AnalyticsService:
                     ])
 
         elif format == 'pdf':
-            # TODO: Generate PDF report with charts
-            # Requirements for production implementation:
-            # 1. Install reportlab or weasyprint library
-            # 2. Create PDF template with logo and styling
-            # 3. Convert plotly charts to images (using kaleido or orca)
-            # 4. Layout metrics, tables, and charts in PDF
-            # 5. Add page numbers and table of contents
-            # 6. Generate executive summary section
-            logger.warning("PDF export not yet implemented - use CSV or JSON format")
-            return ""
+            # Generate PDF report with charts
+            import io
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            from reportlab.platypus import (
+                SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+                PageBreak, Image, KeepTogether
+            )
+            from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+            import plotly.graph_objects as go
+
+            logger.info("📄 Generating PDF report with charts...")
+
+            # Create PDF document
+            doc = SimpleDocTemplate(filepath, pagesize=A4)
+            story = []
+            styles = getSampleStyleSheet()
+
+            # Custom styles
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=24,
+                textColor=colors.HexColor('#3B82F6'),
+                spaceAfter=30,
+                alignment=TA_CENTER
+            )
+
+            heading_style = ParagraphStyle(
+                'CustomHeading',
+                parent=styles['Heading2'],
+                fontSize=16,
+                textColor=colors.HexColor('#1E40AF'),
+                spaceAfter=12,
+                spaceBefore=20
+            )
+
+            # Title
+            story.append(Paragraph("📊 Analytics Report", title_style))
+            story.append(Paragraph(
+                f"Period: {dashboard_data['period']['start'][:10]} to {dashboard_data['period']['end'][:10]}",
+                styles['Normal']
+            ))
+            story.append(Spacer(1, 0.3*inch))
+
+            # Headline Metrics
+            story.append(Paragraph("Key Metrics", heading_style))
+
+            metrics_data = [['Metric', 'Value', 'Unit', 'Trend']]
+            for metric_name, metric in dashboard_data['headline_metrics'].items():
+                trend_text = f"{metric.get('trend_percentage', 0):+.1f}%" if metric.get('trend_percentage') else 'N/A'
+                metrics_data.append([
+                    metric['name'],
+                    str(metric['value']),
+                    metric['unit'],
+                    trend_text
+                ])
+
+            metrics_table = Table(metrics_data, colWidths=[3*inch, 1.5*inch, 1*inch, 1*inch])
+            metrics_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3B82F6')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ]))
+            story.append(metrics_table)
+            story.append(Spacer(1, 0.3*inch))
+
+            # Risk Trends Chart
+            if dashboard_data.get('risk_trends'):
+                story.append(Paragraph("Risk Trends Over Time", heading_style))
+
+                try:
+                    # Create plotly chart
+                    risk_data = dashboard_data['risk_trends']
+                    dates = [r['date'] for r in risk_data]
+                    critical = [r['critical'] for r in risk_data]
+                    high = [r['high'] for r in risk_data]
+                    medium = [r['medium'] for r in risk_data]
+
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=dates, y=critical, name='Critical', line=dict(color='red')))
+                    fig.add_trace(go.Scatter(x=dates, y=high, name='High', line=dict(color='orange')))
+                    fig.add_trace(go.Scatter(x=dates, y=medium, name='Medium', line=dict(color='yellow')))
+
+                    fig.update_layout(
+                        title='Risk Levels Trend',
+                        xaxis_title='Date',
+                        yaxis_title='Count',
+                        height=400,
+                        width=700
+                    )
+
+                    # Export to image
+                    img_bytes = fig.to_image(format="png", width=700, height=400)
+                    img_buffer = io.BytesIO(img_bytes)
+                    img = Image(img_buffer, width=6*inch, height=3.4*inch)
+                    story.append(img)
+                    story.append(Spacer(1, 0.2*inch))
+
+                except Exception as e:
+                    logger.warning(f"Could not generate risk trends chart: {e}")
+                    story.append(Paragraph("(Chart generation skipped)", styles['Italic']))
+
+            # Top Risks
+            story.append(PageBreak())
+            story.append(Paragraph("Top Identified Risks", heading_style))
+
+            if dashboard_data.get('top_risks'):
+                risks_data = [['Risk', 'Severity', 'Count']]
+                for risk in dashboard_data['top_risks'][:10]:
+                    risks_data.append([
+                        risk.get('risk_type', 'Unknown'),
+                        risk.get('severity', 'N/A'),
+                        str(risk.get('count', 0))
+                    ])
+
+                risks_table = Table(risks_data, colWidths=[4*inch, 1.5*inch, 1*inch])
+                risks_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#DC2626')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('ALIGN', (-1, 0), (-1, -1), 'RIGHT'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.black)
+                ]))
+                story.append(risks_table)
+
+            story.append(Spacer(1, 0.3*inch))
+
+            # Cost Analysis
+            if dashboard_data.get('cost_analysis'):
+                story.append(Paragraph("Cost Analysis", heading_style))
+                cost_data = dashboard_data['cost_analysis']
+
+                cost_info = [
+                    ['Total LLM Cost', f"${cost_data.get('total_cost', 0):.2f}"],
+                    ['Total Tokens Used', f"{cost_data.get('total_tokens', 0):,}"],
+                    ['Average Cost per Contract', f"${cost_data.get('cost_per_contract', 0):.2f}"],
+                    ['Cost Saved', f"${cost_data.get('cost_saved', 0):.2f}"],
+                ]
+
+                cost_table = Table(cost_info, colWidths=[4*inch, 2.5*inch])
+                cost_table.setStyle(TableStyle([
+                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                    ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+                    ('GRID', (0, 0), (-1, -1), 1, colors.grey)
+                ]))
+                story.append(cost_table)
+
+            story.append(Spacer(1, 0.3*inch))
+
+            # Recommendations
+            if dashboard_data.get('recommendations'):
+                story.append(PageBreak())
+                story.append(Paragraph("💡 Recommendations", heading_style))
+
+                for i, rec in enumerate(dashboard_data['recommendations'], 1):
+                    rec_text = f"<b>{i}.</b> {rec}"
+                    story.append(Paragraph(rec_text, styles['Normal']))
+                    story.append(Spacer(1, 0.1*inch))
+
+            # Footer
+            story.append(Spacer(1, 0.5*inch))
+            story.append(Paragraph(
+                f"Generated at: {dashboard_data['generated_at']}",
+                styles['Italic']
+            ))
+            story.append(Paragraph(
+                "Contract AI System - Analytics Report",
+                styles['Italic']
+            ))
+
+            # Build PDF
+            doc.build(story)
+            logger.info(f"✅ PDF report generated successfully: {filepath}")
 
         logger.info(f"📄 Analytics report exported: {filepath}")
         return filepath
@@ -673,7 +862,29 @@ class AnalyticsService:
 
         self.metrics_cache[name].append(metric)
 
-        logger.debug(f"📊 Tracked metric: {name} = {value} {unit}")
+        # Persist to database
+        try:
+            from ..models import AnalyticsMetricLog
+
+            log_entry = AnalyticsMetricLog(
+                metric_name=name,
+                metric_type=metric_type.value,
+                value=value,
+                unit=unit,
+                user_id=user_id,
+                contract_id=contract_id,
+                metadata=metadata,
+                timestamp=datetime.now()
+            )
+
+            self.db_session.add(log_entry)
+            self.db_session.commit()
+
+            logger.debug(f"📊 Tracked and persisted metric: {name} = {value} {unit}")
+
+        except Exception as e:
+            logger.warning(f"Could not persist metric to database: {e}")
+            logger.debug(f"📊 Tracked metric (in-memory only): {name} = {value} {unit}")
 
 
 # Singleton instance

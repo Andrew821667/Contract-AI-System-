@@ -12,6 +12,8 @@ from .auth_models import (
 from .analyzer_models import ContractRisk, ContractRecommendation, ContractAnnotation, ContractSuggestedChange, AnalysisFeedback
 from .disagreement_models import Disagreement, DisagreementObjection, DisagreementExportLog, DisagreementFeedback
 from .changes_models import ContractVersion, ContractChange, ChangeAnalysisResult, ChangeReviewFeedback
+from .analytics_models import AnalyticsMetricLog, AggregatedMetric
+from .ml_feedback_models import RiskPredictionFeedback, ModelTrainingBatch
 
 # !>740=85 engine
 engine = create_engine(
@@ -89,5 +91,11 @@ __all__ = [
     "ContractVersion",
     "ContractChange",
     "ChangeAnalysisResult",
-    "ChangeReviewFeedback"
+    "ChangeReviewFeedback",
+    # Analytics models
+    "AnalyticsMetricLog",
+    "AggregatedMetric",
+    # ML Feedback models
+    "RiskPredictionFeedback",
+    "ModelTrainingBatch"
 ]
