@@ -29,7 +29,7 @@ from loguru import logger
 router = APIRouter(tags=["ml-ai"])
 
 # Auth service
-auth_service = AuthService()
+# AuthService will be initialized with DB in each endpoint that needs it
 
 # ML/AI components (lazily initialized)
 _risk_predictor = None
