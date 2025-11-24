@@ -92,7 +92,7 @@ class ComposerStartRequest(BaseModel):
     contract_type: str = Field(..., example="supply")
     parties: List[str] = Field(..., example=["Company A", "Company B"])
     template_id: Optional[str] = None
-    language: str = Field(default="ru", regex="^(ru|en)$")
+    language: str = Field(default="ru", pattern="^(ru|en)$")
 
 
 class ComposerSuggestionRequest(BaseModel):
@@ -122,7 +122,7 @@ class AddKnowledgeRequest(BaseModel):
     """Add company knowledge request"""
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=10)
-    category: str = Field(..., regex="^(policy|template|precedent|guideline)$")
+    category: str = Field(..., pattern="^(policy|template|precedent|guideline)$")
     tags: List[str] = Field(default=[])
 
 

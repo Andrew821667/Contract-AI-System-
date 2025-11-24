@@ -62,7 +62,7 @@ class TrackMetricRequest(BaseModel):
 
 class ExportRequest(BaseModel):
     """Export analytics report request"""
-    format: str = Field(default='json', regex='^(json|csv|pdf)$')
+    format: str = Field(default='json', pattern='^(json|csv|pdf)$')
     period_days: int = Field(default=30, ge=1, le=365)
     user_id: Optional[str] = None
 
