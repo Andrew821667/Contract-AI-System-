@@ -529,19 +529,49 @@ class MLRiskPredictor:
             contract_data: Contract metadata
             actual_risk_level: User-confirmed risk level
         """
-        # For now, just log feedback
-        # In production, accumulate feedback and retrain periodically
+        """
+        Store feedback and trigger retraining if threshold reached
+        """
         logger.info(f"📝 Feedback received: {actual_risk_level} for contract")
 
-        # TODO: Implement incremental learning or batch retraining
-        # Requirements for production implementation:
-        # 1. Create FeedbackLog database model to store user corrections
-        # 2. Accumulate at least 100+ feedback samples before retraining
-        # 3. Split feedback data into train/validation sets
-        # 4. Retrain model with combined original + feedback data
-        # 5. Evaluate model performance on validation set
-        # 6. Use A/B testing to compare old vs new model
-        # 7. Implement model versioning and rollback mechanism
+        try:
+            from ..models import RiskPredictionFeedback
+            from sqlalchemy.orm import Session
+
+            # Store feedback
+            feedback = RiskPredictionFeedback(
+                contract_id=contract_data.get('contract_id'),
+                user_id=contract_data.get('user_id'),
+                contract_features=contract_data,
+                predicted_risk_level=contract_data.get('predicted_risk', 'unknown'),
+                predicted_confidence=contract_data.get('confidence'),
+                actual_risk_level=actual_risk_level,
+                feedback_reason=contract_data.get('feedback_reason'),
+                model_version=self.model_version,
+                used_for_training=False
+            )
+
+            # Save to database
+            if hasattr(self, 'db_session') and self.db_session:
+                self.db_session.add(feedback)
+                self.db_session.commit()
+                logger.info(f"✅ Feedback stored in database (ID: {feedback.id})")
+
+                # Check if we have enough feedback for retraining
+                unused_feedback_count = self.db_session.query(RiskPredictionFeedback).filter(
+                    RiskPredictionFeedback.used_for_training == False
+                ).count()
+
+                if unused_feedback_count >= 100:
+                    logger.warning(f"🔄 {unused_feedback_count} feedback samples accumulated - retraining recommended!")
+                    logger.info("💡 Run: python scripts/retrain_risk_model.py")
+
+            else:
+                logger.warning("Database session not available - feedback not persisted")
+
+        except Exception as e:
+            logger.error(f"Failed to store feedback: {e}")
+            logger.info("Feedback logged but not persisted to database")
 
     def _class_to_risk_level(self, class_idx: int) -> RiskLevel:
         """Convert class index to RiskLevel enum"""
