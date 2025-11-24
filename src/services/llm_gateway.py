@@ -58,8 +58,6 @@ class LLMGateway:
                 auth=settings.yandex_api_key
             )
 
-            )
-
         elif self.provider == "deepseek":
             from openai import OpenAI
             self._client = OpenAI(
