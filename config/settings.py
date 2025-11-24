@@ -19,13 +19,11 @@ class Settings(BaseSettings):
     perplexity_api_key: str = ""
     yandex_api_key: str = ""
     yandex_folder_id: str = ""
-    gigachat_api_key: str = ""
-    gigachat_scope: str = "GIGACHAT_API_PERS"
     deepseek_api_key: str = ""
     qwen_api_key: str = ""
 
     # Default LLM Provider
-    default_llm_provider: Literal["claude", "openai", "perplexity", "yandex", "gigachat", "deepseek", "qwen"] = "openai"
+    default_llm_provider: Literal["claude", "openai", "perplexity", "yandex", "deepseek", "qwen"] = "openai"
 
     # ChromaDB
     chroma_persist_directory: str = "./chroma_data"
