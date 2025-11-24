@@ -186,59 +186,109 @@ class ExtendedDocumentParser(BaseDocumentParser):
 
     def _parse_rtf(self, file_path: str) -> str:
         """
-        Parse RTF to XML
+        Parse RTF to XML using striprtf library
 
-        Note: Requires striprtf or pypandoc
-        For now, returns stub - will be implemented when dependencies installed
+        Returns properly formatted XML with contract content
         """
-        logger.warning("RTF parsing not yet fully implemented, returning stub")
+        logger.info(f"Parsing RTF: {file_path}")
 
-        # Stub implementation - extract raw text
         try:
-            with open(file_path, 'rb') as f:
-                content = f.read().decode('latin-1', errors='ignore')
-
-            # Very basic RTF text extraction
-            import re
-            # Remove RTF control words
-            text = re.sub(r'\\[a-z]+\d*\s?', '', content)
-            text = re.sub(r'[{}]', '', text)
-            text = text.strip()
-
-            # Convert to basic XML
+            from striprtf.striprtf import rtf_to_text
             from lxml import etree
+
+            # Read RTF file
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                rtf_content = f.read()
+
+            # Convert RTF to plain text
+            text = rtf_to_text(rtf_content)
+
+            # Convert to XML
             root = etree.Element("contract")
             content_elem = etree.SubElement(root, "content")
-            content_elem.text = text
+            content_elem.text = text.strip()
+
+            # Add metadata
+            meta_elem = etree.SubElement(root, "metadata")
+            format_elem = etree.SubElement(meta_elem, "format")
+            format_elem.text = "RTF"
 
             xml_str = '<?xml version="1.0" encoding="UTF-8"?>\n'
             xml_str += etree.tostring(root, encoding='unicode', pretty_print=True)
 
+            logger.info(f"RTF parsed: {len(text)} characters")
             return xml_str
+
         except Exception as e:
             logger.error(f"RTF parsing error: {e}")
-            raise
+            # Fallback to basic extraction
+            logger.warning("Falling back to basic RTF extraction")
+            return self._parse_rtf_fallback(file_path)
+
+    def _parse_rtf_fallback(self, file_path: str) -> str:
+        """Fallback RTF parser using regex"""
+        import re
+        from lxml import etree
+
+        with open(file_path, 'rb') as f:
+            content = f.read().decode('latin-1', errors='ignore')
+
+        # Remove RTF control words
+        text = re.sub(r'\\[a-z]+\d*\s?', '', content)
+        text = re.sub(r'[{}]', '', text)
+        text = text.strip()
+
+        root = etree.Element("contract")
+        content_elem = etree.SubElement(root, "content")
+        content_elem.text = text
+
+        xml_str = '<?xml version="1.0" encoding="UTF-8"?>\n'
+        xml_str += etree.tostring(root, encoding='unicode', pretty_print=True)
+        return xml_str
 
     def _parse_odt(self, file_path: str) -> str:
         """
-        Parse ODT to XML
+        Parse ODT to XML using odfpy library
 
-        Note: Requires odfpy
-        For now, returns stub - will be implemented when dependencies installed
+        Returns properly formatted XML with contract content
         """
-        logger.warning("ODT parsing not yet fully implemented, returning stub")
+        logger.info(f"Parsing ODT: {file_path}")
 
-        # Stub implementation
         try:
+            from odf import text, teletype
+            from odf.opendocument import load
             from lxml import etree
+
+            # Load ODT document
+            doc = load(file_path)
+
+            # Extract all text
+            all_paragraphs = doc.getElementsByType(text.P)
+            text_content = []
+
+            for paragraph in all_paragraphs:
+                para_text = teletype.extractText(paragraph)
+                if para_text.strip():
+                    text_content.append(para_text)
+
+            full_text = '\n'.join(text_content)
+
+            # Convert to XML
             root = etree.Element("contract")
             content_elem = etree.SubElement(root, "content")
-            content_elem.text = f"ODT document: {os.path.basename(file_path)}"
+            content_elem.text = full_text.strip()
+
+            # Add metadata
+            meta_elem = etree.SubElement(root, "metadata")
+            format_elem = etree.SubElement(meta_elem, "format")
+            format_elem.text = "ODT"
 
             xml_str = '<?xml version="1.0" encoding="UTF-8"?>\n'
             xml_str += etree.tostring(root, encoding='unicode', pretty_print=True)
 
+            logger.info(f"ODT parsed: {len(full_text)} characters")
             return xml_str
+
         except Exception as e:
             logger.error(f"ODT parsing error: {e}")
             raise

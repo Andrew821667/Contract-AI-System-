@@ -8,6 +8,9 @@ from datetime import datetime
 import os
 import hashlib
 from loguru import logger
+from docx import Document
+from docx.shared import Pt, RGBColor, Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 from ..models.disagreement_models import Disagreement, DisagreementObjection, DisagreementExportLog
 
@@ -77,18 +80,14 @@ class DisagreementExportService:
             objections_dict = {obj.id: obj for obj in objections}
             sorted_objections = [objections_dict[oid] for oid in selected_ids if oid in objections_dict]
 
-            # Generate DOCX content (stub - real implementation would use python-docx)
+            # Generate DOCX document using python-docx
             file_path = os.path.join(
                 self.export_dir,
                 f"disagreement_{disagreement_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx"
             )
 
-            # Stub: in production would use python-docx library
-            docx_content = self._generate_docx_content_stub(disagreement, sorted_objections)
-            
-            # Save stub file
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(docx_content)
+            # Generate real DOCX document
+            self._generate_docx_document(disagreement, sorted_objections, file_path)
 
             file_size = os.path.getsize(file_path)
             file_hash = self._calculate_file_hash(file_path)
@@ -118,69 +117,114 @@ class DisagreementExportService:
                 'error': str(e)
             }
 
-    def _generate_docx_content_stub(
-        self, disagreement: Disagreement, objections: List[DisagreementObjection]
-    ) -> str:
+    def _generate_docx_document(
+        self, disagreement: Disagreement, objections: List[DisagreementObjection], file_path: str
+    ) -> None:
         """
-        Generate DOCX content (stub version - text format)
-        
-        Real implementation would use python-docx:
-        - Official letterhead with logo
-        - Proper formatting (headers, numbering, tables)
-        - References to contract clauses
+        Generate professional DOCX document with python-docx
+
+        Features:
+        - Official letterhead formatting
+        - Proper structure (headers, numbering)
+        - Color-coded priorities
+        - Table formatting for metadata
         """
-        content = []
-        
-        # Header
-        content.append("ВОЗРАЖЕНИЯ К ПРОЕКТУ ДОГОВОРА")
-        content.append("=" * 60)
-        content.append(f"Дата: {datetime.now().strftime('%d.%m.%Y')}")
-        content.append(f"ID договора: {disagreement.contract_id}")
-        content.append("")
-        
-        # Objections
-        content.append("ЗАМЕЧАНИЯ И ПРЕДЛОЖЕНИЯ:")
-        content.append("")
-        
+        doc = Document()
+
+        # Set default font
+        style = doc.styles['Normal']
+        style.font.name = 'Times New Roman'
+        style.font.size = Pt(12)
+
+        # Title
+        title = doc.add_heading('ВОЗРАЖЕНИЯ К ПРОЕКТУ ДОГОВОРА', level=1)
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # Metadata table
+        table = doc.add_table(rows=2, cols=2)
+        table.style = 'Light Grid Accent 1'
+
+        table.cell(0, 0).text = 'Дата:'
+        table.cell(0, 1).text = datetime.now().strftime('%d.%m.%Y')
+        table.cell(1, 0).text = 'ID договора:'
+        table.cell(1, 1).text = str(disagreement.contract_id)
+
+        doc.add_paragraph()  # Spacing
+
+        # Objections section
+        doc.add_heading('ЗАМЕЧАНИЯ И ПРЕДЛОЖЕНИЯ', level=2)
+
+        priority_colors = {
+            'critical': RGBColor(220, 20, 60),   # Crimson
+            'high': RGBColor(255, 140, 0),        # Dark Orange
+            'medium': RGBColor(255, 215, 0),      # Gold
+            'low': RGBColor(60, 179, 113)         # Medium Sea Green
+        }
+
         for i, obj in enumerate(objections, 1):
-            content.append(f"{i}. Пункт договора: {obj.contract_section_xpath or 'не указан'}")
-            content.append(f"   Приоритет: {obj.priority.upper()}")
-            content.append("")
-            content.append(f"   Замечание:")
-            content.append(f"   {obj.issue_description}")
-            content.append("")
-            
+            # Objection number with priority color
+            p = doc.add_paragraph()
+            runner = p.add_run(f"{i}. ")
+            runner.bold = True
+            runner.font.size = Pt(14)
+
+            priority_runner = p.add_run(f"[{obj.priority.upper()}] ")
+            priority_runner.bold = True
+            priority_runner.font.color.rgb = priority_colors.get(obj.priority.lower(), RGBColor(0, 0, 0))
+
+            section_runner = p.add_run(f"Пункт договора: {obj.contract_section_xpath or 'не указан'}")
+
+            # Issue description
+            p_issue = doc.add_paragraph(style='List Bullet')
+            issue_label = p_issue.add_run('Замечание: ')
+            issue_label.bold = True
+            p_issue.add_run(obj.issue_description)
+
+            # Legal basis
             if obj.legal_basis:
-                content.append(f"   Правовое обоснование:")
-                content.append(f"   {obj.legal_basis}")
-                content.append("")
-            
+                p_legal = doc.add_paragraph(style='List Bullet')
+                legal_label = p_legal.add_run('Правовое обоснование: ')
+                legal_label.bold = True
+                p_legal.add_run(obj.legal_basis)
+
+            # Risks
             if obj.risk_explanation:
-                content.append(f"   Риски:")
-                content.append(f"   {obj.risk_explanation}")
-                content.append("")
-            
-            content.append(f"   Предлагаемая формулировка:")
-            content.append(f"   {obj.alternative_formulation}")
-            content.append("")
-            
+                p_risk = doc.add_paragraph(style='List Bullet')
+                risk_label = p_risk.add_run('Риски: ')
+                risk_label.bold = True
+                risk_label.font.color.rgb = RGBColor(220, 20, 60)  # Crimson
+                p_risk.add_run(obj.risk_explanation)
+
+            # Alternative formulation
+            p_alt = doc.add_paragraph(style='List Bullet')
+            alt_label = p_alt.add_run('Предлагаемая формулировка: ')
+            alt_label.bold = True
+            alt_label.font.color.rgb = RGBColor(0, 100, 0)  # Dark green
+            p_alt.add_run(obj.alternative_formulation)
+
+            # Alternative reasoning
             if obj.alternative_reasoning:
-                content.append(f"   Обоснование предложения:")
-                content.append(f"   {obj.alternative_reasoning}")
-                content.append("")
-            
-            content.append("-" * 60)
-            content.append("")
-        
-        # Footer
-        content.append("")
-        content.append(f"Всего замечаний: {len(objections)}")
-        content.append("")
-        content.append("С уважением,")
-        content.append("[Подпись]")
-        content.append("[Должность]")
-        
-        return "\n".join(content)
+                p_reason = doc.add_paragraph(style='List Bullet')
+                reason_label = p_reason.add_run('Обоснование предложения: ')
+                reason_label.bold = True
+                p_reason.add_run(obj.alternative_reasoning)
+
+            # Separator
+            doc.add_paragraph('_' * 80)
+
+        # Footer with summary
+        doc.add_paragraph()
+        summary_p = doc.add_paragraph()
+        summary_p.add_run(f'Всего замечаний: {len(objections)}').bold = True
+
+        doc.add_paragraph()
+        doc.add_paragraph('С уважением,')
+        doc.add_paragraph('[Подпись]')
+        doc.add_paragraph('[Должность]')
+
+        # Save document
+        doc.save(file_path)
+        logger.info(f"DOCX document generated: {file_path}")
 
     def export_to_pdf(
         self, disagreement_id: int, user_id: Optional[str] = None
@@ -242,11 +286,10 @@ class DisagreementExportService:
                 )
 
             except ImportError:
-                logger.warning("PDFGenerator not available, using fallback text export")
-                # Fallback to text
-                pdf_path = pdf_path.replace('.pdf', '.txt')
-                with open(pdf_path, 'w', encoding='utf-8') as f:
-                    f.write(self._generate_docx_content_stub(disagreement, sorted_objections))
+                logger.warning("PDFGenerator not available, using fallback DOCX export")
+                # Fallback to DOCX instead of PDF
+                pdf_path = pdf_path.replace('.pdf', '.docx')
+                self._generate_docx_document(disagreement, sorted_objections, pdf_path)
 
             file_size = os.path.getsize(pdf_path)
             file_hash = self._calculate_file_hash(pdf_path)
@@ -312,8 +355,8 @@ class DisagreementExportService:
             if not subject:
                 subject = f"Возражения к проекту договора № {disagreement.contract_id}"
 
-            # Stub: Real implementation would use smtplib
-            email_sent = self._send_email_stub(
+            # Send email with SMTP
+            email_sent = self._send_email(
                 recipient_email, subject, disagreement.pdf_path
             )
 
@@ -347,7 +390,7 @@ class DisagreementExportService:
                 'error': str(e)
             }
 
-    def _send_email_stub(self, recipient: str, subject: str, attachment_path: str) -> bool:
+    def _send_email(self, recipient: str, subject: str, attachment_path: str) -> bool:
         """
         Send email with attachment using SMTP
 
@@ -469,7 +512,8 @@ class DisagreementExportService:
             if not edo_endpoint:
                 raise ValueError(f"Unknown EDO system: {edo_system}")
 
-            # Stub: Real implementation would call EDO API
+            # EDO API integration (requires paid subscription and certificates)
+            # See docs/EDO_INTEGRATION.md for implementation guide
             edo_document_id = self._send_to_edo_stub(
                 edo_system, edo_endpoint, disagreement.pdf_path
             )
