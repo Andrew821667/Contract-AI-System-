@@ -80,7 +80,7 @@ class Settings(BaseSettings):
     embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
 
     # Security
-    secret_key: str = "your-secret-key-here"
+    secret_key: str = ""  # REQUIRED in production! Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -91,6 +91,27 @@ class Settings(BaseSettings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+        # Security validation: require SECRET_KEY in production
+        if self.app_env == "production" and not self.secret_key:
+            raise ValueError(
+                "❌ SECRET_KEY must be set in production environment!\n"
+                "Generate a secure key with:\n"
+                "  python -c \"import secrets; print(secrets.token_urlsafe(32))\"\n"
+                "Then add to .env file:\n"
+                "  SECRET_KEY=<generated-key>"
+            )
+
+        # Warn if using default/weak key in any environment
+        if self.secret_key in ["", "your-secret-key-here", "changeme", "secret"]:
+            import warnings
+            warnings.warn(
+                "⚠️  Using empty or default SECRET_KEY! This is INSECURE!\n"
+                f"Current environment: {self.app_env}",
+                SecurityWarning,
+                stacklevel=2
+            )
+
         # Создаём необходимые директории
         self._create_directories()
 
