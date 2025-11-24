@@ -138,7 +138,6 @@ class LLMProvider(str, Enum):
     CLAUDE = "claude"
     PERPLEXITY = "perplexity"
     YANDEX = "yandex"
-    GIGACHAT = "gigachat"
     DEEPSEEK = "deepseek"
     QWEN = "qwen"
 
