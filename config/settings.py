@@ -82,6 +82,14 @@ class Settings(BaseSettings):
     # Security
     secret_key: str = ""  # REQUIRED in production! Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
 
+    # Email / SMTP Settings
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_from_name: str = "Contract AI System"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

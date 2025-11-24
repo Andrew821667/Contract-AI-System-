@@ -122,6 +122,12 @@ class AnalyticsService:
     def _load_historical_metrics(self):
         """Load historical metrics from database"""
         # TODO: Load from database
+        # Requirements for production implementation:
+        # 1. Create AnalyticsMetric database model (date, metric_name, value, user_id)
+        # 2. Create migration for new table
+        # 3. Add method to persist metrics after each operation
+        # 4. Load recent metrics on service initialization
+        # 5. Implement time-based aggregation (hourly/daily/monthly)
         # For now, use in-memory cache
         logger.info("📊 Analytics Service initialized")
 
@@ -628,7 +634,14 @@ class AnalyticsService:
 
         elif format == 'pdf':
             # TODO: Generate PDF report with charts
-            logger.warning("PDF export not yet implemented")
+            # Requirements for production implementation:
+            # 1. Install reportlab or weasyprint library
+            # 2. Create PDF template with logo and styling
+            # 3. Convert plotly charts to images (using kaleido or orca)
+            # 4. Layout metrics, tables, and charts in PDF
+            # 5. Add page numbers and table of contents
+            # 6. Generate executive summary section
+            logger.warning("PDF export not yet implemented - use CSV or JSON format")
             return ""
 
         logger.info(f"📄 Analytics report exported: {filepath}")

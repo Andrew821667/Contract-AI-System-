@@ -534,6 +534,14 @@ class MLRiskPredictor:
         logger.info(f"📝 Feedback received: {actual_risk_level} for contract")
 
         # TODO: Implement incremental learning or batch retraining
+        # Requirements for production implementation:
+        # 1. Create FeedbackLog database model to store user corrections
+        # 2. Accumulate at least 100+ feedback samples before retraining
+        # 3. Split feedback data into train/validation sets
+        # 4. Retrain model with combined original + feedback data
+        # 5. Evaluate model performance on validation set
+        # 6. Use A/B testing to compare old vs new model
+        # 7. Implement model versioning and rollback mechanism
 
     def _class_to_risk_level(self, class_idx: int) -> RiskLevel:
         """Convert class index to RiskLevel enum"""
