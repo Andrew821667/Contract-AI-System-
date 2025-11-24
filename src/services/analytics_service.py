@@ -138,7 +138,7 @@ class AnalyticsService:
                     'value': metric.value,
                     'timestamp': metric.timestamp,
                     'user_id': metric.user_id,
-                    'metadata': metric.metadata
+                    'extra_metadata': metric.extra_metadata
                 })
 
             logger.info(f"📊 Analytics Service initialized - loaded {len(recent_metrics)} historical metrics")
@@ -841,7 +841,10 @@ class AnalyticsService:
         name: str,
         value: float,
         unit: str,
-        metric_type: MetricType
+        metric_type: MetricType,
+        user_id: Optional[str] = None,
+        contract_id: Optional[int] = None,
+        metadata: Optional[Dict] = None
     ):
         """
         Track a custom metric
@@ -851,6 +854,9 @@ class AnalyticsService:
             value: Metric value
             unit: Unit of measurement
             metric_type: Type of metric
+            user_id: Optional user ID for filtering
+            contract_id: Optional contract ID for context
+            metadata: Optional additional metadata
         """
         metric = AnalyticsMetric(
             name=name,
@@ -873,7 +879,7 @@ class AnalyticsService:
                 unit=unit,
                 user_id=user_id,
                 contract_id=contract_id,
-                metadata=metadata,
+                extra_metadata=metadata,
                 timestamp=datetime.now()
             )
 
