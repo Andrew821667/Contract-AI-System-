@@ -207,23 +207,24 @@ class CounterpartyService:
 
         try:
             # Real Fedresurs API call
-            # Note: Fedresurs API might require authentication or have rate limits
+            # Note: Fedresurs public API is free but has rate limits
+            response = requests.get(
+                f"{self.fedresurs_api_url}",
+                params={'inn': inn},
+                timeout=10
+            )
 
-            # Stub implementation - in production would call real API:
-            # response = requests.get(
-            #     f"{self.fedresurs_api_url}",
-            #     params={'inn': inn},
-            #     timeout=10
-            # )
-            # if response.status_code == 200:
-            #     data = response.json()
-            #     if data.get('pageData'):
-            #         result['has_bankruptcy_cases'] = True
-            #         result['cases'] = data['pageData']
-
-            # For now, return stub (no bankruptcy cases)
-            result['has_bankruptcy_cases'] = False
-            result['data_source'] = 'Fedresurs API (stub)'
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('pageData'):
+                    result['has_bankruptcy_cases'] = True
+                    result['cases'] = data['pageData']
+                    logger.info(f"Fedresurs: Found {len(data['pageData'])} bankruptcy cases for {inn}")
+                else:
+                    logger.info(f"Fedresurs: No bankruptcy cases for {inn}")
+            else:
+                logger.warning(f"Fedresurs API returned status {response.status_code}")
+                result['has_bankruptcy_cases'] = False
 
         except requests.RequestException as e:
             logger.warning(f"Fedresurs API request failed: {e}")
