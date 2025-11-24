@@ -34,9 +34,9 @@ class AnalyticsMetricLog(Base):
     # Context
     user_id = Column(String(36), nullable=True, index=True)
     contract_id = Column(Integer, nullable=True, index=True)
-    
-    # Metadata
-    metadata = Column(JSON, nullable=True)  # Additional context as JSON
+
+    # Metadata (renamed to avoid SQLAlchemy reserved word)
+    extra_metadata = Column(JSON, nullable=True)  # Additional context as JSON
     
     # Timestamp
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
