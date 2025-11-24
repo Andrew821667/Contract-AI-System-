@@ -63,14 +63,14 @@ class CreateUserRequest(BaseModel):
     """Admin: Create user request"""
     email: EmailStr
     name: str = Field(..., min_length=2, max_length=255)
-    role: str = Field(..., regex="^(admin|senior_lawyer|lawyer|junior_lawyer|demo)$")
-    subscription_tier: str = Field(default="demo", regex="^(demo|basic|pro|enterprise)$")
+    role: str = Field(..., pattern="^(admin|senior_lawyer|lawyer|junior_lawyer|demo)$")
+    subscription_tier: str = Field(default="demo", pattern="^(demo|basic|pro|enterprise)$")
 
 
 class UpdateRoleRequest(BaseModel):
     """Admin: Update role request"""
-    role: str = Field(..., regex="^(admin|senior_lawyer|lawyer|junior_lawyer|demo)$")
-    subscription_tier: Optional[str] = Field(None, regex="^(demo|basic|pro|enterprise)$")
+    role: str = Field(..., pattern="^(admin|senior_lawyer|lawyer|junior_lawyer|demo)$")
+    subscription_tier: Optional[str] = Field(None, pattern="^(demo|basic|pro|enterprise)$")
 
 
 # ==================== OAuth2 Setup ====================
