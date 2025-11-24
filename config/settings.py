@@ -56,7 +56,7 @@ class Settings(BaseSettings):
 
     # Two-level analysis system
     llm_quick_model: str = "gpt-4o-mini"  # Быстрый анализ (Уровень 1)
-    llm_deep_model: str = "gpt-4o"        # Глубокий анализ (Уровень 2)
+    llm_deep_model: str = "gpt-5.1"       # Глубокий анализ (Уровень 2) - лучшая модель OpenAI
 
     # Batch analysis settings (оптимизировано для производительности)
     llm_batch_size: int = 15  # Сколько пунктов анализировать в одном запросе (оптимально для gpt-4o-mini)
@@ -69,7 +69,10 @@ class Settings(BaseSettings):
     llm_pricing: dict = {
         "gpt-4o-mini": {"input": 0.15, "output": 0.60},
         "gpt-4o": {"input": 2.50, "output": 10.00},
-        "gpt-4-turbo": {"input": 10.00, "output": 30.00},
+        "gpt-5": {"input": 5.00, "output": 15.00},
+        "gpt-5.1": {"input": 6.00, "output": 18.00},
+        "o1-preview": {"input": 15.00, "output": 60.00},
+        "o1-mini": {"input": 3.00, "output": 12.00},
     }
 
     # RAG Settings
