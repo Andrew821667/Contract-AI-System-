@@ -224,7 +224,8 @@ Contract-AI-System/
 - PostgreSQL / SQLite
 
 **AI/ML:**
-- OpenAI GPT-4 / GPT-3.5 / Claude-2
+- OpenAI GPT-5.1 / GPT-5 / GPT-4o (ноябрь 2025 - новейшие модели)
+- Anthropic Claude (Sonnet, Opus)
 - ChromaDB (vector database для RAG)
 - LangChain (RAG orchestration)
 - Sentence Transformers (embeddings)

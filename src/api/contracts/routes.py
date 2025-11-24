@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from loguru import logger
 
 from src.models.database import get_db
-from src.models import Contract, ContractAnalysis
+from src.models import Contract, AnalysisResult
 from src.models.auth_models import User
 from src.services.auth_service import AuthService
 from src.services.document_parser import DocumentParser
@@ -32,7 +32,7 @@ from config.settings import settings
 
 
 router = APIRouter()
-auth_service = AuthService()
+# AuthService will be initialized with DB in each endpoint that needs it
 
 
 # Dependency: Get current user from token
@@ -568,7 +568,7 @@ async def get_contract_details(
             )
 
         # Get analysis results if available
-        analysis = db.query(ContractAnalysis).filter(ContractAnalysis.contract_id == contract_id).first()
+        analysis = db.query(AnalysisResult).filter(AnalysisResult.contract_id == contract_id).first()
 
         return {
             'contract': {

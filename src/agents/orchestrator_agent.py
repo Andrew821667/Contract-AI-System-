@@ -25,14 +25,12 @@ from ..services.llm_gateway import LLMGateway
 from ..services.review_queue_service import ReviewQueueService
 from ..models.database import Contract
 from .base_agent import BaseAgent, AgentResult
-from .agent_stubs import (
-    OnboardingAgent,
-    ContractGeneratorAgent,
-    ContractAnalyzerAgent,
-    DisagreementProcessorAgent,
-    ChangesAnalyzerAgent,
-    QuickExportAgent
-)
+from .onboarding_agent import OnboardingAgent
+from .contract_generator_agent import ContractGeneratorAgent
+from .contract_analyzer_agent import ContractAnalyzerAgent
+from .disagreement_processor_agent import DisagreementProcessorAgent
+from .changes_analyzer_agent import ChangesAnalyzerAgent
+from .quick_export_agent import QuickExportAgent
 
 
 class WorkflowState(dict):

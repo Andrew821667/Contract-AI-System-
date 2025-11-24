@@ -19,13 +19,11 @@ class Settings(BaseSettings):
     perplexity_api_key: str = ""
     yandex_api_key: str = ""
     yandex_folder_id: str = ""
-    gigachat_api_key: str = ""
-    gigachat_scope: str = "GIGACHAT_API_PERS"
     deepseek_api_key: str = ""
     qwen_api_key: str = ""
 
     # Default LLM Provider
-    default_llm_provider: Literal["claude", "openai", "perplexity", "yandex", "gigachat", "deepseek", "qwen"] = "openai"
+    default_llm_provider: Literal["claude", "openai", "perplexity", "yandex", "deepseek", "qwen"] = "openai"
 
     # ChromaDB
     chroma_persist_directory: str = "./chroma_data"
@@ -58,7 +56,7 @@ class Settings(BaseSettings):
 
     # Two-level analysis system
     llm_quick_model: str = "gpt-4o-mini"  # Быстрый анализ (Уровень 1)
-    llm_deep_model: str = "gpt-4o"        # Глубокий анализ (Уровень 2)
+    llm_deep_model: str = "gpt-5.1"       # Глубокий анализ (Уровень 2) - лучшая модель OpenAI
 
     # Batch analysis settings (оптимизировано для производительности)
     llm_batch_size: int = 15  # Сколько пунктов анализировать в одном запросе (оптимально для gpt-4o-mini)
@@ -71,7 +69,10 @@ class Settings(BaseSettings):
     llm_pricing: dict = {
         "gpt-4o-mini": {"input": 0.15, "output": 0.60},
         "gpt-4o": {"input": 2.50, "output": 10.00},
-        "gpt-4-turbo": {"input": 10.00, "output": 30.00},
+        "gpt-5": {"input": 5.00, "output": 15.00},
+        "gpt-5.1": {"input": 6.00, "output": 18.00},
+        "o1-preview": {"input": 15.00, "output": 60.00},
+        "o1-mini": {"input": 3.00, "output": 12.00},
     }
 
     # RAG Settings
@@ -79,7 +80,15 @@ class Settings(BaseSettings):
     embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
 
     # Security
-    secret_key: str = "your-secret-key-here"
+    secret_key: str = ""  # REQUIRED in production! Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+
+    # Email / SMTP Settings
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_from_name: str = "Contract AI System"
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -90,6 +99,27 @@ class Settings(BaseSettings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+        # Security validation: require SECRET_KEY in production
+        if self.app_env == "production" and not self.secret_key:
+            raise ValueError(
+                "❌ SECRET_KEY must be set in production environment!\n"
+                "Generate a secure key with:\n"
+                "  python -c \"import secrets; print(secrets.token_urlsafe(32))\"\n"
+                "Then add to .env file:\n"
+                "  SECRET_KEY=<generated-key>"
+            )
+
+        # Warn if using default/weak key in any environment
+        if self.secret_key in ["", "your-secret-key-here", "changeme", "secret"]:
+            import warnings
+            warnings.warn(
+                "⚠️  Using empty or default SECRET_KEY! This is INSECURE!\n"
+                f"Current environment: {self.app_env}",
+                SecurityWarning,
+                stacklevel=2
+            )
+
         # Создаём необходимые директории
         self._create_directories()
 

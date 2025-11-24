@@ -5,6 +5,7 @@
 from enum import Enum
 from typing import List, Dict, Any, Optional
 from pathlib import Path
+from loguru import logger
 
 
 class KnowledgeBaseCategory(Enum):
@@ -101,11 +102,53 @@ class KnowledgeBaseManager:
         top_k: int = 5
     ) -> List[Dict[str, Any]]:
         """
-        Поиск в конкретной категории
-        TODO: Интеграция с RAG системой
+        Поиск в конкретной категории с интеграцией RAG системы
         """
-        # Placeholder для будущей интеграции с RAG
-        return []
+        try:
+            # Import RAG system here to avoid circular imports
+            from ..services.rag_system import RAGSystem
+            from ..models import get_db
+
+            # Map category to RAG collection
+            category_to_collection = {
+                KnowledgeBaseCategory.FORMS: RAGSystem.COLLECTION_TEMPLATES,
+                KnowledgeBaseCategory.LEGAL: RAGSystem.COLLECTION_LAWS,
+                KnowledgeBaseCategory.CASE_LAW: RAGSystem.COLLECTION_CASE_LAW,
+                KnowledgeBaseCategory.KEY_CASES: RAGSystem.COLLECTION_CASE_LAW,
+                KnowledgeBaseCategory.TRENDS: RAGSystem.COLLECTION_KNOWLEDGE,
+            }
+
+            collection = category_to_collection.get(category, RAGSystem.COLLECTION_KNOWLEDGE)
+
+            # Initialize RAG system
+            db = next(get_db())
+            rag = RAGSystem(db_session=db)
+
+            # Search in collection
+            documents = rag.search(
+                query=query,
+                collection=collection,
+                top_k=top_k,
+                use_reranking=True
+            )
+
+            # Convert to dict format
+            results = []
+            for doc in documents:
+                results.append({
+                    'id': doc.doc_id,
+                    'content': doc.content,
+                    'metadata': doc.metadata,
+                    'score': doc.score,
+                    'category': category.value
+                })
+
+            logger.info(f"Found {len(results)} results in category {category.value}")
+            return results
+
+        except Exception as e:
+            logger.error(f"Error searching in category {category.value}: {e}")
+            return []
 
     def search_all_categories(
         self,

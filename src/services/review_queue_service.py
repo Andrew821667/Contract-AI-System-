@@ -19,7 +19,8 @@ from sqlalchemy import and_, or_, func
 import json
 from loguru import logger
 
-from ..models.database import ReviewTask, User, Contract
+from ..models.database import ReviewTask, Contract
+from ..models.auth_models import User
 from ..models.repositories import ReviewTaskRepository
 
 

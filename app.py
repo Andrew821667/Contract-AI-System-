@@ -1422,7 +1422,7 @@ def page_settings():
     st.subheader("LLM Provider")
     provider = st.selectbox(
         "Провайдер",
-        ["openai", "anthropic", "yandex", "gigachat"],
+        ["openai", "anthropic", "yandex", "deepseek", "qwen"],
         index=0
     )
 
