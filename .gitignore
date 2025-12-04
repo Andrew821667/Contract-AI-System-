@@ -47,6 +47,14 @@ ENV/
 *.log
 logs/
 
+# Credentials
+CREDENTIALS.txt
+
+# Process IDs
+.backend.pid
+.frontend.pid
+.admin.pid
+
 # Data directories (A>45@60B ?>;L7>20B5;LA:85 D09;K)
 data/uploads/*
 data/normalized/*

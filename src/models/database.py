@@ -328,11 +328,15 @@ class LLMCache(Base):
 
 # ==================== DATABASE CONNECTION ====================
 import os
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+# Load environment variables
+load_dotenv()
+
 # Get database URL from environment
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./database/contracts.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./contract_ai.db")
 
 # Create engine
 # For SQLite, we need to enable check_same_thread=False to allow FastAPI to use it
