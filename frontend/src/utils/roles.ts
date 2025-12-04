@@ -143,10 +143,10 @@ export const roleColors: Record<UserRole, { gradient: string; bg: string; text: 
     badge: 'bg-gradient-to-r from-green-500 to-emerald-600 text-white'
   },
   demo: {
-    gradient: 'from-slate-500 to-gray-600',
-    bg: 'bg-gradient-to-r from-slate-50 to-gray-50',
-    text: 'text-slate-600',
-    badge: 'bg-gradient-to-r from-slate-500 to-gray-600 text-white'
+    gradient: 'from-cyan-500 to-teal-600',
+    bg: 'bg-gradient-to-r from-cyan-50 to-teal-50',
+    text: 'text-cyan-600',
+    badge: 'bg-gradient-to-r from-cyan-500 to-teal-600 text-white'
   }
 }
 
