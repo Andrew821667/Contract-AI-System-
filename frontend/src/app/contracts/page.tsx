@@ -139,13 +139,16 @@ export default function ContractsListPage() {
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="flex items-center space-x-4"
+              className="flex items-center space-x-3"
             >
               <Button variant="outline" size="sm" onClick={() => router.push('/dashboard')}>
                 ← Дашборд
               </Button>
+              <Button variant="secondary" size="sm" onClick={() => router.push('/contracts/generate')}>
+                ✨ Генератор
+              </Button>
               <Button variant="primary" size="sm" onClick={() => router.push('/contracts/upload')}>
-                + Загрузить договор
+                + Загрузить
               </Button>
             </motion.div>
           </div>
