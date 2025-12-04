@@ -2,8 +2,9 @@
 
 ## Quick Start
 
-**Desktop Shortcut**: Double-click "Contract AI.command" on your desktop
-- Launches: Backend (port 8000) + Frontend (port 3000) + Admin Panel (port 8501)
+**Desktop Shortcuts**:
+- **"Contract AI.command"** - Запускает все сервисы (Backend + Frontend + Admin)
+- **"Contract AI Stop.command"** - Останавливает все сервисы
 
 **URLs:**
 - Frontend: http://localhost:3000

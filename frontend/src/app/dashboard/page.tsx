@@ -7,6 +7,7 @@ import { motion } from 'framer-motion'
 import api from '@/services/api'
 import toast from 'react-hot-toast'
 import { getUserRole, getRolePermissions, getRoleColor, getRoleLabel } from '@/utils/roles'
+import ChangePasswordModal from '@/components/ChangePasswordModal'
 
 interface User {
   id: string
@@ -47,17 +48,38 @@ export default function DashboardPage() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [showWelcome, setShowWelcome] = useState(false)
+  const [showPasswordChange, setShowPasswordChange] = useState(false)
   const userRole = getUserRole()
   const permissions = getRolePermissions(userRole)
   const roleColor = getRoleColor(userRole)
   const roleLabel = getRoleLabel(userRole)
 
-  // Check authentication
+  // Check authentication and default password
   useEffect(() => {
     const token = localStorage.getItem('access_token')
     if (!token) {
       router.push('/login')
     } else {
+      // Check if using default password
+      const passwordChanged = localStorage.getItem('passwordChanged')
+      const userStr = localStorage.getItem('user')
+
+      if (!passwordChanged && userStr) {
+        try {
+          const userData = JSON.parse(userStr)
+          // Check if using demo credentials (default passwords)
+          const defaultEmails = ['demo@example.com', 'admin@example.com', 'lawyer@example.com', 'junior@example.com']
+          if (defaultEmails.includes(userData.email)) {
+            // Show password change dialog after welcome
+            setTimeout(() => {
+              setShowPasswordChange(true)
+            }, 2000)
+          }
+        } catch (e) {
+          console.error('Error parsing user data:', e)
+        }
+      }
+
       // Show welcome message on first visit
       const hasSeenWelcome = sessionStorage.getItem('hasSeenWelcome')
       if (!hasSeenWelcome) {
@@ -225,6 +247,13 @@ export default function DashboardPage() {
           </motion.div>
         </motion.div>
       )}
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={showPasswordChange}
+        onClose={() => setShowPasswordChange(false)}
+        userEmail={user?.email || ''}
+      />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
