@@ -17,6 +17,34 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
+      // Demo credentials
+      const demoCredentials = [
+        { email: 'demo@example.com', password: 'demo123', name: 'Demo User' },
+        { email: 'admin@example.com', password: 'admin123', name: 'Admin User' }
+      ]
+
+      const demoUser = demoCredentials.find(
+        u => u.email === data.email && u.password === data.password
+      )
+
+      if (demoUser) {
+        // Demo mode - bypass API
+        localStorage.setItem('access_token', 'demo_token_' + Date.now())
+        localStorage.setItem('user', JSON.stringify({ name: demoUser.name, email: demoUser.email }))
+
+        toast.success(`Добро пожаловать, ${demoUser.name}!`, {
+          icon: '🎉',
+          style: {
+            borderRadius: '12px',
+            background: 'linear-gradient(135deg, #0ea5e9, #d946ef)',
+            color: '#fff',
+          },
+        })
+        router.push('/dashboard')
+        return
+      }
+
+      // Try real API
       const response = await api.login({
         username: data.email,
         password: data.password,
@@ -242,20 +270,16 @@ export default function LoginPage() {
                 <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                Тестовые аккаунты:
+                Демо-аккаунты:
               </p>
               <div className="space-y-1.5 text-xs text-white/80">
-                <div className="flex justify-between">
-                  <span>Junior:</span>
-                  <code className="bg-black/20 px-2 py-0.5 rounded">junior@contractai.local / Junior123!</code>
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
+                  <span className="font-semibold">Demo:</span>
+                  <code className="bg-black/20 px-2 py-0.5 rounded">demo@example.com / demo123</code>
                 </div>
-                <div className="flex justify-between">
-                  <span>Lawyer:</span>
-                  <code className="bg-black/20 px-2 py-0.5 rounded">lawyer@contractai.local / Lawyer123!</code>
-                </div>
-                <div className="flex justify-between">
-                  <span>Admin:</span>
-                  <code className="bg-black/20 px-2 py-0.5 rounded">admin@contractai.local / Admin123!</code>
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
+                  <span className="font-semibold">Admin:</span>
+                  <code className="bg-black/20 px-2 py-0.5 rounded">admin@example.com / admin123</code>
                 </div>
               </div>
             </motion.div>
