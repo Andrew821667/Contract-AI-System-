@@ -2,14 +2,16 @@
 
 ## Quick Start
 
-**Desktop Shortcuts**:
-- **"Contract AI.command"** - Запускает все сервисы (Backend + Frontend + Admin)
+**Desktop Shortcuts** (✅ WORKING):
+- **"Contract AI.command"** - Запускает все сервисы (Backend + Frontend)
 - **"Contract AI Stop.command"** - Останавливает все сервисы
 
 **URLs:**
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- Admin Panel: http://localhost:8501
+- Frontend: http://localhost:3000 ✅
+- Backend API: http://localhost:8000 ✅
+- Admin Panel: http://localhost:8501 ⚠️ (optional, not in worktree)
+
+**Status:** Desktop shortcuts fixed and working! (Dec 4, 2025)
 
 ---
 
@@ -194,7 +196,7 @@ python -c "from src.services.llm_gateway import LLMGateway; gw = LLMGateway(); p
 4. **No integration tests**: End-to-end tests needed
 
 ### General
-1. **Desktop shortcut**: Now fixed to launch all services
+1. ✅ **Desktop shortcut**: FIXED - теперь запускает Backend + Frontend корректно
 2. **Repository cleanup needed**: Old code artifacts present
 3. **LLM limiting strategy unclear**: Confusion between request count vs tokens/cost
 4. **Missing passwords**: Some test users have unknown passwords
