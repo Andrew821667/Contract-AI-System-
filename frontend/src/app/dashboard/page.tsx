@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import api from '@/services/api'
 import toast from 'react-hot-toast'
+import { getUserRole, getRolePermissions, getRoleColor, getRoleLabel } from '@/utils/roles'
 
 interface User {
   id: string
@@ -45,12 +46,24 @@ const itemVariants = {
 export default function DashboardPage() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
+  const [showWelcome, setShowWelcome] = useState(false)
+  const userRole = getUserRole()
+  const permissions = getRolePermissions(userRole)
+  const roleColor = getRoleColor(userRole)
+  const roleLabel = getRoleLabel(userRole)
 
   // Check authentication
   useEffect(() => {
     const token = localStorage.getItem('access_token')
     if (!token) {
       router.push('/login')
+    } else {
+      // Show welcome message on first visit
+      const hasSeenWelcome = sessionStorage.getItem('hasSeenWelcome')
+      if (!hasSeenWelcome) {
+        setShowWelcome(true)
+        sessionStorage.setItem('hasSeenWelcome', 'true')
+      }
     }
   }, [router])
 
@@ -137,6 +150,81 @@ export default function DashboardPage() {
           </div>
         </div>
       </header>
+
+      {/* Welcome Modal */}
+      {showWelcome && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setShowWelcome(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.1 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full p-8 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="text-center mb-6">
+              <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br ${roleColor.gradient} mb-4`}>
+                <span className="text-4xl">👋</span>
+              </div>
+              <h2 className="text-3xl font-bold gradient-text mb-2">
+                Добро пожаловать, {user?.name || 'Пользователь'}!
+              </h2>
+              <p className={`text-lg font-semibold ${roleColor.text}`}>
+                Ваша роль: {roleLabel}
+              </p>
+            </div>
+
+            <div className={`p-6 rounded-2xl ${roleColor.bg} mb-6`}>
+              <h3 className="text-xl font-bold text-slate-800 mb-4">
+                Ваши возможности:
+              </h3>
+              <ul className="space-y-3">
+                {permissions.features.map((feature, idx) => (
+                  <motion.li
+                    key={idx}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.3 + idx * 0.05 }}
+                    className="flex items-center gap-3"
+                  >
+                    <span className="text-green-500 text-xl">✓</span>
+                    <span className="text-slate-700">{feature}</span>
+                  </motion.li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="p-4 bg-slate-50 rounded-xl text-center">
+                <p className="text-sm text-slate-600 mb-1">Лимит договоров</p>
+                <p className="text-2xl font-bold text-slate-800">
+                  {permissions.maxContractsPerDay === -1 ? '∞' : permissions.maxContractsPerDay}
+                </p>
+                <p className="text-xs text-slate-500">в день</p>
+              </div>
+              <div className="p-4 bg-slate-50 rounded-xl text-center">
+                <p className="text-sm text-slate-600 mb-1">Форматы экспорта</p>
+                <p className="text-lg font-bold text-slate-800">
+                  {permissions.exportFormats.join(', ').toUpperCase() || 'Нет'}
+                </p>
+              </div>
+            </div>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setShowWelcome(false)}
+              className={`w-full py-4 rounded-xl font-semibold text-white shadow-lg bg-gradient-to-r ${roleColor.gradient}`}
+            >
+              Начать работу
+            </motion.button>
+          </motion.div>
+        </motion.div>
+      )}
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -268,11 +356,13 @@ export default function DashboardPage() {
           <h2 className="text-2xl font-bold gradient-text mb-6">Быстрые действия</h2>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {[
-              { icon: '📤', label: 'Загрузить договор', route: '/contracts/upload', gradient: 'from-blue-500 to-cyan-600' },
-              { icon: '✨', label: 'Генерировать', route: '/contracts/generate', gradient: 'from-purple-500 to-pink-600' },
-              { icon: '📋', label: 'Все договоры', route: '/contracts', gradient: 'from-green-500 to-emerald-600' },
-              { icon: '💎', label: 'Тарифы', route: '/pricing', gradient: 'from-orange-500 to-amber-600' }
-            ].map((action, idx) => (
+              { icon: '📤', label: 'Загрузить договор', route: '/contracts/upload', gradient: 'from-blue-500 to-cyan-600', permission: 'canAnalyze' },
+              { icon: '✨', label: 'Генерировать', route: '/contracts/generate', gradient: 'from-purple-500 to-pink-600', permission: 'canGenerate' },
+              { icon: '📋', label: 'Все договоры', route: '/contracts', gradient: 'from-green-500 to-emerald-600', permission: null },
+              { icon: '💎', label: 'Тарифы', route: '/pricing', gradient: 'from-orange-500 to-amber-600', permission: null }
+            ]
+            .filter(action => !action.permission || permissions[action.permission as keyof typeof permissions])
+            .map((action, idx) => (
               <motion.button
                 key={idx}
                 initial={{ opacity: 0, scale: 0.9 }}

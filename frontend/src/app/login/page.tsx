@@ -17,10 +17,12 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      // Demo credentials
+      // Demo credentials with roles
       const demoCredentials = [
-        { email: 'demo@example.com', password: 'demo123', name: 'Demo User' },
-        { email: 'admin@example.com', password: 'admin123', name: 'Admin User' }
+        { email: 'demo@example.com', password: 'demo123', name: 'Demo User', role: 'demo' },
+        { email: 'admin@example.com', password: 'admin123', name: 'Admin User', role: 'admin' },
+        { email: 'lawyer@example.com', password: 'lawyer123', name: 'Lawyer User', role: 'lawyer' },
+        { email: 'junior@example.com', password: 'junior123', name: 'Junior Lawyer', role: 'junior_lawyer' },
       ]
 
       const demoUser = demoCredentials.find(
@@ -30,7 +32,11 @@ export default function LoginPage() {
       if (demoUser) {
         // Demo mode - bypass API
         localStorage.setItem('access_token', 'demo_token_' + Date.now())
-        localStorage.setItem('user', JSON.stringify({ name: demoUser.name, email: demoUser.email }))
+        localStorage.setItem('user', JSON.stringify({
+          name: demoUser.name,
+          email: demoUser.email,
+          role: demoUser.role
+        }))
 
         toast.success(`Добро пожаловать, ${demoUser.name}!`, {
           icon: '🎉',
