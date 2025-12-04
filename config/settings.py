@@ -116,7 +116,7 @@ class Settings(BaseSettings):
             warnings.warn(
                 "⚠️  Using empty or default SECRET_KEY! This is INSECURE!\n"
                 f"Current environment: {self.app_env}",
-                SecurityWarning,
+                UserWarning,
                 stacklevel=2
             )
 
