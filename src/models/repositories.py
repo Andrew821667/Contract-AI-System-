@@ -8,7 +8,7 @@ from datetime import datetime
 import json
 
 from .database import (
-    Template, Contract, AnalysisResult,
+    Contract, Template, AnalysisResult,
     ReviewTask, LegalDocument, ExportLog
 )
 from .auth_models import User
