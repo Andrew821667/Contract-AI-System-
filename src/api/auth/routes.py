@@ -146,7 +146,7 @@ def get_client_ip(request: Request) -> Optional[str]:
 
 # ==================== Router Setup ====================
 
-router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
+router = APIRouter(tags=["authentication"])
 
 
 # ==================== Public Endpoints ====================

@@ -28,9 +28,6 @@ from loguru import logger
 # Router
 router = APIRouter(tags=["ml-ai"])
 
-# Auth service
-# AuthService will be initialized with DB in each endpoint that needs it
-
 # ML/AI components (lazily initialized)
 _risk_predictor = None
 _smart_composer = None
@@ -92,7 +89,7 @@ class ComposerStartRequest(BaseModel):
     contract_type: str = Field(..., example="supply")
     parties: List[str] = Field(..., example=["Company A", "Company B"])
     template_id: Optional[str] = None
-    language: str = Field(default="ru", pattern="^(ru|en)$")
+    language: str = Field(default="ru", regex="^(ru|en)$")
 
 
 class ComposerSuggestionRequest(BaseModel):
@@ -122,7 +119,7 @@ class AddKnowledgeRequest(BaseModel):
     """Add company knowledge request"""
     title: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=10)
-    category: str = Field(..., pattern="^(policy|template|precedent|guideline)$")
+    category: str = Field(..., regex="^(policy|template|precedent|guideline)$")
     tags: List[str] = Field(default=[])
 
 
@@ -131,6 +128,7 @@ def get_current_user(token: str = Query(...)) -> User:
     """Get current authenticated user"""
     db = SessionLocal()
     try:
+        auth_service = AuthService(db)
         user, error = auth_service.verify_access_token(token, db)
         if error:
             raise HTTPException(status_code=401, detail=error)

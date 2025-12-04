@@ -16,7 +16,6 @@ from src.services.auth_service import AuthService
 
 
 router = APIRouter()
-# AuthService will be initialized with DB in each endpoint that needs it
 
 
 class ConnectionManager:
@@ -117,6 +116,7 @@ async def websocket_analysis_updates(
     - error: Error occurred
     """
     # Verify token
+    auth_service = AuthService(db)
     user, error = auth_service.verify_access_token(token, db)
     if error or not user:
         await websocket.close(code=1008, reason="Invalid authentication token")
@@ -234,6 +234,7 @@ async def websocket_notifications(
     - limit_reached: Daily limit reached
     """
     # Verify token
+    auth_service = AuthService(db)
     user, error = auth_service.verify_access_token(token, db)
     if error or not user:
         await websocket.close(code=1008, reason="Invalid authentication token")
