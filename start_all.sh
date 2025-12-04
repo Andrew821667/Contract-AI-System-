@@ -160,26 +160,50 @@ fi
 # ============================================================================
 echo -e "\n${BLUE}[5/7]${NC} Starting FastAPI Backend (port 8000)..."
 
+# Debug: Show environment
+echo "DEBUG: python3 path: $(which python3)"
+echo "DEBUG: Current directory: $(pwd)"
+
 python3 -c "import uvicorn" >/dev/null 2>&1
 if [ $? -ne 0 ]; then
     echo -e "${RED}❌ uvicorn not installed. Installing...${NC}"
     pip3 install uvicorn
 fi
 
+# Start backend with better error logging
+echo "DEBUG: Starting backend with: python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000"
 nohup python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000 > logs/backend.log 2>&1 &
 BACKEND_PID=$!
+echo "DEBUG: Backend PID: $BACKEND_PID"
 echo $BACKEND_PID > .backend.pid
 
-sleep 3
+# Check if process is actually running
+sleep 1
+if ps -p $BACKEND_PID > /dev/null 2>&1; then
+    echo "DEBUG: Backend process is running (PID: $BACKEND_PID)"
+else
+    echo -e "${RED}❌ Backend process died immediately after start${NC}"
+    echo "Last 20 lines of backend.log:"
+    tail -20 logs/backend.log
+    exit 1
+fi
+
+# Wait longer for backend to initialize
+echo "DEBUG: Waiting 5 seconds for backend to initialize..."
+sleep 5
 
 # Check if backend started
-if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+echo "DEBUG: Testing health endpoint with curl..."
+if curl -s --max-time 5 http://localhost:8000/health > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Backend started (PID: $BACKEND_PID)${NC}"
     echo -e "${CYAN}   📡 API: http://localhost:8000${NC}"
     echo -e "${CYAN}   📚 Docs: http://localhost:8000/api/docs${NC}"
 else
-    echo -e "${RED}❌ Backend failed to start${NC}"
-    cat logs/backend.log
+    echo -e "${RED}❌ Backend health check failed${NC}"
+    echo "Backend process status:"
+    ps -p $BACKEND_PID || echo "Process not found"
+    echo "Last 30 lines of backend.log:"
+    tail -30 logs/backend.log
     exit 1
 fi
 
