@@ -32,7 +32,6 @@ from config.settings import settings
 
 
 router = APIRouter()
-# AuthService will be initialized with DB in each endpoint that needs it
 
 
 # Dependency: Get current user from token
@@ -48,6 +47,7 @@ async def get_current_user(
         )
 
     token = authorization.replace("Bearer ", "")
+    auth_service = AuthService(db)
     user, error = auth_service.verify_access_token(token, db)
 
     if error or not user:
@@ -68,13 +68,13 @@ class ContractUploadResponse(BaseModel):
     message: str
 
 
-class ContractAnalysisRequest(BaseModel):
+class AnalysisResultRequest(BaseModel):
     contract_id: str
     check_counterparty: bool = True
     counterparty_tin: Optional[str] = None
 
 
-class ContractAnalysisResponse(BaseModel):
+class AnalysisResultResponse(BaseModel):
     analysis_id: str
     contract_id: str
     status: str
@@ -251,9 +251,9 @@ async def analyze_contract_background(
             db.commit()
 
 
-@router.post("/analyze", response_model=ContractAnalysisResponse)
+@router.post("/analyze", response_model=AnalysisResultResponse)
 async def analyze_contract(
-    request_data: ContractAnalysisRequest,
+    request_data: AnalysisResultRequest,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -303,7 +303,7 @@ async def analyze_contract(
 
         logger.info(f"Analysis started for contract {request_data.contract_id} by user {current_user.id}")
 
-        return ContractAnalysisResponse(
+        return AnalysisResultResponse(
             analysis_id=analysis_id,
             contract_id=request_data.contract_id,
             status='analyzing',

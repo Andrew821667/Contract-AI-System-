@@ -4,7 +4,7 @@ LLM Gateway - Единая точка доступа ко всем LLM пров�
 """
 import json
 import hashlib
-from typing import Dict, Any, Literal, Optional
+from typing import Dict, Any, Literal, Optional, Union
 from tenacity import retry, stop_after_attempt, wait_exponential
 from loguru import logger
 from datetime import datetime
@@ -152,7 +152,7 @@ class LLMGateway:
         use_cache: bool = True,
         db_session = None,
         **kwargs
-    ) -> str | Dict[str, Any]:
+    ) -> Union[str, Dict[str, Any]]:
         """
         Универсальный вызов LLM
 
@@ -246,11 +246,6 @@ class LLMGateway:
             return self._call_openai_compatible(prompt, system_prompt, temperature, max_tokens, **kwargs)
         elif self.provider == "yandex":
             return self._call_yandex(prompt, system_prompt, temperature, max_tokens, **kwargs)
-        elif self.provider == "qwen":
-            return self._call_qwen(prompt, system_prompt, temperature, max_tokens, **kwargs)
-        else:
-            raise ValueError(f"Provider {self.provider} not implemented")
-
     def _estimate_cost(self, tokens: int) -> float:
         """Estimate cost based on tokens (rough approximation)"""
         model = self.model or "gpt-4o-mini"
@@ -336,7 +331,6 @@ class LLMGateway:
             return alternative.text
 
         return ""
-
 
     def _call_qwen(self, prompt: str, system_prompt: Optional[str], temperature: float, max_tokens: int, **kwargs) -> str:
         """K7>2 Qwen API (Alibaba Cloud)"""
@@ -429,7 +423,7 @@ def llm_call(
     system_prompt: Optional[str] = None,
     response_format: Literal["text", "json"] = "text",
     **kwargs
-) -> str | Dict[str, Any]:
+) -> Union[str, Dict[str, Any]]:
     """
     KAB@K9 2K7>2 LLM 157 A>740=8O M:75<?;O@0 gateway
 

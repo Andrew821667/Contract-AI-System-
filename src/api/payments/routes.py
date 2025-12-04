@@ -17,7 +17,6 @@ from src.services.payment_service import payment_service
 
 
 router = APIRouter()
-# AuthService will be initialized with DB in each endpoint that needs it
 
 
 # Dependency: Get current user
@@ -33,6 +32,7 @@ async def get_current_user(
         )
 
     token = authorization.replace("Bearer ", "")
+    auth_service = AuthService(db)
     user, error = auth_service.verify_access_token(token, db)
 
     if error or not user:
