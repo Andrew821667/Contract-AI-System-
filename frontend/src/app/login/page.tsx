@@ -10,10 +10,14 @@ import toast from 'react-hot-toast'
 export default function LoginPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
 
-  const { register, handleSubmit, formState: { errors } } = useForm()
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    console.log('🔥 FORM SUBMITTED!')
+    console.log('Email:', email, 'Password:', password)
 
-  const onSubmit = async (data: any) => {
     setIsLoading(true)
 
     try {
@@ -25,11 +29,15 @@ export default function LoginPage() {
         { email: 'junior@example.com', password: 'junior123', name: 'Junior Lawyer', role: 'junior_lawyer' },
       ]
 
+      console.log('Looking for match...')
       const demoUser = demoCredentials.find(
-        u => u.email === data.email && u.password === data.password
+        u => u.email === email && u.password === password
       )
 
+      console.log('Match result:', demoUser)
+
       if (demoUser) {
+        console.log('✅ DEMO USER FOUND! Setting localStorage...')
         // Demo mode - bypass API
         localStorage.setItem('access_token', 'demo_token_' + Date.now())
         localStorage.setItem('user', JSON.stringify({
@@ -38,6 +46,7 @@ export default function LoginPage() {
           role: demoUser.role
         }))
 
+        console.log('✅ LocalStorage set, showing toast...')
         toast.success(`Добро пожаловать, ${demoUser.name}!`, {
           icon: '🎉',
           style: {
@@ -46,14 +55,21 @@ export default function LoginPage() {
             color: '#fff',
           },
         })
-        router.push('/dashboard')
+
+        console.log('✅ Redirecting to dashboard in 100ms...')
+        // Small delay to ensure localStorage is set before redirect
+        setTimeout(() => {
+          window.location.href = '/dashboard'
+        }, 100)
         return
       }
 
+      console.log('⚠️ No demo user found, trying API...')
+
       // Try real API
       const response = await api.login({
-        username: data.email,
-        password: data.password,
+        username: email,
+        password: password,
       })
 
       toast.success(`Добро пожаловать, ${response.user.name}!`, {
@@ -169,7 +185,7 @@ export default function LoginPage() {
               Вход в систему
             </h2>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            <form onSubmit={handleLogin} className="space-y-5">
               {/* Email Field */}
               <div>
                 <label className="block text-sm font-semibold text-white mb-2">
@@ -182,27 +198,14 @@ export default function LoginPage() {
                     </svg>
                   </div>
                   <input
-                    {...register('email', {
-                      required: 'Email обязателен',
-                      pattern: {
-                        value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                        message: 'Неверный формат email'
-                      }
-                    })}
-                    type="email"
+                    type="text"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-12 pr-4 py-3.5 bg-white/10 border-2 border-white/20 rounded-xl text-white placeholder-white/50 focus:border-white focus:ring-4 focus:ring-white/20 transition-all duration-300 outline-none backdrop-blur-sm"
                     placeholder="user@example.com"
+                    required
                   />
                 </div>
-                {errors.email && (
-                  <motion.p
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-1 text-sm text-red-200"
-                  >
-                    {errors.email.message as string}
-                  </motion.p>
-                )}
               </div>
 
               {/* Password Field */}
@@ -217,27 +220,14 @@ export default function LoginPage() {
                     </svg>
                   </div>
                   <input
-                    {...register('password', {
-                      required: 'Пароль обязателен',
-                      minLength: {
-                        value: 6,
-                        message: 'Минимум 6 символов'
-                      }
-                    })}
                     type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-12 pr-4 py-3.5 bg-white/10 border-2 border-white/20 rounded-xl text-white placeholder-white/50 focus:border-white focus:ring-4 focus:ring-white/20 transition-all duration-300 outline-none backdrop-blur-sm"
                     placeholder="••••••••"
+                    required
                   />
                 </div>
-                {errors.password && (
-                  <motion.p
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="mt-1 text-sm text-red-200"
-                  >
-                    {errors.password.message as string}
-                  </motion.p>
-                )}
               </div>
 
               {/* Submit Button */}
@@ -246,6 +236,7 @@ export default function LoginPage() {
                 whileTap={{ scale: 0.98 }}
                 type="submit"
                 disabled={isLoading}
+                onClick={() => console.log('🖱️ BUTTON CLICKED!')}
                 className="w-full py-4 bg-white text-primary-600 font-bold rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden group"
               >
                 <span className="relative z-10">

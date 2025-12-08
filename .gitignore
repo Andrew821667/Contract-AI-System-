@@ -142,3 +142,4 @@ frontend/node_modules/
 frontend/next-env.d.ts
 frontend/.next
 frontend/build
+create_test_users.py

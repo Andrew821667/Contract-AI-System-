@@ -57,9 +57,12 @@ export default function DashboardPage() {
   // Check authentication and default password
   useEffect(() => {
     const token = localStorage.getItem('access_token')
+    console.log('🔍 Dashboard checking token:', token)
     if (!token) {
+      console.log('❌ No token found, redirecting to login')
       router.push('/login')
     } else {
+      console.log('✅ Token found, user authenticated')
       // Check if using default password
       const passwordChanged = localStorage.getItem('passwordChanged')
       const userStr = localStorage.getItem('user')

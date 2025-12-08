@@ -27,8 +27,9 @@ class RateLimiter:
 
     Пример использования:
         limiter = RateLimiter(
-            requests_per_minute=10,
-            tokens_per_minute=50000,
+            # Global limits
+            requests_per_minute=600,
+            tokens_per_minute=500000,
             cost_per_hour=1.0
         )
 

@@ -20,8 +20,9 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Project paths
-PROJECT_DIR="/Users/andrew/Contract-AI-System-"
-WORKTREE_DIR="/Users/andrew/.claude-worktrees/Contract-AI-System-/blissful-hellman"
+# Project paths
+PROJECT_DIR="$(pwd)"
+WORKTREE_DIR="$(pwd)"
 FRONTEND_DIR="$WORKTREE_DIR/frontend"
 
 # Detect Node.js and npm paths
@@ -52,6 +53,12 @@ EOF
 echo -e "${NC}"
 
 cd "$WORKTREE_DIR"
+
+# Activate virtual environment if it exists
+if [ -d "venv" ]; then
+    echo -e "${BLUE}🔧 Activating virtual environment...${NC}"
+    source venv/bin/activate
+fi
 
 # ============================================================================
 # Step 1: Check .env file
