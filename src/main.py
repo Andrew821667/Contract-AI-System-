@@ -37,10 +37,7 @@ from config.settings import settings
 from src.models.database import engine, Base, SessionLocal
 
 # Import middleware
-from src.middleware.security import (
-    RateLimitMiddleware,
-    SecurityHeadersMiddleware
-)
+from src.middleware.security import setup_security_middleware
 
 # Import routers
 from src.api.auth.routes import router as auth_router
@@ -95,9 +92,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Security middleware
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(RateLimitMiddleware, requests_per_minute=100)
+# Security middleware setup
+setup_security_middleware(app)
 
 
 # Exception handlers

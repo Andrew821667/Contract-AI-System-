@@ -23,12 +23,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Rate limiting middleware using token bucket algorithm
 
     Limits:
-    - Default: 100 requests per minute per IP
-    - Login: 5 requests per minute per IP
-    - Register: 5 requests per minute per IP
+    - Default: 1000 requests per minute per IP
+    - Login: 20 requests per minute per IP
+    - Register: 20 requests per minute per IP
+    - Demo Activate: 50 requests per minute per IP
     """
 
-    def __init__(self, app, requests_per_minute: int = 100):
+    # Rate limiting settings
+    requests_per_minute: int = 1000  # Increased from 100
+    burst_limit: int = 50
+
+    def __init__(self, app, requests_per_minute: int = 1000):
         super().__init__(app)
         self.requests_per_minute = requests_per_minute
         self.buckets: Dict[str, Dict] = defaultdict(lambda: {
@@ -38,9 +43,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # Specific limits for endpoints
         self.endpoint_limits = {
-            '/api/v1/auth/login': 5,
-            '/api/v1/auth/register': 5,
-            '/api/v1/auth/demo-activate': 10,
+            '/api/v1/auth/login': 20,
+            '/api/v1/auth/register': 20,
+            '/api/v1/auth/demo-activate': 50,
         }
 
     async def dispatch(self, request: Request, call_next):
@@ -255,7 +260,7 @@ def setup_security_middleware(app):
     setup_cors(app)
 
     # Rate limiting
-    app.add_middleware(RateLimitMiddleware, requests_per_minute=100)
+    app.add_middleware(RateLimitMiddleware, requests_per_minute=1000)
 
     # Security headers
     app.add_middleware(SecurityHeadersMiddleware)

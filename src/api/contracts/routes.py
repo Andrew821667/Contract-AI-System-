@@ -43,17 +43,35 @@ async def get_current_user(
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authorization header"
+            detail="Missing or invalid authorization header",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     token = authorization.replace("Bearer ", "")
     auth_service = AuthService(db)
-    user, error = auth_service.verify_access_token(token, db)
-
-    if error or not user:
+    
+    # Verify token
+    payload = auth_service.verify_token(token, token_type="access")
+    if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=error or "Invalid token"
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user_id = payload.get("user_id")
+    user = db.query(User).filter(User.id == user_id).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+        
+    if not user.is_active():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is not active"
         )
 
     return user
@@ -479,7 +497,7 @@ async def export_contract(
 
 # ==================== CONTRACT LISTING ====================
 
-@router.get("/list", response_model=ContractListResponse)
+@router.get("", response_model=ContractListResponse)
 async def list_contracts(
     page: int = 1,
     page_size: int = 20,
