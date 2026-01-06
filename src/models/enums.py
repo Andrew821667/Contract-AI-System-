@@ -66,12 +66,10 @@ class ContractStatus(str, Enum):
 
 class UserRole(str, Enum):
     """Роли пользователей"""
-    ADMIN = "admin"  # Администратор
-    SENIOR_LAWYER = "senior_lawyer"  # Старший юрист
-    LAWYER = "lawyer"  # Юрист
-    JUNIOR_LAWYER = "junior_lawyer"  # Младший юрист
-    VIEWER = "viewer"  # Наблюдатель (только чтение)
-
+    ADMIN = "admin"  # Администратор - полный доступ к системе
+    LAWYER = "lawyer"  # Юрист - стандартные права работы с договорами
+    JUNIOR_LAWYER = "junior_lawyer"  # Пользователь - базовые права
+    DEMO = "demo"  # Демо-пользователь - временный доступ только на просмотр
 
 class ClauseType(str, Enum):
     """Типы пунктов договора"""

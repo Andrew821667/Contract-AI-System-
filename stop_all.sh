@@ -12,7 +12,7 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-WORKTREE_DIR="/Users/andrew/.claude-worktrees/Contract-AI-System-/blissful-hellman"
+WORKTREE_DIR="$(pwd)"
 
 echo -e "${CYAN}"
 cat << "EOF"
@@ -59,7 +59,7 @@ echo -e "\n${CYAN}[1/3]${NC} Stopping FastAPI Backend..."
 kill_by_pidfile ".backend.pid" "Backend"
 
 # Also kill by port
-lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+lsof -ti:8001 | xargs kill -9 2>/dev/null || true
 
 # Stop Frontend
 echo -e "\n${CYAN}[2/3]${NC} Stopping Next.js Frontend..."

@@ -3,7 +3,7 @@
 # Contract AI System - Start All Services
 # ============================================================================
 # This script starts:
-# 1. FastAPI Backend (port 8000)
+# 1. FastAPI Backend (port 8001)
 # 2. Next.js Frontend (port 3000)
 # 3. Streamlit Admin Panel (port 8501)
 # ============================================================================
@@ -142,7 +142,7 @@ check_port() {
 }
 
 PORTS_OK=true
-check_port 8000 || PORTS_OK=false
+check_port 8001 || PORTS_OK=false
 check_port 3000 || PORTS_OK=false
 check_port 8501 || PORTS_OK=false
 
@@ -151,7 +151,7 @@ if [ "$PORTS_OK" = false ]; then
     read -r KILL_PORTS
     if [ "$KILL_PORTS" = "y" ] || [ "$KILL_PORTS" = "Y" ]; then
         echo -e "${YELLOW}Killing processes...${NC}"
-        lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+        lsof -ti:8001 | xargs kill -9 2>/dev/null || true
         lsof -ti:3000 | xargs kill -9 2>/dev/null || true
         lsof -ti:8501 | xargs kill -9 2>/dev/null || true
         sleep 2
@@ -165,7 +165,7 @@ fi
 # ============================================================================
 # Step 5: Start FastAPI Backend
 # ============================================================================
-echo -e "\n${BLUE}[5/7]${NC} Starting FastAPI Backend (port 8000)..."
+echo -e "\n${BLUE}[5/7]${NC} Starting FastAPI Backend (port 8001)..."
 
 # Debug: Show environment
 echo "DEBUG: python3 path: $(which python3)"
@@ -178,8 +178,8 @@ if [ $? -ne 0 ]; then
 fi
 
 # Start backend with better error logging
-echo "DEBUG: Starting backend with: python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000"
-nohup python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000 > logs/backend.log 2>&1 &
+echo "DEBUG: Starting backend with: python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8001"
+nohup python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8001 > logs/backend.log 2>&1 &
 BACKEND_PID=$!
 echo "DEBUG: Backend PID: $BACKEND_PID"
 echo $BACKEND_PID > .backend.pid
@@ -201,10 +201,10 @@ sleep 5
 
 # Check if backend started
 echo "DEBUG: Testing health endpoint with curl..."
-if curl -s --max-time 5 http://localhost:8000/health > /dev/null 2>&1; then
+if curl -s --max-time 5 http://localhost:8001/health > /dev/null 2>&1; then
     echo -e "${GREEN}✅ Backend started (PID: $BACKEND_PID)${NC}"
-    echo -e "${CYAN}   📡 API: http://localhost:8000${NC}"
-    echo -e "${CYAN}   📚 Docs: http://localhost:8000/api/docs${NC}"
+    echo -e "${CYAN}   📡 API: http://localhost:8001${NC}"
+    echo -e "${CYAN}   📚 Docs: http://localhost:8001/api/docs${NC}"
 else
     echo -e "${RED}❌ Backend health check failed${NC}"
     echo "Backend process status:"
@@ -274,13 +274,13 @@ EOF
 echo -e "${NC}"
 
 echo -e "${CYAN}📍 ACCESS POINTS:${NC}"
-echo -e "   ${GREEN}•${NC} Main Interface (Users):   ${BLUE}http://localhost:3000${NC}"
+echo -e "   ${GREEN}•${NC} Main Interface (Users):   ${BLUE}http://localhost:3001${NC}"
 echo -e "   ${GREEN}•${NC} Admin Panel (Admins):     ${BLUE}http://localhost:8501${NC}"
-echo -e "   ${GREEN}•${NC} API Documentation:        ${BLUE}http://localhost:8000/api/docs${NC}"
+echo -e "   ${GREEN}•${NC} API Documentation:        ${BLUE}http://localhost:8002/api/docs${NC}"
 
-echo -e "\n${CYAN}👥 DEFAULT CREDENTIALS:${NC}"
-echo -e "   ${GREEN}•${NC} Admin:  ${YELLOW}admin@contractai.local${NC} / ${YELLOW}Admin123!${NC}"
-echo -e "   ${GREEN}•${NC} Check CREDENTIALS.txt for all users"
+echo -e "\n${RED}🚨 AUTHENTICATION DISABLED! 🚨${NC}"
+echo -e "   ${YELLOW}•${NC} Auto-login as Administrator enabled"
+echo -e "   ${YELLOW}•${NC} All functions available without login"
 
 echo -e "\n${CYAN}📋 PROCESS IDs:${NC}"
 echo -e "   ${GREEN}•${NC} Backend:  ${YELLOW}$BACKEND_PID${NC}"

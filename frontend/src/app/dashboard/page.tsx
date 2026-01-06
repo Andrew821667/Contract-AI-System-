@@ -46,13 +46,32 @@ const itemVariants = {
 
 export default function DashboardPage() {
   const router = useRouter()
-  const [user, setUser] = useState<User | null>(null)
+
+  // Initialize user from localStorage immediately
+  const getInitialUser = () => {
+    if (typeof window === 'undefined') return null
+    const stored = localStorage.getItem('user')
+    if (!stored) return null
+    try {
+      return JSON.parse(stored)
+    } catch {
+      return null
+    }
+  }
+
+  const [user, setUser] = useState<User | null>(getInitialUser)
   const [showWelcome, setShowWelcome] = useState(false)
   const [showPasswordChange, setShowPasswordChange] = useState(false)
   const userRole = getUserRole()
   const permissions = getRolePermissions(userRole)
   const roleColor = getRoleColor(userRole)
   const roleLabel = getRoleLabel(userRole)
+
+  // Debug: log user role for admin check
+  useEffect(() => {
+    console.log('🔍 User role:', user?.role)
+    console.log('🔍 Is admin?', user?.role === 'admin')
+  }, [user])
 
   // Check authentication and default password
   useEffect(() => {
@@ -97,8 +116,8 @@ export default function DashboardPage() {
     queryKey: ['currentUser'],
     queryFn: async () => {
       const response = await api.getCurrentUser()
-      setUser(response.data)
-      return response.data
+      // Don't overwrite user state - it's already correctly set from localStorage
+      return response
     }
   })
 
@@ -365,14 +384,26 @@ export default function DashboardPage() {
                     </svg>
                   </motion.div>
                 </div>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => router.push('/pricing')}
-                  className="w-full mt-2 py-2 bg-gradient-to-r from-orange-500 to-amber-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
-                >
-                  Улучшить тариф
-                </motion.button>
+                {user?.role !== 'admin' && (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => router.push('/pricing')}
+                    className="w-full mt-2 py-2 bg-gradient-to-r from-orange-500 to-amber-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
+                  >
+                    Улучшить тариф
+                  </motion.button>
+                )}
+                {user?.role === 'admin' && (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => router.push('/pricing')}
+                    className="w-full mt-2 py-2 bg-gradient-to-r from-slate-500 to-slate-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
+                  >
+                    Просмотр тарифов
+                  </motion.button>
+                )}
               </div>
             </div>
           </motion.div>
@@ -388,30 +419,41 @@ export default function DashboardPage() {
           <h2 className="text-2xl font-bold gradient-text mb-6">Быстрые действия</h2>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {[
-              { icon: '📤', label: 'Загрузить договор', route: '/contracts/upload', gradient: 'from-blue-500 to-cyan-600', permission: 'canAnalyze' },
-              { icon: '✨', label: 'Генерировать', route: '/contracts/generate', gradient: 'from-purple-500 to-pink-600', permission: 'canGenerate' },
-              { icon: '📋', label: 'Все договоры', route: '/contracts', gradient: 'from-green-500 to-emerald-600', permission: null },
-              { icon: '💎', label: 'Тарифы', route: '/pricing', gradient: 'from-orange-500 to-amber-600', permission: null }
+              { icon: '📤', label: 'Загрузить договор', route: '/contracts/upload', gradient: 'from-blue-500 to-cyan-600', permission: 'canAnalyze', adminOnly: false },
+              { icon: '✨', label: 'Генерировать', route: '/contracts/generate', gradient: 'from-purple-500 to-pink-600', permission: 'canGenerate', adminOnly: false },
+              { icon: '📋', label: 'Все договоры', route: '/contracts', gradient: 'from-green-500 to-emerald-600', permission: null, adminOnly: false },
+              { icon: '🎫', label: 'Демо-токены', route: '/admin/demo-tokens', gradient: 'from-indigo-500 to-purple-600', permission: null, adminOnly: true },
+              { icon: '💎', label: 'Тарифы', route: '/pricing', gradient: 'from-orange-500 to-amber-600', permission: null, adminOnly: false }
             ]
-            .filter(action => !action.permission || permissions[action.permission as keyof typeof permissions])
-            .map((action, idx) => (
-              <motion.button
-                key={idx}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.4 + idx * 0.1 }}
-                whileHover={{ y: -4, scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => router.push(action.route)}
-                className="relative group overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300"
-              >
-                <div className={`absolute inset-0 bg-gradient-to-br ${action.gradient} opacity-90 group-hover:opacity-100 transition-opacity`} />
-                <div className="relative z-10 p-6 text-white text-center">
-                  <div className="text-4xl mb-3">{action.icon}</div>
-                  <div className="text-base font-semibold">{action.label}</div>
-                </div>
-              </motion.button>
-            ))}
+              .filter(action => {
+                // Filter by permission
+                if (action.permission && !permissions[action.permission as keyof typeof permissions]) {
+                  return false;
+                }
+                // Filter admin-only actions
+                if (action.adminOnly && user?.role !== 'admin') {
+                  return false;
+                }
+                return true;
+              })
+              .map((action, idx) => (
+                <motion.button
+                  key={idx}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.4 + idx * 0.1 }}
+                  whileHover={{ y: -4, scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => router.push(action.route)}
+                  className="relative group overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300"
+                >
+                  <div className={`absolute inset-0 bg-gradient-to-br ${action.gradient} opacity-90 group-hover:opacity-100 transition-opacity`} />
+                  <div className="relative z-10 p-6 text-white text-center">
+                    <div className="text-4xl mb-3">{action.icon}</div>
+                    <div className="text-base font-semibold">{action.label}</div>
+                  </div>
+                </motion.button>
+              ))}
           </div>
         </motion.div>
 

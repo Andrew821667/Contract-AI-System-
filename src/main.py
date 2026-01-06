@@ -40,7 +40,7 @@ from src.models.database import engine, Base, SessionLocal
 from src.middleware.security import setup_security_middleware
 
 # Import routers
-from src.api.auth.routes import router as auth_router
+# from src.api.auth.routes import router as auth_router  # DISABLED AUTH
 from src.api.contracts import router as contracts_router
 from src.api.websocket import router as websocket_router
 from src.api.payments import router as payments_router
@@ -84,7 +84,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",  # React frontend
+        "http://localhost:3001",  # React frontend (fallback)
         "http://localhost:8501",  # Streamlit admin
+        "http://localhost:8002",  # API access
         settings.frontend_url if hasattr(settings, 'frontend_url') else "http://localhost:3000"
     ],
     allow_credentials=True,
@@ -134,7 +136,7 @@ async def root() -> Dict[str, Any]:
 
 
 # Include routers
-app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
+# app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])  # DISABLED AUTH
 app.include_router(contracts_router, prefix="/api/v1/contracts", tags=["Contracts"])
 app.include_router(websocket_router, prefix="/api/v1/ws", tags=["WebSocket"])
 app.include_router(payments_router, prefix="/api/v1/payments", tags=["Payments"])

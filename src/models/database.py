@@ -287,6 +287,7 @@ class ContractFeedback(Base):
 
 
 # -:A?>@B 2A5E <>45;59
+
 __all__ = [
     "Base",
     "User",
@@ -297,7 +298,8 @@ __all__ = [
     "LegalDocument",
     "ExportLog",
     "ContractFeedback",
-    "LLMCache"
+    "LLMCache",
+    "DemoCode"
 ]
 
 

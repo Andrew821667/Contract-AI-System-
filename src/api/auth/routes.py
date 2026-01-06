@@ -81,43 +81,29 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 # ==================== Dependencies ====================
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
+    # DISABLED AUTH - returns mock admin user
 ) -> User:
     """
-    Get current authenticated user from JWT token
-
-    Raises:
-        HTTPException 401: Invalid or expired token
+    Get current user (DISABLED AUTH - returns mock admin user)
     """
-    auth_service = AuthService(db)
-
-    # Verify token
-    payload = auth_service.verify_token(token, token_type="access")
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    user_id = payload.get("user_id")
-
-    # Get user from database
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-
-    if not user.is_active():
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is not active"
-        )
-
-    return user
+    # Return mock admin user for testing without auth
+    from datetime import datetime
+    return User(
+        id="admin-001",
+        email="admin@test.com",
+        name="Administrator",
+        role="admin",
+        subscription_tier="enterprise",
+        is_demo=False,
+        email_verified=True,
+        active=True,
+        password_hash="mock",
+        created_at=datetime.utcnow(),
+        contracts_today=0,
+        llm_requests_today=0,
+        last_reset_date=datetime.utcnow(),
+        login_count=1
+    )
 
 
 async def require_admin(current_user: User = Depends(get_current_user)) -> User:
@@ -565,6 +551,69 @@ async def generate_demo_link(
         "max_llm_requests": demo_token.max_llm_requests,
         "created_by": current_user.email
     }
+
+
+@router.get("/admin/demo-tokens", dependencies=[Depends(require_admin)])
+async def list_demo_tokens(
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    limit: int = 100
+):
+    """
+    List all demo tokens (Admin only)
+    
+    **Requires:** Admin role
+    
+    **Query Parameters:**
+    - `limit`: Max tokens to return (default: 100)
+    
+    **Returns:**
+    ```json
+    [
+        {
+            "id": "uuid",
+            "token": "abc123...",
+            "url": "https://contract-ai.example.com/demo?token=abc123",
+            "created_at": "2025-01-15T10:00:00",
+            "expires_at": "2025-01-16T10:00:00",
+            "used": false,
+            "used_at": null,
+            "max_contracts": 3,
+            "max_llm_requests": 10,
+            "campaign": "website_cta"
+        }
+    ]
+    ```
+    """
+    from src.models.auth_models import DemoToken
+    
+    tokens = db.query(DemoToken)\
+        .order_by(DemoToken.created_at.desc())\
+        .limit(limit)\
+        .all()
+    
+    result = []
+    for token in tokens:
+        demo_url = f"http://localhost:3000/demo/activate?token={token.token}"
+        
+        result.append({
+            "id": token.id,
+            "token": token.token,
+            "url": demo_url,
+            "created_at": token.created_at.isoformat() if token.created_at else None,
+            "expires_at": token.expires_at.isoformat() if token.expires_at else None,
+            "used": token.used,
+            "used_at": token.used_at.isoformat() if token.used_at else None,
+            "uses_count": token.uses_count,
+            "max_uses": token.max_uses,
+            "max_contracts": token.max_contracts,
+            "max_llm_requests": token.max_llm_requests,
+            "campaign": token.campaign,
+            "source": token.source
+        })
+    
+    return result
+
 
 
 @router.post("/admin/users", dependencies=[Depends(require_admin)])

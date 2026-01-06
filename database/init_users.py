@@ -33,79 +33,13 @@ def create_initial_users(db: Session) -> dict:
 
     users_to_create = [
         {
-            "email": "admin@contractai.local",
-            "name": "System Administrator",
-            "password": "Admin123!",
+            "email": "admin@test.com",
+            "name": "Administrator",
+            "password": "admin123",
             "role": "admin",
             "subscription_tier": "enterprise",
             "is_demo": False,
-            "description": "Full system administrator with unlimited access"
-        },
-        {
-            "email": "demo1@example.com",
-            "name": "Demo User 1",
-            "password": "Demo123!",
-            "role": "demo",
-            "subscription_tier": "demo",
-            "is_demo": True,
-            "demo_expires": datetime.utcnow() + timedelta(days=7),
-            "description": "Demo user via link (7 days trial)"
-        },
-        {
-            "email": "demo2@example.com",
-            "name": "Demo User 2",
-            "password": "Demo123!",
-            "role": "demo",
-            "subscription_tier": "demo",
-            "is_demo": True,
-            "demo_expires": datetime.utcnow() + timedelta(days=7),
-            "description": "Demo user via link (7 days trial)"
-        },
-        {
-            "email": "trial@example.com",
-            "name": "Trial User",
-            "password": "Trial123!",
-            "role": "junior_lawyer",
-            "subscription_tier": "basic",
-            "is_demo": False,
-            "subscription_expires": datetime.utcnow() + timedelta(days=30),
-            "description": "Trial user with 30 days basic access"
-        },
-        {
-            "email": "junior@contractai.local",
-            "name": "Junior Lawyer",
-            "password": "Junior123!",
-            "role": "junior_lawyer",
-            "subscription_tier": "basic",
-            "is_demo": False,
-            "description": "Junior lawyer with basic tier access"
-        },
-        {
-            "email": "lawyer@contractai.local",
-            "name": "Regular Lawyer",
-            "password": "Lawyer123!",
-            "role": "lawyer",
-            "subscription_tier": "pro",
-            "is_demo": False,
-            "description": "Regular lawyer with pro tier access"
-        },
-        {
-            "email": "senior@contractai.local",
-            "name": "Senior Lawyer",
-            "password": "Senior123!",
-            "role": "senior_lawyer",
-            "subscription_tier": "pro",
-            "is_demo": False,
-            "description": "Senior lawyer with pro tier access"
-        },
-        {
-            "email": "vip@contractai.local",
-            "name": "VIP Client",
-            "password": "Vip123!",
-            "role": "senior_lawyer",
-            "subscription_tier": "enterprise",
-            "is_demo": False,
-            "description": "VIP client with enterprise unlimited access"
+            "description": "System administrator"
         },
     ]
 
@@ -334,32 +268,17 @@ def main():
             logger.error("❌ No users created (they may already exist)")
             return
 
-        # Create demo tokens
-        tokens = create_demo_tokens(db)
-
-        # Save to file
-        save_credentials_to_file(credentials, tokens)
-
-        # Print to console
-        print_credentials_table(credentials)
-
-        if tokens:
-            print("\n📋 DEMO TOKENS CREATED:")
-            print("-" * 80)
-            for token in tokens:
-                print(f"  • {token['description']}")
-                print(f"    Token: {token['token']}")
-            print("-" * 80 + "\n")
-
         logger.info("✅ Database initialization completed successfully!")
-        logger.info(f"📄 Credentials saved to CREDENTIALS.txt")
 
         print("\n🎉 SUCCESS! Contract AI System is ready to use.")
         print("\n📍 ACCESS POINTS:")
-        print("  • Main Interface: http://localhost:3000")
+        print("  • Main Interface: http://localhost:3001")
         print("  • Admin Panel: http://localhost:8501")
-        print("  • API Docs: http://localhost:8000/api/docs")
-        print("\n⚠️  Don't forget to change passwords in production!\n")
+        print("  • API Docs: http://localhost:8002/api/docs")
+        print("\n👤 LOGIN CREDENTIALS:")
+        print("  • Email: admin@test.com")
+        print("  • Password: admin123")
+        print("\n⚠️  Don't forget to change password in production!\n")
 
     except Exception as e:
         logger.error(f"❌ Error during initialization: {e}")

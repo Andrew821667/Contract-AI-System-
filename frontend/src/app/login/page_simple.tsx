@@ -16,33 +16,9 @@ export default function SimpleLoginPage() {
     console.log('Email entered:', email)
     console.log('Password entered:', password)
 
-    // Demo credentials
-    const demos = [
-      { email: 'demo@example.com', password: 'demo123', name: 'Demo User', role: 'demo' },
-      { email: 'admin@example.com', password: 'admin123', name: 'Admin User', role: 'admin' },
-    ]
-
-    const found = demos.find(d => d.email === email && d.password === password)
-    console.log('User found:', found)
-
-    if (found) {
-      console.log('✅ SUCCESS!')
-      localStorage.setItem('access_token', 'demo_token_' + Date.now())
-      localStorage.setItem('user', JSON.stringify({
-        name: found.name,
-        email: found.email,
-        role: found.role
-      }))
-
-      setMessage('✅ SUCCESS! Redirecting...')
-
-      setTimeout(() => {
-        router.push('/dashboard')
-      }, 1000)
-    } else {
-      console.log('❌ FAILED')
-      setMessage('❌ Wrong credentials')
-    }
+    // Simple login - just show form is working
+    console.log('Login attempt:', email, password)
+    setMessage('Login functionality removed. Use main login page.')
   }
 
   return (

@@ -62,7 +62,7 @@ class APIClient {
   private refreshing = false;
 
   constructor() {
-    const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002';
 
     this.client = axios.create({
       baseURL,
@@ -72,6 +72,8 @@ class APIClient {
       },
     });
 
+    // DISABLED AUTH - Request interceptor disabled
+    /*
     // Request interceptor: Add auth token
     this.client.interceptors.request.use(
       (config) => {
@@ -113,6 +115,7 @@ class APIClient {
         return Promise.reject(error);
       }
     );
+    */
   }
 
   // ==================== Token Management ====================

@@ -81,6 +81,30 @@ class Settings(BaseSettings):
 
     # Security
     secret_key: str = ""  # REQUIRED in production! Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+    
+    # JWT Configuration
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 1440  # 24 hours
+    jwt_refresh_token_expire_days: int = 7
+    
+    # Password Policy
+    password_min_length: int = 8
+    password_require_uppercase: bool = True
+    password_require_lowercase: bool = True
+    password_require_digit: bool = True
+    password_require_special: bool = True
+    
+    # Account Lockout
+    max_failed_login_attempts: int = 5
+    account_lockout_duration_minutes: int = 30
+    
+    # Demo User Settings
+    demo_account_lifetime_hours: int = 24
+    demo_daily_contract_view_limit: int = 10
+    
+    # Demo Code Settings
+    demo_code_validity_days: int = 7
+    demo_code_length: int = 12
 
     # Email / SMTP Settings
     smtp_host: str = "smtp.gmail.com"
