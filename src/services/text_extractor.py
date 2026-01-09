@@ -1,0 +1,333 @@
+"""
+Text Extraction Service
+Извлекает текст из PDF, DOCX и изображений (с OCR)
+
+Supports:
+- PDF documents (native text extraction)
+- DOCX files
+- Scanned images/PDFs (PaddleOCR)
+"""
+
+import time
+import logging
+from pathlib import Path
+from typing import Dict, Any, Optional, BinaryIO, Union
+from dataclasses import dataclass
+import io
+
+# PDF processing
+try:
+    import pdfplumber
+except ImportError:
+    pdfplumber = None
+
+# DOCX processing
+try:
+    from docx import Document as DocxDocument
+except ImportError:
+    DocxDocument = None
+
+# OCR processing
+try:
+    from paddleocr import PaddleOCR
+    from PIL import Image
+    import pdf2image
+except ImportError:
+    PaddleOCR = None
+    Image = None
+    pdf2image = None
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ExtractionResult:
+    """Результат извлечения текста"""
+    text: str
+    method: str  # 'pdf', 'docx', 'ocr'
+    pages: int
+    confidence: Optional[float]  # Для OCR
+    processing_time: float  # секунды
+    metadata: Dict[str, Any]  # Дополнительная информация
+
+
+class TextExtractor:
+    """
+    Сервис извлечения текста из документов
+
+    Автоматически определяет тип документа и применяет
+    оптимальный метод извлечения текста
+    """
+
+    def __init__(self, use_ocr: bool = True, ocr_lang: str = 'ru'):
+        """
+        Args:
+            use_ocr: Использовать ли OCR для сканов
+            ocr_lang: Язык для OCR ('ru', 'en', 'ru+en')
+        """
+        self.use_ocr = use_ocr
+        self.ocr_lang = ocr_lang
+        self._ocr_engine = None
+
+        # Check dependencies
+        if not pdfplumber:
+            logger.warning("pdfplumber not installed. PDF extraction will be limited.")
+        if not DocxDocument:
+            logger.warning("python-docx not installed. DOCX extraction unavailable.")
+        if not PaddleOCR and use_ocr:
+            logger.warning("paddleocr not installed. OCR unavailable.")
+
+    @property
+    def ocr_engine(self):
+        """Lazy initialization of OCR engine"""
+        if self._ocr_engine is None and PaddleOCR and self.use_ocr:
+            try:
+                self._ocr_engine = PaddleOCR(
+                    use_angle_cls=True,
+                    lang=self.ocr_lang,
+                    show_log=False
+                )
+                logger.info(f"PaddleOCR initialized with lang={self.ocr_lang}")
+            except Exception as e:
+                logger.error(f"Failed to initialize PaddleOCR: {e}")
+                self._ocr_engine = None
+        return self._ocr_engine
+
+    def extract(self, file_path: Union[str, Path, BinaryIO],
+                file_extension: Optional[str] = None) -> ExtractionResult:
+        """
+        Извлекает текст из документа
+
+        Args:
+            file_path: Путь к файлу или file-like объект
+            file_extension: Расширение файла (если file_path - это BinaryIO)
+
+        Returns:
+            ExtractionResult с извлеченным текстом и метаданными
+        """
+        start_time = time.time()
+
+        # Определяем расширение файла
+        if isinstance(file_path, (str, Path)):
+            file_path = Path(file_path)
+            ext = file_path.suffix.lower()
+        else:
+            ext = file_extension.lower() if file_extension else None
+
+        # Выбираем метод извлечения
+        if ext in ['.pdf']:
+            result = self._extract_from_pdf(file_path)
+        elif ext in ['.docx', '.doc']:
+            result = self._extract_from_docx(file_path)
+        elif ext in ['.png', '.jpg', '.jpeg', '.tiff', '.bmp']:
+            result = self._extract_from_image(file_path)
+        else:
+            raise ValueError(f"Unsupported file format: {ext}")
+
+        # Добавляем время обработки
+        result.processing_time = time.time() - start_time
+
+        logger.info(f"Text extracted: method={result.method}, "
+                   f"pages={result.pages}, "
+                   f"chars={len(result.text)}, "
+                   f"time={result.processing_time:.2f}s")
+
+        return result
+
+    def _extract_from_pdf(self, file_path: Union[Path, BinaryIO]) -> ExtractionResult:
+        """
+        Извлекает текст из PDF
+
+        Сначала пытается извлечь нативный текст,
+        если текста мало - применяет OCR (документ отсканирован)
+        """
+        if not pdfplumber:
+            raise ImportError("pdfplumber is required for PDF extraction")
+
+        try:
+            if isinstance(file_path, Path):
+                pdf = pdfplumber.open(file_path)
+            else:
+                pdf = pdfplumber.open(file_path)
+
+            text_parts = []
+            total_chars = 0
+
+            for page in pdf.pages:
+                page_text = page.extract_text() or ""
+                text_parts.append(page_text)
+                total_chars += len(page_text.strip())
+
+            pdf.close()
+
+            full_text = "\n\n".join(text_parts)
+            pages = len(text_parts)
+
+            # Если текста мало (< 100 символов на страницу) - это скан
+            avg_chars_per_page = total_chars / pages if pages > 0 else 0
+
+            if avg_chars_per_page < 100 and self.use_ocr:
+                logger.info(f"Low text density ({avg_chars_per_page:.0f} chars/page). "
+                           "Switching to OCR...")
+                return self._extract_from_pdf_with_ocr(file_path)
+
+            return ExtractionResult(
+                text=full_text,
+                method='pdf',
+                pages=pages,
+                confidence=None,
+                processing_time=0,  # Will be set by caller
+                metadata={
+                    'chars_per_page': avg_chars_per_page,
+                    'total_chars': total_chars
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"PDF extraction failed: {e}")
+            raise
+
+    def _extract_from_pdf_with_ocr(self, file_path: Union[Path, BinaryIO]) -> ExtractionResult:
+        """
+        Извлекает текст из PDF с помощью OCR
+        (для отсканированных документов)
+        """
+        if not pdf2image or not self.ocr_engine:
+            raise ImportError("pdf2image and paddleocr required for PDF OCR")
+
+        try:
+            # Конвертируем PDF в изображения
+            if isinstance(file_path, Path):
+                images = pdf2image.convert_from_path(file_path)
+            else:
+                images = pdf2image.convert_from_bytes(file_path.read())
+
+            text_parts = []
+            total_confidence = 0
+            conf_count = 0
+
+            for i, image in enumerate(images):
+                logger.debug(f"OCR processing page {i+1}/{len(images)}...")
+
+                # OCR на изображение
+                result = self.ocr_engine.ocr(image, cls=True)
+
+                # Извлекаем текст и confidence
+                page_text_parts = []
+                for line in result[0] if result[0] else []:
+                    text = line[1][0]  # Текст
+                    conf = line[1][1]  # Confidence
+                    page_text_parts.append(text)
+                    total_confidence += conf
+                    conf_count += 1
+
+                page_text = "\n".join(page_text_parts)
+                text_parts.append(page_text)
+
+            full_text = "\n\n".join(text_parts)
+            avg_confidence = total_confidence / conf_count if conf_count > 0 else 0.0
+
+            return ExtractionResult(
+                text=full_text,
+                method='ocr',
+                pages=len(images),
+                confidence=avg_confidence,
+                processing_time=0,
+                metadata={
+                    'ocr_lang': self.ocr_lang,
+                    'lines_detected': conf_count
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"PDF OCR extraction failed: {e}")
+            raise
+
+    def _extract_from_docx(self, file_path: Union[Path, BinaryIO]) -> ExtractionResult:
+        """Извлекает текст из DOCX"""
+        if not DocxDocument:
+            raise ImportError("python-docx is required for DOCX extraction")
+
+        try:
+            if isinstance(file_path, Path):
+                doc = DocxDocument(file_path)
+            else:
+                doc = DocxDocument(file_path)
+
+            # Извлекаем текст из параграфов
+            paragraphs = [p.text for p in doc.paragraphs]
+
+            # Извлекаем текст из таблиц
+            table_texts = []
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = " | ".join(cell.text for cell in row.cells)
+                    table_texts.append(row_text)
+
+            full_text = "\n".join(paragraphs)
+            if table_texts:
+                full_text += "\n\n" + "\n".join(table_texts)
+
+            return ExtractionResult(
+                text=full_text,
+                method='docx',
+                pages=1,  # DOCX не имеет концепции страниц
+                confidence=None,
+                processing_time=0,
+                metadata={
+                    'paragraphs': len(paragraphs),
+                    'tables': len(doc.tables),
+                    'total_chars': len(full_text)
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"DOCX extraction failed: {e}")
+            raise
+
+    def _extract_from_image(self, file_path: Union[Path, BinaryIO]) -> ExtractionResult:
+        """Извлекает текст из изображения с помощью OCR"""
+        if not Image or not self.ocr_engine:
+            raise ImportError("PIL and paddleocr required for image OCR")
+
+        try:
+            # Открываем изображение
+            if isinstance(file_path, Path):
+                image = Image.open(file_path)
+            else:
+                image = Image.open(file_path)
+
+            # OCR
+            result = self.ocr_engine.ocr(image, cls=True)
+
+            # Извлекаем текст
+            text_parts = []
+            total_confidence = 0
+            conf_count = 0
+
+            for line in result[0] if result[0] else []:
+                text = line[1][0]
+                conf = line[1][1]
+                text_parts.append(text)
+                total_confidence += conf
+                conf_count += 1
+
+            full_text = "\n".join(text_parts)
+            avg_confidence = total_confidence / conf_count if conf_count > 0 else 0.0
+
+            return ExtractionResult(
+                text=full_text,
+                method='ocr',
+                pages=1,
+                confidence=avg_confidence,
+                processing_time=0,
+                metadata={
+                    'ocr_lang': self.ocr_lang,
+                    'lines_detected': conf_count,
+                    'image_size': image.size
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"Image OCR extraction failed: {e}")
+            raise
