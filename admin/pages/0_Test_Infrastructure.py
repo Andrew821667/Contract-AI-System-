@@ -1,6 +1,6 @@
 """
-Infrastructure Testing Page
-Tests database connections, migrations, API keys, and services
+Страница тестирования инфраструктуры
+Тестирование подключений к БД, миграций, API ключей и сервисов
 """
 import streamlit as st
 import sys
@@ -12,73 +12,73 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 st.set_page_config(
-    page_title="Test Infrastructure - Contract AI",
+    page_title="Тестирование инфраструктуры - Contract AI",
     page_icon="🧪",
     layout="wide"
 )
 
-st.title("🧪 Infrastructure Testing")
-st.markdown("Test all components of Contract AI System v2.0")
+st.title("🧪 Тестирование инфраструктуры")
+st.markdown("Тестирование всех компонентов Contract AI System v2.0")
 
 st.markdown("---")
 
 # Section 1: Database Tests
-st.header("1️⃣ Database & Migrations")
+st.header("1️⃣ База данных и миграции")
 
 col1, col2 = st.columns(2)
 
 with col1:
-    if st.button("🗄️ Test Database Connection"):
-        with st.spinner("Testing database connection..."):
+    if st.button("🗄️ Тест подключения к БД"):
+        with st.spinner("Тестирование подключения к БД..."):
             try:
                 # Placeholder for real DB test
                 import time
                 time.sleep(1)
-                st.success("✅ Database connected successfully!")
-                st.info("PostgreSQL 16.x detected")
-                st.caption("Connection string: postgresql://localhost:5432/contract_ai")
+                st.success("✅ База данных подключена успешно!")
+                st.info("Обнаружен PostgreSQL 16.x")
+                st.caption("Строка подключения: postgresql://localhost:5432/contract_ai")
             except Exception as e:
-                st.error(f"❌ Database connection failed: {e}")
+                st.error(f"❌ Подключение к БД не удалось: {e}")
 
 with col2:
-    if st.button("📋 Check Migrations Status"):
-        with st.spinner("Checking migration status..."):
+    if st.button("📋 Проверить статус миграций"):
+        with st.spinner("Проверка статуса миграций..."):
             try:
                 import time
                 time.sleep(1)
-                st.success("✅ All migrations applied")
+                st.success("✅ Все миграции применены")
                 st.json({
-                    "Current revision": "006_llm_metrics",
-                    "Pending migrations": 0,
-                    "Tables created": 14
+                    "Текущая ревизия": "006_llm_metrics",
+                    "Ожидающих миграций": 0,
+                    "Создано таблиц": 14
                 })
             except Exception as e:
-                st.error(f"❌ Migration check failed: {e}")
+                st.error(f"❌ Проверка миграций не удалась: {e}")
 
 # pgvector test
-if st.button("🔍 Test pgvector Extension"):
-    with st.spinner("Testing pgvector..."):
+if st.button("🔍 Тест расширения pgvector"):
+    with st.spinner("Тестирование pgvector..."):
         try:
             import time
             time.sleep(1)
-            st.success("✅ pgvector extension is active")
-            st.info("Vector dimensionality: 1536")
-            st.caption("IVFFlat indexes created: 2")
+            st.success("✅ Расширение pgvector активно")
+            st.info("Размерность векторов: 1536")
+            st.caption("Создано IVFFlat индексов: 2")
         except Exception as e:
-            st.error(f"❌ pgvector test failed: {e}")
+            st.error(f"❌ Тест pgvector не удался: {e}")
 
 st.markdown("---")
 
 # Section 2: API Tests
-st.header("2️⃣ LLM API Connections")
+st.header("2️⃣ Подключения к LLM API")
 
-st.info("Test connectivity to all configured LLM providers")
+st.info("Тестирование подключения ко всем настроенным LLM провайдерам")
 
-if st.button("🚀 Run API Connection Tests"):
-    st.markdown("### Test Results:")
+if st.button("🚀 Запустить тесты API подключений"):
+    st.markdown("### Результаты тестов:")
 
     # Test DeepSeek
-    with st.spinner("Testing DeepSeek-V3..."):
+    with st.spinner("Тестирование DeepSeek-V3..."):
         import time
         time.sleep(0.5)
 
@@ -86,192 +86,192 @@ if st.button("🚀 Run API Connection Tests"):
         with col1:
             st.write("**DeepSeek-V3**")
         with col2:
-            st.success("✅ Connected")
+            st.success("✅ Подключено")
         with col3:
-            st.caption("180ms")
+            st.caption("180мс")
 
     # Test Claude
-    with st.spinner("Testing Claude 4.5..."):
+    with st.spinner("Тестирование Claude 4.5..."):
         time.sleep(0.5)
 
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
             st.write("**Claude 4.5 Sonnet**")
         with col2:
-            st.success("✅ Connected")
+            st.success("✅ Подключено")
         with col3:
-            st.caption("245ms")
+            st.caption("245мс")
 
     # Test GPT-4o
-    with st.spinner("Testing GPT-4o..."):
+    with st.spinner("Тестирование GPT-4o..."):
         time.sleep(0.5)
 
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
             st.write("**GPT-4o**")
         with col2:
-            st.success("✅ Connected")
+            st.success("✅ Подключено")
         with col3:
-            st.caption("210ms")
+            st.caption("210мс")
 
     # Test GPT-4o-mini
-    with st.spinner("Testing GPT-4o-mini..."):
+    with st.spinner("Тестирование GPT-4o-mini..."):
         time.sleep(0.5)
 
         col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
             st.write("**GPT-4o-mini**")
         with col2:
-            st.success("✅ Connected")
+            st.success("✅ Подключено")
         with col3:
-            st.caption("125ms")
+            st.caption("125мс")
 
-    st.success("🎉 All API connections successful!")
+    st.success("🎉 Все API подключения успешны!")
 
 st.markdown("---")
 
 # Section 3: Service Tests
-st.header("3️⃣ Core Services")
+st.header("3️⃣ Основные сервисы")
 
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    if st.button("🤖 Test Smart Router"):
-        with st.spinner("Testing Smart Router..."):
+    if st.button("🤖 Тест умного роутера"):
+        with st.spinner("Тестирование умного роутера..."):
             import time
             time.sleep(1)
 
-            st.success("✅ Smart Router operational")
+            st.success("✅ Умный роутер работает")
             st.json({
-                "Default model": "deepseek-v3",
-                "Complexity threshold": 0.8,
-                "Fallback enabled": True
+                "Модель по умолчанию": "deepseek-v3",
+                "Порог сложности": 0.8,
+                "Резерв включен": True
             })
 
 with col2:
-    if st.button("🔍 Test RAG Service"):
-        with st.spinner("Testing RAG Service..."):
+    if st.button("🔍 Тест RAG сервиса"):
+        with st.spinner("Тестирование RAG сервиса..."):
             import time
             time.sleep(1)
 
-            st.success("✅ RAG Service operational")
+            st.success("✅ RAG сервис работает")
             st.json({
-                "Knowledge entries": 247,
+                "Записей знаний": 247,
                 "Top-K": 5,
-                "Similarity threshold": 0.7
+                "Порог схожести": 0.7
             })
 
 with col3:
-    if st.button("⚙️ Test Config Service"):
-        with st.spinner("Testing Config Service..."):
+    if st.button("⚙️ Тест сервиса конфигурации"):
+        with st.spinner("Тестирование сервиса конфигурации..."):
             import time
             time.sleep(1)
 
-            st.success("✅ Config Service operational")
+            st.success("✅ Сервис конфигурации работает")
             st.json({
-                "System mode": "full_load",
-                "Enabled modules": 6,
-                "Config entries": 4
+                "Режим системы": "full_load",
+                "Включено модулей": 6,
+                "Записей конфигурации": 4
             })
 
 st.markdown("---")
 
 # Section 4: System Modes
-st.header("4️⃣ System Modes Test")
+st.header("4️⃣ Тест режимов системы")
 
-st.info("Test different system operation modes")
+st.info("Тестирование различных режимов работы системы")
 
 mode = st.selectbox(
-    "Select Mode to Test",
-    ["Full Load (Parallel)", "Sequential (Economy)", "Manual (Custom)"]
+    "Выберите режим для теста",
+    ["Полная загрузка (Параллельно)", "Последовательный (Экономия)", "Ручной (Настраиваемый)"]
 )
 
-if st.button("▶️ Test Selected Mode"):
-    with st.spinner(f"Testing {mode}..."):
+if st.button("▶️ Тест выбранного режима"):
+    with st.spinner(f"Тестирование {mode}..."):
         import time
         time.sleep(1.5)
 
-        if "Full Load" in mode:
-            st.success("✅ Full Load mode: All modules running in parallel")
-            modules = ["OCR", "Level1 Extraction", "LLM Extraction", "RAG Filter", "Validation", "Embedding"]
+        if "Полная загрузка" in mode:
+            st.success("✅ Режим полной загрузки: Все модули работают параллельно")
+            modules = ["OCR", "Извлечение Level1", "LLM извлечение", "RAG фильтр", "Валидация", "Эмбеддинги"]
             for module in modules:
-                st.info(f"✓ {module}: Running")
+                st.info(f"✓ {module}: Работает")
 
-        elif "Sequential" in mode:
-            st.success("✅ Sequential mode: Modules running one by one")
-            st.info("Current module: OCR")
-            st.caption("Next: Level1 Extraction")
+        elif "Последовательный" in mode:
+            st.success("✅ Последовательный режим: Модули работают по очереди")
+            st.info("Текущий модуль: OCR")
+            st.caption("Следующий: Извлечение Level1")
 
-        elif "Manual" in mode:
-            st.success("✅ Manual mode: Custom module selection")
-            enabled = ["OCR", "LLM Extraction", "Validation"]
-            disabled = ["Level1 Extraction", "RAG Filter", "Embedding"]
+        elif "Ручной" in mode:
+            st.success("✅ Ручной режим: Выборочное включение модулей")
+            enabled = ["OCR", "LLM извлечение", "Валидация"]
+            disabled = ["Извлечение Level1", "RAG фильтр", "Эмбеддинги"]
 
-            st.markdown("**Enabled:**")
+            st.markdown("**Включены:**")
             for module in enabled:
                 st.success(f"✓ {module}")
 
-            st.markdown("**Disabled:**")
+            st.markdown("**Отключены:**")
             for module in disabled:
                 st.error(f"✗ {module}")
 
 st.markdown("---")
 
 # Section 5: Sample Data Test
-st.header("5️⃣ Sample Data & Knowledge Base")
+st.header("5️⃣ Тестовые данные и база знаний")
 
-if st.button("📚 Test Knowledge Base"):
-    with st.spinner("Querying knowledge base..."):
+if st.button("📚 Тест базы знаний"):
+    with st.spinner("Запрос к базе знаний..."):
         import time
         time.sleep(1)
 
-        st.success("✅ Knowledge base accessible")
+        st.success("✅ База знаний доступна")
 
         sample_entries = [
-            {"Title": "Ограничение ответственности", "Type": "best_practice", "Active": True},
-            {"Title": "Стандартная формулировка штрафа", "Type": "template_clause", "Active": True},
-            {"Title": "Компромисс по предоплате", "Type": "negotiation_tactic", "Active": True},
-            {"Title": "Иностранная подсудность", "Type": "risk_pattern", "Active": True},
+            {"Название": "Ограничение ответственности", "Тип": "best_practice", "Активна": True},
+            {"Название": "Стандартная формулировка штрафа", "Тип": "template_clause", "Активна": True},
+            {"Название": "Компромисс по предоплате", "Тип": "negotiation_tactic", "Активна": True},
+            {"Название": "Иностранная подсудность", "Тип": "risk_pattern", "Активна": True},
         ]
 
         st.dataframe(sample_entries, use_container_width=True)
 
-if st.button("🔍 Test Vector Search"):
-    with st.spinner("Testing semantic search..."):
+if st.button("🔍 Тест векторного поиска"):
+    with st.spinner("Тестирование семантического поиска..."):
         import time
         time.sleep(1.5)
 
-        st.success("✅ Vector search operational")
+        st.success("✅ Векторный поиск работает")
 
-        st.markdown("**Query:** _ограничение ответственности в договоре_")
-        st.markdown("**Results:**")
+        st.markdown("**Запрос:** _ограничение ответственности в договоре_")
+        st.markdown("**Результаты:**")
 
         results = [
-            {"Title": "Ограничение ответственности в договорах поставки", "Similarity": 0.94},
-            {"Title": "Лимиты ответственности по договорам услуг", "Similarity": 0.87},
-            {"Title": "Компромисс по условиям ответственности", "Similarity": 0.79},
+            {"Название": "Ограничение ответственности в договорах поставки", "Схожесть": 0.94},
+            {"Название": "Лимиты ответственности по договорам услуг", "Схожесть": 0.87},
+            {"Название": "Компромисс по условиям ответственности", "Схожесть": 0.79},
         ]
 
         for r in results:
-            st.info(f"📄 {r['Title']} - Similarity: {r['Similarity']:.2f}")
+            st.info(f"📄 {r['Название']} - Схожесть: {r['Схожесть']:.2f}")
 
 st.markdown("---")
 
 # Section 6: Cost Calculation Test
-st.header("6️⃣ Cost Calculation")
+st.header("6️⃣ Расчет стоимости")
 
 col1, col2 = st.columns(2)
 
 with col1:
     test_model = st.selectbox(
-        "Model",
+        "Модель",
         ["DeepSeek-V3", "Claude 4.5 Sonnet", "GPT-4o", "GPT-4o-mini"]
     )
 
 with col2:
-    test_tokens = st.number_input("Input Tokens", value=1000, step=100)
+    test_tokens = st.number_input("Входных токенов", value=1000, step=100)
 
-if st.button("💰 Calculate Cost"):
+if st.button("💰 Рассчитать стоимость"):
     # Simulate cost calculation
     costs = {
         "DeepSeek-V3": 0.14,
@@ -285,36 +285,36 @@ if st.button("💰 Calculate Cost"):
 
     total_cost = input_cost + output_cost
 
-    st.success(f"✅ Estimated cost: ${total_cost:.6f}")
-    st.info(f"Input: ${input_cost:.6f} | Output: ${output_cost:.6f}")
+    st.success(f"✅ Расчетная стоимость: ${total_cost:.6f}")
+    st.info(f"Вход: ${input_cost:.6f} | Выход: ${output_cost:.6f}")
 
 st.markdown("---")
 
 # Summary
-st.header("📊 Test Summary")
+st.header("📊 Сводка тестов")
 
-if st.button("🔄 Run All Tests"):
-    with st.spinner("Running comprehensive tests..."):
+if st.button("🔄 Запустить все тесты"):
+    with st.spinner("Запуск комплексных тестов..."):
         import time
 
         progress_bar = st.progress(0)
         status_text = st.empty()
 
         tests = [
-            "Database connection",
-            "Migrations status",
-            "pgvector extension",
+            "Подключение к БД",
+            "Статус миграций",
+            "Расширение pgvector",
             "DeepSeek API",
             "Claude API",
             "GPT-4o API",
-            "Smart Router",
-            "RAG Service",
-            "Config Service",
-            "Knowledge Base"
+            "Умный роутер",
+            "RAG сервис",
+            "Сервис конфигурации",
+            "База знаний"
         ]
 
         for i, test in enumerate(tests):
-            status_text.text(f"Testing {test}...")
+            status_text.text(f"Тестирование {test}...")
             time.sleep(0.5)
             progress_bar.progress((i + 1) / len(tests))
 
@@ -322,21 +322,21 @@ if st.button("🔄 Run All Tests"):
         progress_bar.empty()
 
         st.balloons()
-        st.success("🎉 All tests passed!")
+        st.success("🎉 Все тесты пройдены!")
 
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
-            st.metric("Tests Passed", "10/10", delta="100%")
+            st.metric("Тестов пройдено", "10/10", delta="100%")
 
         with col2:
-            st.metric("Total Time", "8.2s")
+            st.metric("Общее время", "8.2сек")
 
         with col3:
-            st.metric("APIs Connected", "4/4")
+            st.metric("API подключено", "4/4")
 
         with col4:
-            st.metric("Services OK", "3/3")
+            st.metric("Сервисов ОК", "3/3")
 
 st.markdown("---")
-st.caption("Contract AI System v2.0 - Infrastructure Testing")
+st.caption("Contract AI System v2.0 - Тестирование инфраструктуры")

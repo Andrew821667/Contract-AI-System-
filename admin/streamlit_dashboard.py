@@ -12,7 +12,7 @@ sys.path.insert(0, str(project_root))
 
 # Page configuration
 st.set_page_config(
-    page_title="Contract AI Admin - v2.0",
+    page_title="Админка Contract AI - v2.0",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -54,71 +54,71 @@ with st.sidebar:
     st.markdown("---")
 
     # System Status
-    st.subheader("🔌 System Status")
-    st.success("✅ Online")
-    st.metric("Uptime", "12h 34m")
+    st.subheader("🔌 Статус системы")
+    st.success("✅ Онлайн")
+    st.metric("Аптайм", "12ч 34м")
 
     st.markdown("---")
 
     # Navigation
-    st.subheader("📂 Navigation")
+    st.subheader("📂 Навигация")
     page = st.radio(
-        "Go to:",
-        ["Dashboard", "System Config", "LLM Metrics", "RAG Statistics", "Test Connections"],
+        "Перейти к:",
+        ["Главная", "Настройки системы", "Метрики LLM", "Статистика RAG", "Тест подключений"],
         label_visibility="collapsed"
     )
 
     st.markdown("---")
     st.caption("Contract AI System v2.0")
-    st.caption("Multi-Model Routing | RAG | Human-in-the-Loop")
+    st.caption("Мульти-модельная маршрутизация | RAG | Human-in-the-Loop")
 
 # Main content area
-if page == "Dashboard":
+if page == "Главная":
     # Header
-    st.markdown('<div class="main-header">📊 System Dashboard</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-header">📊 Панель управления</div>', unsafe_allow_html=True)
 
     # Row 1: Key Metrics
     col1, col2, col3, col4, col5 = st.columns(5)
 
     with col1:
         st.metric(
-            label="📄 Documents Today",
+            label="📄 Документов сегодня",
             value="47",
             delta="+8",
-            help="Documents processed today"
+            help="Обработано документов сегодня"
         )
 
     with col2:
         st.metric(
-            label="💰 Cost/Doc",
+            label="💰 Стоимость/док",
             value="$0.019",
             delta="-91%",
             delta_color="inverse",
-            help="Average cost per document"
+            help="Средняя стоимость за документ"
         )
 
     with col3:
         st.metric(
-            label="🎯 Confidence",
+            label="🎯 Уверенность",
             value="94.2%",
             delta="+1.2%",
-            help="Average confidence score"
+            help="Средний балл уверенности"
         )
 
     with col4:
         st.metric(
-            label="⏳ Pending Approval",
+            label="⏳ Ожидает подтверждения",
             value="3",
             delta="",
-            help="Documents awaiting user approval"
+            help="Документов в очереди на утверждение"
         )
 
     with col5:
         st.metric(
-            label="📑 Active Contracts",
+            label="📑 Активных договоров",
             value="1,842",
             delta="+23",
-            help="Total active contracts"
+            help="Всего активных договоров"
         )
 
     st.markdown("---")
@@ -127,15 +127,15 @@ if page == "Dashboard":
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("📈 Processing Volume (Last 7 Days)")
+        st.subheader("📈 Объём обработки (последние 7 дней)")
         # Placeholder for chart
         st.line_chart({
-            "Mon": 35, "Tue": 42, "Wed": 38, "Thu": 45,
-            "Fri": 52, "Sat": 28, "Sun": 47
+            "Пн": 35, "Вт": 42, "Ср": 38, "Чт": 45,
+            "Пт": 52, "Сб": 28, "Вс": 47
         })
 
     with col2:
-        st.subheader("🤖 Model Usage Distribution")
+        st.subheader("🤖 Распределение использования моделей")
         # Placeholder for pie chart
         model_data = {
             "DeepSeek-V3": 87,
@@ -147,170 +147,170 @@ if page == "Dashboard":
     st.markdown("---")
 
     # Row 3: Current System Mode
-    st.subheader("⚙️ Current System Configuration")
+    st.subheader("⚙️ Текущая конфигурация системы")
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.info("**System Mode:** Full Load")
-        st.caption("All modules running in parallel")
+        st.info("**Режим системы:** Полная загрузка")
+        st.caption("Все модули работают параллельно")
 
     with col2:
-        st.info("**Default Model:** DeepSeek-V3")
-        st.caption("Primary worker for cost optimization")
+        st.info("**Модель по умолчанию:** DeepSeek-V3")
+        st.caption("Основная модель для оптимизации затрат")
 
     with col3:
-        st.info("**RAG Status:** Enabled")
-        st.caption("Top-K: 5, Threshold: 0.7")
+        st.info("**Статус RAG:** Включен")
+        st.caption("Top-K: 5, Порог: 0.7")
 
     st.markdown("---")
 
     # Row 4: Recent Activity
-    st.subheader("📋 Recent Activity")
+    st.subheader("📋 Последняя активность")
 
     activity_data = [
-        {"Time": "10:42", "Event": "Document digitized", "Details": "Contract #2453", "Status": "✅ Success"},
-        {"Time": "10:38", "Event": "Negotiation analyzed", "Details": "Session #891", "Status": "⏳ Awaiting Approval"},
-        {"Time": "10:35", "Event": "Model switched", "Details": "DeepSeek → Claude (complexity: 0.85)", "Status": "✅ Success"},
-        {"Time": "10:30", "Event": "RAG lookup", "Details": "5 precedents found", "Status": "✅ Success"},
-        {"Time": "10:25", "Event": "Protocol generated", "Details": "12 disagreements", "Status": "⏳ Awaiting Approval"},
+        {"Время": "10:42", "Событие": "Документ оцифрован", "Детали": "Договор #2453", "Статус": "✅ Успешно"},
+        {"Время": "10:38", "Событие": "Переговоры проанализированы", "Детали": "Сессия #891", "Статус": "⏳ Ожидает подтверждения"},
+        {"Время": "10:35", "Событие": "Смена модели", "Детали": "DeepSeek → Claude (сложность: 0.85)", "Статус": "✅ Успешно"},
+        {"Время": "10:30", "Событие": "RAG запрос", "Детали": "Найдено 5 прецедентов", "Статус": "✅ Успешно"},
+        {"Время": "10:25", "Событие": "Протокол сформирован", "Детали": "12 разногласий", "Статус": "⏳ Ожидает подтверждения"},
     ]
 
     st.dataframe(activity_data, use_container_width=True)
 
-elif page == "System Config":
-    st.markdown('<div class="main-header">⚙️ System Configuration</div>', unsafe_allow_html=True)
+elif page == "Настройки системы":
+    st.markdown('<div class="main-header">⚙️ Настройки системы</div>', unsafe_allow_html=True)
 
-    st.warning("⚠️ Configuration changes require system restart")
+    st.warning("⚠️ Изменения конфигурации требуют перезапуска системы")
 
     # System Mode
-    st.subheader("🔧 System Operation Mode")
+    st.subheader("🔧 Режим работы системы")
 
     current_mode = st.selectbox(
-        "Select Mode",
-        ["Full Load (Parallel)", "Sequential (Economy)", "Manual (Custom)"],
-        help="Full Load: All modules run in parallel (fastest)\n"
-             "Sequential: Modules run one by one (economy)\n"
-             "Manual: Select which modules to enable"
+        "Выберите режим",
+        ["Полная загрузка (Параллельно)", "Последовательный (Экономия)", "Ручной (Настраиваемый)"],
+        help="Полная загрузка: Все модули работают параллельно (быстрее всего)\n"
+             "Последовательный: Модули работают по очереди (экономия)\n"
+             "Ручной: Выберите, какие модули включить"
     )
 
-    if current_mode == "Manual (Custom)":
+    if current_mode == "Ручной (Настраиваемый)":
         st.multiselect(
-            "Enabled Modules",
-            ["OCR", "Level1 Extraction", "LLM Extraction", "RAG Filter", "Validation", "Embedding Generation"],
-            default=["OCR", "LLM Extraction", "Validation"]
+            "Включенные модули",
+            ["OCR", "Извлечение Level1", "LLM извлечение", "RAG фильтр", "Валидация", "Генерация эмбеддингов"],
+            default=["OCR", "LLM извлечение", "Валидация"]
         )
 
-    if st.button("💾 Apply System Mode"):
-        st.success("✅ System mode updated!")
+    if st.button("💾 Применить режим системы"):
+        st.success("✅ Режим системы обновлён!")
 
     st.markdown("---")
 
     # Smart Router Config
-    st.subheader("🤖 Smart Router Configuration")
+    st.subheader("🤖 Конфигурация умного роутера")
 
     col1, col2 = st.columns(2)
 
     with col1:
         default_model = st.selectbox(
-            "Default Model",
+            "Модель по умолчанию",
             ["DeepSeek-V3", "Claude 4.5 Sonnet", "GPT-4o", "GPT-4o-mini"]
         )
 
     with col2:
         complexity_threshold = st.slider(
-            "Complexity Threshold",
+            "Порог сложности",
             min_value=0.0,
             max_value=1.0,
             value=0.8,
             step=0.05,
-            help="Threshold for switching to Claude (higher = more selective)"
+            help="Порог для переключения на Claude (выше = более избирательно)"
         )
 
-    enable_fallback = st.checkbox("Enable Fallback Mechanism", value=True)
+    enable_fallback = st.checkbox("Включить резервный механизм", value=True)
 
-    if st.button("💾 Apply Router Config"):
-        st.success("✅ Router configuration updated!")
+    if st.button("💾 Применить настройки роутера"):
+        st.success("✅ Конфигурация роутера обновлена!")
 
     st.markdown("---")
 
     # RAG Config
-    st.subheader("🔍 RAG Configuration")
+    st.subheader("🔍 Конфигурация RAG")
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        rag_enabled = st.checkbox("Enable RAG", value=True)
+        rag_enabled = st.checkbox("Включить RAG", value=True)
 
     with col2:
-        rag_top_k = st.number_input("Top-K Results", min_value=1, max_value=20, value=5)
+        rag_top_k = st.number_input("Количество результатов Top-K", min_value=1, max_value=20, value=5)
 
     with col3:
         rag_threshold = st.slider(
-            "Similarity Threshold",
+            "Порог схожести",
             min_value=0.0,
             max_value=1.0,
             value=0.7,
             step=0.05
         )
 
-    if st.button("💾 Apply RAG Config"):
-        st.success("✅ RAG configuration updated!")
+    if st.button("💾 Применить настройки RAG"):
+        st.success("✅ Конфигурация RAG обновлена!")
 
-elif page == "LLM Metrics":
-    st.markdown('<div class="main-header">📊 LLM Usage Metrics</div>', unsafe_allow_html=True)
+elif page == "Метрики LLM":
+    st.markdown('<div class="main-header">📊 Метрики использования LLM</div>', unsafe_allow_html=True)
 
     # Filters
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        date_range = st.date_input("Date Range", value=[])
+        date_range = st.date_input("Диапазон дат", value=[])
 
     with col2:
         model_filter = st.multiselect(
-            "Models",
+            "Модели",
             ["DeepSeek-V3", "Claude 4.5", "GPT-4o", "GPT-4o-mini"],
             default=["DeepSeek-V3", "Claude 4.5"]
         )
 
     with col3:
-        status_filter = st.selectbox("Status", ["All", "Success", "Failed", "Partial"])
+        status_filter = st.selectbox("Статус", ["Все", "Успешно", "Ошибка", "Частично"])
 
     st.markdown("---")
 
     # Metrics Table
-    st.subheader("📋 Recent LLM Requests")
+    st.subheader("📋 Последние запросы к LLM")
 
     metrics_data = [
         {
-            "Timestamp": "2026-01-09 10:42:15",
-            "Model": "DeepSeek-V3",
-            "Document": "Contract #2453",
-            "Tokens (In/Out)": "1,234 / 567",
-            "Cost": "$0.00028",
-            "Time (sec)": "1.8",
-            "Confidence": "0.95",
-            "Status": "✅ Success"
+            "Время": "2026-01-09 10:42:15",
+            "Модель": "DeepSeek-V3",
+            "Документ": "Договор #2453",
+            "Токены (Вход/Выход)": "1,234 / 567",
+            "Стоимость": "$0.00028",
+            "Время (сек)": "1.8",
+            "Уверенность": "0.95",
+            "Статус": "✅ Успешно"
         },
         {
-            "Timestamp": "2026-01-09 10:38:22",
-            "Model": "Claude 4.5",
-            "Document": "Contract #2452",
-            "Tokens (In/Out)": "2,456 / 892",
-            "Cost": "$0.02058",
-            "Time (sec)": "3.2",
-            "Confidence": "0.97",
-            "Status": "✅ Success"
+            "Время": "2026-01-09 10:38:22",
+            "Модель": "Claude 4.5",
+            "Документ": "Договор #2452",
+            "Токены (Вход/Выход)": "2,456 / 892",
+            "Стоимость": "$0.02058",
+            "Время (сек)": "3.2",
+            "Уверенность": "0.97",
+            "Статус": "✅ Успешно"
         },
         {
-            "Timestamp": "2026-01-09 10:35:10",
-            "Model": "DeepSeek-V3",
-            "Document": "Session #891",
-            "Tokens (In/Out)": "980 / 423",
-            "Cost": "$0.00020",
-            "Time (sec)": "1.5",
-            "Confidence": "0.89",
-            "Status": "⚠️ Fallback Used"
+            "Время": "2026-01-09 10:35:10",
+            "Модель": "DeepSeek-V3",
+            "Документ": "Сессия #891",
+            "Токены (Вход/Выход)": "980 / 423",
+            "Стоимость": "$0.00020",
+            "Время (сек)": "1.5",
+            "Уверенность": "0.89",
+            "Статус": "⚠️ Резерв использован"
         },
     ]
 
@@ -322,7 +322,7 @@ elif page == "LLM Metrics":
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("💰 Cost by Model (Last 30 Days)")
+        st.subheader("💰 Затраты по моделям (последние 30 дней)")
         cost_data = {
             "DeepSeek-V3": 12.45,
             "Claude 4.5": 38.92,
@@ -332,7 +332,7 @@ elif page == "LLM Metrics":
         st.bar_chart(cost_data)
 
     with col2:
-        st.subheader("📊 Request Count by Model")
+        st.subheader("📊 Количество запросов по моделям")
         request_data = {
             "DeepSeek-V3": 1250,
             "Claude 4.5": 145,
@@ -341,30 +341,30 @@ elif page == "LLM Metrics":
         }
         st.bar_chart(request_data)
 
-elif page == "RAG Statistics":
-    st.markdown('<div class="main-header">🔍 RAG Statistics</div>', unsafe_allow_html=True)
+elif page == "Статистика RAG":
+    st.markdown('<div class="main-header">🔍 Статистика RAG</div>', unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.metric("📚 Knowledge Base Entries", "247")
+        st.metric("📚 Записей в базе знаний", "247")
 
     with col2:
-        st.metric("🔍 Total Queries (Today)", "184")
+        st.metric("🔍 Запросов сегодня", "184")
 
     with col3:
-        st.metric("📊 Avg Similarity Score", "0.82")
+        st.metric("📊 Средний балл схожести", "0.82")
 
     st.markdown("---")
 
     # Most Used Knowledge
-    st.subheader("📖 Most Referenced Knowledge")
+    st.subheader("📖 Наиболее используемые знания")
 
     knowledge_data = [
-        {"Title": "Ограничение ответственности в договорах поставки", "Type": "best_practice", "Usage": 47},
-        {"Title": "Стандартная формулировка штрафа", "Type": "template_clause", "Usage": 38},
-        {"Title": "Компромисс по предоплате", "Type": "negotiation_tactic", "Usage": 25},
-        {"Title": "Иностранная подсудность", "Type": "risk_pattern", "Usage": 19},
+        {"Название": "Ограничение ответственности в договорах поставки", "Тип": "best_practice", "Использований": 47},
+        {"Название": "Стандартная формулировка штрафа", "Тип": "template_clause", "Использований": 38},
+        {"Название": "Компромисс по предоплате", "Тип": "negotiation_tactic", "Использований": 25},
+        {"Название": "Иностранная подсудность", "Тип": "risk_pattern", "Использований": 19},
     ]
 
     st.dataframe(knowledge_data, use_container_width=True)
@@ -372,35 +372,35 @@ elif page == "RAG Statistics":
     st.markdown("---")
 
     # Add New Knowledge
-    st.subheader("➕ Add New Knowledge Entry")
+    st.subheader("➕ Добавить новую запись")
 
     with st.form("add_knowledge"):
         col1, col2 = st.columns(2)
 
         with col1:
-            title = st.text_input("Title")
+            title = st.text_input("Название")
             content_type = st.selectbox(
-                "Type",
+                "Тип",
                 ["best_practice", "regulation", "precedent", "template_clause", "risk_pattern", "negotiation_tactic"]
             )
 
         with col2:
-            source = st.text_input("Source (optional)")
+            source = st.text_input("Источник (необязательно)")
 
-        content = st.text_area("Content", height=150)
+        content = st.text_area("Содержание", height=150)
 
-        submitted = st.form_submit_button("💾 Add Entry")
+        submitted = st.form_submit_button("💾 Добавить запись")
 
         if submitted:
-            st.success("✅ Knowledge entry added!")
+            st.success("✅ Запись добавлена!")
 
-elif page == "Test Connections":
-    st.markdown('<div class="main-header">🔌 Test API Connections</div>', unsafe_allow_html=True)
+elif page == "Тест подключений":
+    st.markdown('<div class="main-header">🔌 Тест API подключений</div>', unsafe_allow_html=True)
 
-    st.info("Test connectivity to all configured LLM APIs")
+    st.info("Тестирование подключения ко всем настроенным LLM API")
 
-    if st.button("🚀 Run Connection Tests"):
-        with st.spinner("Testing connections..."):
+    if st.button("🚀 Запустить тесты подключений"):
+        with st.spinner("Тестирование подключений..."):
             import time
 
             # Simulate API tests
@@ -409,44 +409,44 @@ elif page == "Test Connections":
             with col1:
                 st.markdown("### DeepSeek-V3")
                 time.sleep(0.5)
-                st.success("✅ Connected")
-                st.caption("Response time: 150ms")
+                st.success("✅ Подключено")
+                st.caption("Время ответа: 150мс")
 
             with col2:
                 st.markdown("### Claude 4.5")
                 time.sleep(0.5)
-                st.success("✅ Connected")
-                st.caption("Response time: 220ms")
+                st.success("✅ Подключено")
+                st.caption("Время ответа: 220мс")
 
             with col3:
                 st.markdown("### GPT-4o")
                 time.sleep(0.5)
-                st.success("✅ Connected")
-                st.caption("Response time: 180ms")
+                st.success("✅ Подключено")
+                st.caption("Время ответа: 180мс")
 
             with col4:
                 st.markdown("### GPT-4o-mini")
                 time.sleep(0.5)
-                st.success("✅ Connected")
-                st.caption("Response time: 120ms")
+                st.success("✅ Подключено")
+                st.caption("Время ответа: 120мс")
 
-        st.success("🎉 All APIs connected successfully!")
+        st.success("🎉 Все API успешно подключены!")
 
     st.markdown("---")
 
     # Configuration Preview
-    st.subheader("📋 Configuration Preview")
+    st.subheader("📋 Просмотр конфигурации")
 
     config_preview = """
-    Default Model: DeepSeek-V3
-    Complexity Threshold: 0.8
-    RAG Enabled: True
+    Модель по умолчанию: DeepSeek-V3
+    Порог сложности: 0.8
+    RAG включен: Да
     RAG Top-K: 5
-    Fallback: Enabled
+    Резервный механизм: Включен
     """
 
     st.code(config_preview)
 
 # Footer
 st.markdown("---")
-st.caption("Contract AI System v2.0 | Multi-Model Routing | Built with Streamlit")
+st.caption("Contract AI System v2.0 | Мульти-модельная маршрутизация | Создано с помощью Streamlit")
