@@ -42,10 +42,17 @@ async def process_document_async(file_path, file_ext):
     """Асинхронная обработка документа"""
     from src.services.document_processor import DocumentProcessor
     import os
+    from dotenv import load_dotenv
+
+    # Загружаем переменные окружения из .env файла
+    load_dotenv()
 
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if not openai_api_key:
-        raise ValueError("OPENAI_API_KEY не установлен в переменных окружения")
+        raise ValueError(
+            "OPENAI_API_KEY не установлен в переменных окружения.\n"
+            "Создайте файл .env в корне проекта и добавьте: OPENAI_API_KEY=your_key_here"
+        )
 
     processor = DocumentProcessor(
         openai_api_key=openai_api_key,
