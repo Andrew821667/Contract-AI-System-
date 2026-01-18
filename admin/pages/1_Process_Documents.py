@@ -41,8 +41,17 @@ uploaded_file = st.file_uploader(
 async def process_document_async(file_path, file_ext):
     """Асинхронная обработка документа"""
     from src.services.document_processor import DocumentProcessor
+    import os
 
-    processor = DocumentProcessor(use_rag=True)
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if not openai_api_key:
+        raise ValueError("OPENAI_API_KEY не установлен в переменных окружения")
+
+    processor = DocumentProcessor(
+        openai_api_key=openai_api_key,
+        use_rag=True,
+        use_section_analysis=True  # Включаем детальный анализ разделов
+    )
     result = await processor.process_document(file_path, file_ext)
     return result
 
@@ -74,33 +83,31 @@ def get_optimal_model_info(stage: str) -> tuple[str, str]:
     return models.get(stage, ("N/A", "N/A"))
 
 
-def display_validation_section(raw_text: str, extracted_data: Dict[str, Any], rag_similar: list):
-    """Отображает детальную валидацию по всем 9 разделам договора"""
+def display_validation_section(section_analysis_data: Dict[str, Any]):
+    """Отображает детальную валидацию по разделам договора (ДИНАМИЧЕСКИ)"""
+
+    if not section_analysis_data:
+        st.warning("Анализ разделов не был выполнен")
+        return
 
     st.subheader("📋 Детальный разбор по разделам договора")
 
-    # Определяем разделы из текста договора
-    sections = [
-        "1. ПРЕДМЕТ ДОГОВОРА",
-        "2. ЦЕНА ДОГОВОРА И ПОРЯДОК РАСЧЕТОВ",
-        "3. СРОКИ И УСЛОВИЯ ПОСТАВКИ",
-        "4. ПРАВА И ОБЯЗАННОСТИ СТОРОН",
-        "5. ОТВЕТСТВЕННОСТЬ СТОРОН",
-        "6. ОБСТОЯТЕЛЬСТВА НЕПРЕОДОЛИМОЙ СИЛЫ",
-        "7. ПОРЯДОК РАЗРЕШЕНИЯ СПОРОВ",
-        "8. СРОК ДЕЙСТВИЯ И ПОРЯДОК РАСТОРЖЕНИЯ ДОГОВОРА",
-        "9. ПРОЧИЕ УСЛОВИЯ"
-    ]
+    sections = section_analysis_data.get("sections", [])
+    section_analyses = section_analysis_data.get("section_analyses", [])
+    complex_analysis = section_analysis_data.get("complex_analysis")
 
-    st.info(f"**Порядок проверки:** 1️⃣ Сравнение с собственными договорами → 2️⃣ Проверка по RAG базе (актуальная правовая база) → 3️⃣ Фолбэк на базу знаний модели")
+    if not sections:
+        st.warning("Разделы не обнаружены в договоре")
+        return
 
-    # Создаем вкладки для каждого раздела + комплексный анализ
-    tabs = st.tabs([
-        "Раздел 1", "Раздел 2", "Раздел 3", "Раздел 4", "Раздел 5",
-        "Раздел 6", "Раздел 7", "Раздел 8", "Раздел 9", "🔍 Комплексный анализ"
-    ])
+    st.info(f"**Найдено разделов:** {len(sections)} | **Порядок проверки:** 1️⃣ Сравнение с собственными договорами → 2️⃣ Проверка по RAG базе (актуальная правовая база) → 3️⃣ Фолбэк на базу знаний модели")
 
-    # Раздел 1: ПРЕДМЕТ ДОГОВОРА
+    # Динамически создаем названия вкладок
+    tab_names = [f"Раздел {s.number}" for s in sections] + ["🔍 Комплексный анализ"]
+    tabs = st.tabs(tab_names)
+
+    # Отображаем каждый раздел ДИНАМИЧЕСКИ из результатов LLM
+    for idx, (section, analysis) in enumerate(zip(sections, section_analyses)):
     with tabs[0]:
         st.markdown("### 📦 Раздел 1: ПРЕДМЕТ ДОГОВОРА")
 
@@ -645,14 +652,17 @@ if uploaded_file is not None:
 
                 st.markdown("---")
 
-                # Детальная валидация по всем 9 разделам
-                llm_data = result.extracted_data or {}
-                rag_contracts = []
+                # Детальная валидация по разделам (ДИНАМИЧЕСКИ из LLM)
+                section_analysis_data = None
                 for stage in result.stages:
-                    if stage.name == "rag_filter":
-                        rag_contracts = stage.results.get("contracts", [])
+                    if stage.name == "section_analysis" and stage.status == "success":
+                        section_analysis_data = stage.results.get("full_data")
+                        break
 
-                display_validation_section(result.raw_text, llm_data, rag_contracts)
+                if section_analysis_data:
+                    display_validation_section_dynamic(section_analysis_data)
+                else:
+                    st.warning("⚠️ Детальный анализ разделов не был выполнен. Возможно, use_section_analysis=False или произошла ошибка.")
 
             progress_bar.progress(100)
             status_text.empty()
@@ -729,3 +739,169 @@ else:
 
 st.markdown("---")
 st.caption("Contract AI System v2.0 - Обработка документов | Модели: Claude 4.5 Sonnet, DeepSeek-R1, Qwen3-235B, GPT-4o")
+
+
+def display_validation_section_dynamic(section_analysis_data: Dict[str, Any]):
+    """Отображает детальную валидацию по разделам договора (ДИНАМИЧЕСКИ из LLM)"""
+
+    if not section_analysis_data:
+        st.warning("Анализ разделов не был выполнен")
+        return
+
+    st.subheader("📋 Детальный разбор по разделам договора")
+
+    sections = section_analysis_data.get("sections", [])
+    section_analyses = section_analysis_data.get("section_analyses", [])
+    complex_analysis = section_analysis_data.get("complex_analysis")
+
+    if not sections:
+        st.warning("Разделы не обнаружены в договоре")
+        return
+
+    st.info(f"**Найдено разделов:** {len(sections)} | **Порядок проверки:** 1️⃣ Сравнение с собственными договорами → 2️⃣ Проверка по RAG базе (актуальная правовая база) → 3️⃣ Фолбэк на базу знаний модели")
+
+    # Динамически создаем вкладки
+    tab_names = [f"Раздел {s.number}" for s in sections] + ["🔍 Комплексный анализ"]
+    tabs = st.tabs(tab_names)
+
+    # Отображаем каждый раздел ДИНАМИЧЕСКИ
+    for idx, (section, analysis) in enumerate(zip(sections, section_analyses)):
+        with tabs[idx]:
+            st.markdown(f"### 📄 Раздел {section.number}: {section.title}")
+
+            # Текст раздела
+            st.text_area("Текст раздела:", section.text, height=150, key=f"section_{section.number}_text")
+
+            st.markdown("---")
+
+            # Сравнение с собственными договорами
+            st.markdown("**1️⃣ Сравнение с собственными договорами:**")
+            if analysis.own_contracts_comparison.startswith("✅"):
+                st.success(analysis.own_contracts_comparison)
+            elif analysis.own_contracts_comparison.startswith("⚠️"):
+                st.warning(analysis.own_contracts_comparison)
+            else:
+                st.error(analysis.own_contracts_comparison)
+
+            # Детальные проверки
+            if analysis.own_contracts_details:
+                st.dataframe(analysis.own_contracts_details, use_container_width=True)
+
+            # RAG проверка
+            st.markdown("**2️⃣ Проверка по RAG (актуальная правовая база):**")
+            st.info(analysis.rag_legal_check)
+
+            if analysis.rag_legal_references:
+                st.markdown("**Ссылки на законодательство:**")
+                for ref in analysis.rag_legal_references:
+                    st.markdown(f"- {ref}")
+
+            st.markdown("---")
+
+            # Выводы и рекомендации
+            if analysis.conclusion.startswith("Раздел проработан хорошо") or "соответствует" in analysis.conclusion.lower():
+                st.success(f"**Вывод:** {analysis.conclusion}")
+            elif "требует" in analysis.conclusion.lower() or "доработк" in analysis.conclusion.lower():
+                st.warning(f"**Вывод:** {analysis.conclusion}")
+            else:
+                st.info(f"**Вывод:** {analysis.conclusion}")
+
+            if analysis.warnings:
+                st.markdown("**⚠️ Предупреждения:**")
+                for warning in analysis.warnings:
+                    st.warning(warning)
+
+            if analysis.recommendations:
+                st.markdown("**💡 Рекомендации:**")
+                for rec in analysis.recommendations:
+                    st.info(rec)
+
+    # Комплексный анализ (последняя вкладка)
+    with tabs[-1]:
+        st.markdown("### 🔍 КОМПЛЕКСНЫЙ АНАЛИЗ ДОГОВОРА")
+        st.markdown("Анализ взаимосвязей между разделами и общая оценка документа")
+
+        if not complex_analysis:
+            st.warning("Комплексный анализ не выполнен")
+            return
+
+        st.markdown("---")
+        st.markdown("#### 1️⃣ Проверка целостности и согласованности")
+        if complex_analysis.integrity_checks:
+            st.dataframe(complex_analysis.integrity_checks, use_container_width=True)
+
+        st.markdown("---")
+        st.markdown("#### 2️⃣ Юридические риски")
+
+        risk_col1, risk_col2, risk_col3 = st.columns(3)
+
+        with risk_col1:
+            st.markdown("**🟢 НИЗКИЙ РИСК:**")
+            for risk in complex_analysis.risk_assessment.get("low", []):
+                st.success(f"✅ {risk}")
+
+        with risk_col2:
+            st.markdown("**🟡 СРЕДНИЙ РИСК:**")
+            for risk in complex_analysis.risk_assessment.get("medium", []):
+                st.warning(f"⚠️ {risk}")
+
+        with risk_col3:
+            st.markdown("**🔴 ВЫСОКИЙ РИСК:**")
+            for risk in complex_analysis.risk_assessment.get("high", []):
+                st.error(f"❌ {risk}")
+
+        st.markdown("---")
+        st.markdown("#### 3️⃣ Соответствие законодательству РФ")
+        if complex_analysis.legal_compliance:
+            st.dataframe(complex_analysis.legal_compliance, use_container_width=True)
+
+        st.markdown("---")
+        st.markdown("#### 4️⃣ Сравнение с лучшими практиками")
+        st.info("**Источник:** Анализ похожих договоров из базы + RAG актуальная правовая база + база знаний модели")
+        if complex_analysis.best_practices:
+            st.dataframe(complex_analysis.best_practices, use_container_width=True)
+
+        st.markdown("---")
+        st.markdown("#### 5️⃣ Итоговая оценка и рекомендации")
+
+        score_col1, score_col2, score_col3 = st.columns(3)
+
+        with score_col1:
+            st.metric("Общая оценка", f"{complex_analysis.overall_score}/100",
+                      delta="Хорошо" if complex_analysis.overall_score >= 80 else "Требует доработки")
+
+        with score_col2:
+            st.metric("Юридическая надежность", f"{complex_analysis.legal_reliability:.1f}/10",
+                      delta="Высокая" if complex_analysis.legal_reliability >= 8 else "Средняя")
+
+        with score_col3:
+            st.metric("Соответствие закону", f"{complex_analysis.compliance_percent}%",
+                      delta=f"+{100 - complex_analysis.compliance_percent}% после доработки")
+
+        st.markdown("---")
+
+        rec_col1, rec_col2 = st.columns(2)
+
+        with rec_col1:
+            st.markdown("**✅ СИЛЬНЫЕ СТОРОНЫ:**")
+            for strength in complex_analysis.strengths:
+                st.success(strength)
+
+        with rec_col2:
+            st.markdown("**⚠️ КРИТИЧНЫЕ ДОРАБОТКИ:**")
+            for improvement in complex_analysis.critical_improvements:
+                if improvement.startswith("ОБЯЗАТЕЛЬНО") or improvement.startswith("КРИТИЧНО"):
+                    st.error(improvement)
+                else:
+                    st.warning(improvement)
+
+        st.markdown("---")
+        avg_score = complex_analysis.overall_score
+        if avg_score >= 90:
+            st.success("**💡 Рекомендация:** Договор готов к подписанию. Отличная проработка!")
+        elif avg_score >= 80:
+            st.info("**💡 Рекомендация:** Договор можно подписывать после внесения рекомендованных доработок.")
+        elif avg_score >= 70:
+            st.warning("**💡 Рекомендация:** Договор требует доработок. Рекомендуется исправить критичные замечания перед подписанием.")
+        else:
+            st.error("**💡 Рекомендация:** Договор требует существенной переработки. Не рекомендуется к подписанию в текущем виде.")

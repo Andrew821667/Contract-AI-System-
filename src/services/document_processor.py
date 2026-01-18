@@ -23,6 +23,7 @@ from src.services.level1_extractor import Level1Extractor
 from src.services.llm_extractor import LLMExtractor
 from src.services.validation_service import ValidationService
 from src.services.rag_service import RAGService
+from src.services.contract_section_analyzer import ContractSectionAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -86,13 +87,15 @@ class DocumentProcessor:
                  openai_api_key: str,
                  model: str = "gpt-4o-mini",
                  use_ocr: bool = True,
-                 use_rag: bool = True):
+                 use_rag: bool = True,
+                 use_section_analysis: bool = True):
         """
         Args:
             openai_api_key: OpenAI API ключ
             model: Модель для LLM extraction
             use_ocr: Использовать ли OCR для сканов
             use_rag: Использовать ли RAG filter
+            use_section_analysis: Использовать ли детальный анализ разделов
         """
         self.text_extractor = TextExtractor(use_ocr=use_ocr)
         self.level1_extractor = Level1Extractor()
@@ -103,7 +106,11 @@ class DocumentProcessor:
         self.use_rag = use_rag
         self.rag_service = RAGService() if use_rag else None
 
-        logger.info(f"DocumentProcessor initialized: model={model}, ocr={use_ocr}, rag={use_rag}")
+        # Анализ разделов опционально
+        self.use_section_analysis = use_section_analysis
+        self.section_analyzer = ContractSectionAnalyzer(model=model) if use_section_analysis else None
+
+        logger.info(f"DocumentProcessor initialized: model={model}, ocr={use_ocr}, rag={use_rag}, section_analysis={use_section_analysis}")
 
     async def process_document(self,
                                file_path: str | Path | BinaryIO,
@@ -258,6 +265,75 @@ class DocumentProcessor:
                     "warnings_count": len(validation_result.warnings)
                 }
             ))
+
+            # Stage 6: Section Analysis (опционально)
+            section_analysis_result = None
+            if self.use_section_analysis and self.section_analyzer:
+                logger.info("Stage 6: Section Analysis...")
+                stage_start = time.time()
+
+                try:
+                    # Собираем похожие договоры из RAG stage
+                    similar_contracts = []
+                    for stage in stages:
+                        if stage.name == "rag_filter" and stage.status == "success":
+                            similar_contracts = stage.results.get("contracts", [])
+                            break
+
+                    # Запускаем полный анализ разделов
+                    section_analysis_result = await self.section_analyzer.analyze_full_contract(
+                        raw_text,
+                        similar_contracts,
+                        llm_result.data
+                    )
+
+                    stages.append(ProcessingStage(
+                        name="section_analysis",
+                        status="success",
+                        duration_sec=time.time() - stage_start,
+                        results={
+                            "sections_count": len(section_analysis_result.get("sections", [])),
+                            "sections": [
+                                {
+                                    "number": s.number,
+                                    "title": s.title,
+                                    "text_length": len(s.text)
+                                }
+                                for s in section_analysis_result.get("sections", [])
+                            ],
+                            "section_analyses": [
+                                {
+                                    "section_number": a.section_number,
+                                    "section_title": a.section_title,
+                                    "comparison": a.own_contracts_comparison,
+                                    "legal_check": a.rag_legal_check,
+                                    "conclusion": a.conclusion,
+                                    "warnings_count": len(a.warnings),
+                                    "recommendations_count": len(a.recommendations)
+                                }
+                                for a in section_analysis_result.get("section_analyses", [])
+                            ],
+                            "complex_analysis": {
+                                "overall_score": section_analysis_result.get("complex_analysis").overall_score,
+                                "legal_reliability": section_analysis_result.get("complex_analysis").legal_reliability,
+                                "compliance_percent": section_analysis_result.get("complex_analysis").compliance_percent
+                            },
+                            # Полные данные для UI
+                            "full_data": section_analysis_result
+                        }
+                    ))
+
+                    logger.info(f"Section analysis completed: {len(section_analysis_result.get('sections', []))} sections analyzed")
+
+                except Exception as e:
+                    logger.error(f"Section analysis failed: {e}")
+                    stages.append(ProcessingStage(
+                        name="section_analysis",
+                        status="failed",
+                        duration_sec=time.time() - stage_start,
+                        results={},
+                        error=str(e)
+                    ))
 
             # Финальный результат
             total_time = time.time() - start_time
