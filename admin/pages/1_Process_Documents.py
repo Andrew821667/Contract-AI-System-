@@ -54,11 +54,16 @@ async def process_document_async(file_path, file_ext):
             "Создайте файл .env в корне проекта и добавьте: OPENAI_API_KEY=your_key_here"
         )
 
+    # ВРЕМЕННО: Отключаем RAG и section_analysis для тестирования без БД
+    # TODO: Добавить подключение к БД для полной функциональности
     processor = DocumentProcessor(
         openai_api_key=openai_api_key,
-        use_rag=True,
-        use_section_analysis=True  # Включаем детальный анализ разделов
+        use_rag=False,  # Требует подключение к PostgreSQL с pgvector
+        use_section_analysis=False  # Требует RAG для контекста
     )
+
+    st.info("ℹ️ Тестовый режим: RAG и детальный анализ разделов отключены (требуется подключение к БД)")
+
     result = await processor.process_document(file_path, file_ext)
     return result
 
