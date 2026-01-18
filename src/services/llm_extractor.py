@@ -145,14 +145,33 @@ class LLMExtractor:
 Формат ответа:
 {
   "parties": {
-    "supplier": {"name": "...", "inn": "...", "address": "...", "representative": "..."},
-    "customer": {"name": "...", "inn": "...", "address": "...", "representative": "..."},
+    "supplier": {
+      "name": "...",
+      "inn": "...",
+      "ogrn": "...",
+      "kpp": "...",
+      "legal_address": "ПОЛНЫЙ юридический адрес из раздела Реквизиты",
+      "actual_address": "Фактический адрес (если указан отдельно)",
+      "representative": "ФИО представителя",
+      "position": "Должность представителя"
+    },
+    "customer": {
+      "name": "...",
+      "inn": "...",
+      "ogrn": "...",
+      "kpp": "...",
+      "legal_address": "ПОЛНЫЙ юридический адрес из раздела Реквизиты",
+      "actual_address": "Фактический адрес (если указан отдельно)",
+      "representative": "ФИО представителя",
+      "position": "Должность представителя"
+    },
     "_meta": {"confidence": 0.95}
   },
   "subject": {
-    "description": "...",
-    "type": "supply|service|work|...",
-    "_meta": {"confidence": 0.90}
+    "description": "Краткое описание предмета (1-2 предложения)",
+    "full_description": "ПОЛНОЕ описание предмета договора на основе LLM-анализа всех разделов. Опиши ЧТО поставляется/выполняется, В КАКОМ объеме, КАК будет происходить, КАКИЕ обязательства сторон. НЕ копируй текст - создай связное описание своими словами.",
+    "type": "supply|service|work|mixed|...",
+    "_meta": {"confidence": 0.90, "source": "LLM analysis of sections 1, 3, 4"}
   },
   "term": {
     "start_date": "YYYY-MM-DD",
