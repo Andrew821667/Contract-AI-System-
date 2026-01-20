@@ -25,6 +25,15 @@ class ContractSection:
 
 
 @dataclass
+class Recommendation:
+    """Структурированная рекомендация с предлагаемым текстом"""
+    reason: str  # Почему нужно изменить
+    proposed_text: str  # Предлагаемый текст пункта/положения договора
+    action_type: str  # "add" | "modify" | "remove"
+    priority: str  # "critical" | "important" | "optional"
+
+
+@dataclass
 class SectionAnalysis:
     """Результат анализа одного раздела"""
     section_number: str
@@ -41,7 +50,7 @@ class SectionAnalysis:
     # Вывод и рекомендации
     conclusion: str  # Итоговый вывод
     warnings: List[str]  # Предупреждения
-    recommendations: List[str]  # Рекомендации
+    recommendations: List[Recommendation]  # Структурированные рекомендации с предлагаемым текстом
 
 
 @dataclass
@@ -219,7 +228,12 @@ class ContractSectionAnalyzer:
 4. Ссылки на конкретные статьи законов
 5. Итоговый вывод
 6. Предупреждения (если есть)
-7. Рекомендации по улучшению
+7. Рекомендации по улучшению С ПРЕДЛАГАЕМЫМ ТЕКСТОМ ПУНКТА
+
+⚠️ ВАЖНО ДЛЯ РЕКОМЕНДАЦИЙ:
+- Каждая рекомендация должна включать КОНКРЕТНЫЙ текст пункта/положения договора
+- Формат: "reason" (почему нужно), "proposed_text" (что именно добавить/изменить), "action_type", "priority"
+- Предлагаемый текст должен быть готов к использованию (юридически корректен, конкретен)
 
 Верни результат в JSON:
 {{
@@ -232,8 +246,19 @@ class ContractSectionAnalyzer:
   "rag_legal_references": ["ГК РФ ст. 454", "НК РФ ст. 164", ...],
   "conclusion": "Раздел проработан хорошо / требует доработки / ...",
   "warnings": ["Предупреждение 1", ...],
-  "recommendations": ["Рекомендация 1", ...]
+  "recommendations": [
+    {{
+      "reason": "Почему нужно изменить (например: отсутствует порядок приемки, требуемый ГК РФ ст. 513)",
+      "proposed_text": "4.2. Приемка товара осуществляется Покупателем в течение 5 рабочих дней с момента доставки. Покупатель обязан провести осмотр товара и подписать акт приемки-передачи либо мотивированный отказ от приемки.",
+      "action_type": "add",
+      "priority": "critical"
+    }},
+    ...
+  ]
 }}
+
+action_type: "add" (добавить новый пункт) | "modify" (изменить существующий) | "remove" (удалить)
+priority: "critical" (критично) | "important" (важно) | "optional" (рекомендовано)
 """
 
         try:
@@ -249,6 +274,26 @@ class ContractSectionAnalyzer:
 
             result = json.loads(response.choices[0].message.content)
 
+            # Парсим рекомендации как структурированные объекты
+            recommendations_raw = result.get("recommendations", [])
+            recommendations = []
+            for rec in recommendations_raw:
+                if isinstance(rec, dict):
+                    recommendations.append(Recommendation(
+                        reason=rec.get("reason", ""),
+                        proposed_text=rec.get("proposed_text", ""),
+                        action_type=rec.get("action_type", "modify"),
+                        priority=rec.get("priority", "optional")
+                    ))
+                else:
+                    # Fallback для старого формата (простые строки)
+                    recommendations.append(Recommendation(
+                        reason=str(rec),
+                        proposed_text="",
+                        action_type="modify",
+                        priority="optional"
+                    ))
+
             return SectionAnalysis(
                 section_number=section.number,
                 section_title=section.title,
@@ -258,7 +303,7 @@ class ContractSectionAnalyzer:
                 rag_legal_references=result.get("rag_legal_references", []),
                 conclusion=result.get("conclusion", ""),
                 warnings=result.get("warnings", []),
-                recommendations=result.get("recommendations", [])
+                recommendations=recommendations
             )
 
         except Exception as e:
