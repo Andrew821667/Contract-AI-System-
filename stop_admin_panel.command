@@ -5,7 +5,7 @@ echo "⏹️ Остановка Contract AI System Admin Panel..."
 echo "================================================"
 
 # Находим и останавливаем все процессы Streamlit
-PIDS=$(ps aux | grep 'streamlit run admin/streamlit_dashboard.py' | grep -v grep | awk '{print $2}')
+PIDS=$(ps aux | grep 'streamlit run' | grep -v grep | awk '{print $2}')
 
 if [ -z "$PIDS" ]; then
     echo "ℹ️ Процессы Streamlit не найдены (возможно, уже остановлены)"

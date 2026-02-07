@@ -36,8 +36,8 @@ echo "Для остановки используйте кнопку 'Остан�
 echo "================================================"
 echo ""
 
-# Запускаем Streamlit
-streamlit run admin/streamlit_dashboard.py
+# Запускаем Streamlit (Стеклянный ящик — обработка документов)
+streamlit run admin/pages/1_Process_Documents.py --server.port=8501
 
 # Если Streamlit завершился
 echo ""
