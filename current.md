@@ -75,12 +75,12 @@ streamlit run admin/pages/1_Process_Documents.py --server.port=8501 --server.hea
 - **GPT-4o** → Резервный канал, $2.50/1M токенов
 
 ### Pipeline обработки (5 этапов + опциональный 6-й)
-1. **Text Extraction:** pdfplumber, python-docx, TXT, OCR (PaddleOCR)
+1. **Text Extraction:** pdfplumber, python-docx, TXT, XML, HTML, OCR (PaddleOCR)
 2. **Level 1 Extraction:** regex + SpaCy (даты, ИНН, суммы) — бесплатно
 3. **LLM Extraction:** DeepSeek-chat (структурированный JSON)
 4. **RAG Filter:** Отключен (требует PostgreSQL + pgvector)
 5. **Validation:** Pydantic v2 схемы + business logic checks
-6. **Section Analysis** (опц.): Детальный LLM-анализ каждого раздела (~80 сек)
+6. **Section Analysis** (опц.): Параллельный LLM-анализ каждого раздела (~60 сек)
 
 ### База данных
 - **Локальная разработка:** SQLite (`contract_ai.db`)
@@ -100,7 +100,7 @@ Contract-AI-System-/
 ├── src/
 │   ├── services/
 │   │   ├── document_processor.py           # Оркестратор пайплайна ⭐
-│   │   ├── text_extractor.py               # Извлечение текста (PDF/DOCX/TXT/OCR)
+│   │   ├── text_extractor.py               # Извлечение текста (PDF/DOCX/TXT/XML/HTML/OCR)
 │   │   ├── level1_extractor.py             # Regex + SpaCy NER
 │   │   ├── llm_extractor.py                # LLM extraction (DeepSeek/OpenAI) ⭐
 │   │   ├── validation_service.py           # Pydantic валидация ⭐
@@ -155,6 +155,12 @@ Contract-AI-System-/
 - ✅ Исправлен UI: validation_result.status → is_valid (bool)
 - ✅ DeepSeek-chat установлен как основная модель
 - ✅ LLMExtractor и ContractSectionAnalyzer поддерживают base_url (DeepSeek API)
+
+**Оптимизация производительности и новые форматы (2026-02-07):**
+- ✅ Параллелизация Section Analysis: `asyncio.gather()` вместо последовательного цикла (15 мин → 60 сек)
+- ✅ Добавлена поддержка XML файлов (парсинг через xml.etree.ElementTree + fallback на regex)
+- ✅ Добавлена поддержка HTML/HTM файлов (очистка тегов, удаление script/style)
+- ✅ UI: XML/HTML/HTM добавлены в file_uploader
 
 ---
 

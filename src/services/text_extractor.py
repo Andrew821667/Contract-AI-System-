@@ -1,10 +1,13 @@
 """
 Text Extraction Service
-Извлекает текст из PDF, DOCX и изображений (с OCR)
+Извлекает текст из PDF, DOCX, TXT, XML, HTML и изображений (с OCR)
 
 Supports:
 - PDF documents (native text extraction)
 - DOCX files
+- TXT plain text
+- XML documents (contract XML formats)
+- HTML documents
 - Scanned images/PDFs (PaddleOCR)
 """
 
@@ -123,6 +126,10 @@ class TextExtractor:
             result = self._extract_from_image(file_path)
         elif ext in ['.txt', '.text']:
             result = self._extract_from_txt(file_path)
+        elif ext in ['.xml']:
+            result = self._extract_from_xml(file_path)
+        elif ext in ['.html', '.htm']:
+            result = self._extract_from_html(file_path)
         else:
             raise ValueError(f"Unsupported file format: {ext}")
 
@@ -358,4 +365,123 @@ class TextExtractor:
 
         except Exception as e:
             logger.error(f"TXT extraction failed: {e}")
+            raise
+
+    def _extract_from_xml(self, file_path: Union[Path, BinaryIO]) -> ExtractionResult:
+        """Извлекает текст из XML файла (убирает теги, сохраняет текстовое содержимое)"""
+        import xml.etree.ElementTree as ET
+
+        try:
+            if isinstance(file_path, (str, Path)):
+                file_path = Path(file_path)
+                raw_content = file_path.read_text(encoding='utf-8')
+            else:
+                raw_bytes = file_path.read()
+                raw_content = raw_bytes.decode('utf-8') if isinstance(raw_bytes, bytes) else raw_bytes
+
+            # Парсим XML и извлекаем весь текст
+            root = ET.fromstring(raw_content)
+
+            def extract_text_recursive(element):
+                """Рекурсивно извлекает текст из XML элементов"""
+                parts = []
+                if element.text and element.text.strip():
+                    parts.append(element.text.strip())
+                for child in element:
+                    parts.extend(extract_text_recursive(child))
+                    if child.tail and child.tail.strip():
+                        parts.append(child.tail.strip())
+                return parts
+
+            text_parts = extract_text_recursive(root)
+            text = "\n".join(text_parts)
+
+            return ExtractionResult(
+                text=text,
+                method='xml',
+                pages=1,
+                confidence=None,
+                processing_time=0,
+                metadata={
+                    'total_chars': len(text),
+                    'lines': text.count('\n') + 1,
+                    'root_tag': root.tag,
+                    'raw_xml_chars': len(raw_content)
+                }
+            )
+
+        except ET.ParseError as e:
+            logger.warning(f"XML parse error, falling back to text extraction: {e}")
+            # Fallback: если XML невалидный, читаем как текст
+            if isinstance(file_path, Path):
+                text = file_path.read_text(encoding='utf-8')
+            else:
+                file_path.seek(0)
+                raw = file_path.read()
+                text = raw.decode('utf-8') if isinstance(raw, bytes) else raw
+
+            # Простое удаление тегов через regex
+            import re
+            text = re.sub(r'<[^>]+>', ' ', text)
+            text = re.sub(r'\s+', ' ', text).strip()
+
+            return ExtractionResult(
+                text=text,
+                method='xml_fallback',
+                pages=1,
+                confidence=None,
+                processing_time=0,
+                metadata={'total_chars': len(text), 'parse_error': str(e)}
+            )
+
+        except Exception as e:
+            logger.error(f"XML extraction failed: {e}")
+            raise
+
+    def _extract_from_html(self, file_path: Union[Path, BinaryIO]) -> ExtractionResult:
+        """Извлекает текст из HTML файла (убирает теги, сохраняет текст)"""
+        import re
+
+        try:
+            if isinstance(file_path, (str, Path)):
+                file_path = Path(file_path)
+                raw_content = file_path.read_text(encoding='utf-8')
+            else:
+                raw_bytes = file_path.read()
+                raw_content = raw_bytes.decode('utf-8') if isinstance(raw_bytes, bytes) else raw_bytes
+
+            # Удаляем script и style блоки
+            text = re.sub(r'<script[^>]*>.*?</script>', '', raw_content, flags=re.DOTALL | re.IGNORECASE)
+            text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+
+            # Заменяем блочные теги на переносы строк
+            text = re.sub(r'<br\s*/?>|</?p>|</?div>|</?tr>|</?li>', '\n', text, flags=re.IGNORECASE)
+
+            # Убираем все оставшиеся теги
+            text = re.sub(r'<[^>]+>', ' ', text)
+
+            # Декодируем HTML entities
+            import html
+            text = html.unescape(text)
+
+            # Убираем лишние пробелы
+            text = re.sub(r'[ \t]+', ' ', text)
+            text = re.sub(r'\n\s*\n', '\n\n', text)
+            text = text.strip()
+
+            return ExtractionResult(
+                text=text,
+                method='html',
+                pages=1,
+                confidence=None,
+                processing_time=0,
+                metadata={
+                    'total_chars': len(text),
+                    'lines': text.count('\n') + 1,
+                    'raw_html_chars': len(raw_content)
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"HTML extraction failed: {e}")
             raise
