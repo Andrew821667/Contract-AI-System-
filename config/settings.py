@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     # Application
     app_env: str = "development"
     log_level: str = "INFO"
+    debug: bool = True
 
     # Streamlit
     streamlit_server_port: int = 8501

@@ -47,26 +47,34 @@ class LLMExtractor:
     Использует промпты для извлечения структурированных данных
     """
 
-    def __init__(self, openai_api_key: str, model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: str, model: str = "deepseek-chat",
+                 base_url: str = None):
         """
         Args:
-            openai_api_key: API ключ OpenAI
-            model: Модель для использования (по умолчанию gpt-4o-mini для тестов)
+            api_key: API ключ (OpenAI или DeepSeek)
+            model: Модель для использования
+            base_url: Base URL API (для DeepSeek: https://api.deepseek.com/v1)
         """
         if not AsyncOpenAI:
             raise ImportError("openai package required. pip install openai")
 
-        self.client = AsyncOpenAI(api_key=openai_api_key)
+        client_kwargs = {"api_key": api_key}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+
+        self.client = AsyncOpenAI(**client_kwargs)
         self.model = model
 
         # Стоимость токенов (на 1M токенов)
         self.costs = {
+            "deepseek-chat": {"input": 0.14, "output": 0.28},
+            "deepseek-v3": {"input": 0.14, "output": 0.28},
             "gpt-4o-mini": {"input": 0.15, "output": 0.60},
             "gpt-4o": {"input": 2.50, "output": 10.00},
             "gpt-4": {"input": 30.00, "output": 60.00}
         }
 
-        logger.info(f"LLMExtractor initialized with model: {self.model}")
+        logger.info(f"LLMExtractor initialized with model: {self.model}, base_url: {base_url or 'default'}")
 
     async def extract(self, text: str,
                      level1_entities: Optional[Dict[str, Any]] = None) -> LLMExtractionResult:

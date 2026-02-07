@@ -121,6 +121,8 @@ class TextExtractor:
             result = self._extract_from_docx(file_path)
         elif ext in ['.png', '.jpg', '.jpeg', '.tiff', '.bmp']:
             result = self._extract_from_image(file_path)
+        elif ext in ['.txt', '.text']:
+            result = self._extract_from_txt(file_path)
         else:
             raise ValueError(f"Unsupported file format: {ext}")
 
@@ -330,4 +332,30 @@ class TextExtractor:
 
         except Exception as e:
             logger.error(f"Image OCR extraction failed: {e}")
+            raise
+
+    def _extract_from_txt(self, file_path: Union[Path, BinaryIO]) -> ExtractionResult:
+        """Извлекает текст из TXT файла"""
+        try:
+            if isinstance(file_path, (str, Path)):
+                file_path = Path(file_path)
+                text = file_path.read_text(encoding='utf-8')
+            else:
+                raw = file_path.read()
+                text = raw.decode('utf-8') if isinstance(raw, bytes) else raw
+
+            return ExtractionResult(
+                text=text,
+                method='txt',
+                pages=1,
+                confidence=None,
+                processing_time=0,
+                metadata={
+                    'total_chars': len(text),
+                    'lines': text.count('\n') + 1
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"TXT extraction failed: {e}")
             raise

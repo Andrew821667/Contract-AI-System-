@@ -70,9 +70,13 @@ class ComplexAnalysis:
 class ContractSectionAnalyzer:
     """Анализатор разделов договора через LLM"""
 
-    def __init__(self, model: str = "gpt-4o-mini"):
+    def __init__(self, model: str = "deepseek-chat", api_key: str = None,
+                 base_url: str = None):
         self.model = model
-        self.client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        client_kwargs = {"api_key": api_key or os.getenv("OPENAI_API_KEY")}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        self.client = AsyncOpenAI(**client_kwargs)
 
     async def extract_sections(self, contract_text: str) -> List[ContractSection]:
         """

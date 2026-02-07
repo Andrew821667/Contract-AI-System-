@@ -84,22 +84,31 @@ class DocumentProcessor:
     """
 
     def __init__(self,
-                 openai_api_key: str,
-                 model: str = "gpt-4o-mini",
+                 api_key: str = None,
+                 model: str = "deepseek-chat",
+                 base_url: str = None,
+                 openai_api_key: str = None,
                  use_ocr: bool = True,
                  use_rag: bool = True,
                  use_section_analysis: bool = True):
         """
         Args:
-            openai_api_key: OpenAI API ключ
+            api_key: API ключ (DeepSeek или OpenAI)
             model: Модель для LLM extraction
+            base_url: Base URL API (для DeepSeek: https://api.deepseek.com/v1)
+            openai_api_key: Deprecated, используйте api_key
             use_ocr: Использовать ли OCR для сканов
             use_rag: Использовать ли RAG filter
             use_section_analysis: Использовать ли детальный анализ разделов
         """
+        # Обратная совместимость: openai_api_key -> api_key
+        effective_key = api_key or openai_api_key
+
         self.text_extractor = TextExtractor(use_ocr=use_ocr)
         self.level1_extractor = Level1Extractor()
-        self.llm_extractor = LLMExtractor(openai_api_key, model=model)
+        self.llm_extractor = LLMExtractor(
+            api_key=effective_key, model=model, base_url=base_url
+        )
         self.validation_service = ValidationService()
 
         # RAG с автоматическим fallback
@@ -108,20 +117,19 @@ class DocumentProcessor:
 
         if use_rag:
             try:
-                # Попытка создать RAGService (требует БД)
-                # Примечание: RAGService требует db_session, который должен быть передан извне
-                # Пока используем fallback - будем передавать пустой список similar_contracts
                 logger.warning("RAG initialization skipped: db_session should be provided externally")
-                self.use_rag = False  # Fallback на работу без RAG
+                self.use_rag = False
             except Exception as e:
-                logger.warning(f"RAG initialization failed: {e}. Fallback to OpenAI-only mode.")
+                logger.warning(f"RAG initialization failed: {e}. Fallback to LLM-only mode.")
                 self.use_rag = False
 
-        # Анализ разделов опционально (всегда работает через OpenAI API)
+        # Анализ разделов
         self.use_section_analysis = use_section_analysis
-        self.section_analyzer = ContractSectionAnalyzer(model=model) if use_section_analysis else None
+        self.section_analyzer = ContractSectionAnalyzer(
+            model=model, api_key=effective_key, base_url=base_url
+        ) if use_section_analysis else None
 
-        logger.info(f"DocumentProcessor initialized: model={model}, ocr={use_ocr}, rag={self.use_rag}, section_analysis={use_section_analysis}")
+        logger.info(f"DocumentProcessor initialized: model={model}, base_url={base_url or 'default'}, ocr={use_ocr}, rag={self.use_rag}, section_analysis={use_section_analysis}")
 
     async def process_document(self,
                                file_path: str | Path | BinaryIO,
