@@ -49,19 +49,19 @@ async def process_document_async(file_path, file_ext, use_section_analysis=False
     env_path = project_root / ".env"
     load_dotenv(env_path)
 
-    # GPT-4o-mini — основная модель для интерактивной обработки (быстрая, ~11с extraction)
-    # DeepSeek — для batch-задач (дешевле, но в 3.4x медленнее)
-    openai_key = os.getenv("OPENAI_API_KEY")
+    # DeepSeek — основная модель (дешевле, $0.14/1M токенов)
+    # GPT-4o-mini — fallback
     deepseek_key = os.getenv("DEEPSEEK_API_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY")
 
-    if openai_key:
-        api_key = openai_key
-        base_url = None
-        model = os.getenv("OPENAI_MODEL_MINI", "gpt-4o-mini")
-    elif deepseek_key:
+    if deepseek_key:
         api_key = deepseek_key
         base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
         model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    elif openai_key:
+        api_key = openai_key
+        base_url = None
+        model = os.getenv("OPENAI_MODEL_MINI", "gpt-4o-mini")
     else:
         raise ValueError(
             "API ключ не настроен.\n"
