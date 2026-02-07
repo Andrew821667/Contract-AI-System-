@@ -45,7 +45,10 @@ async def process_document_async(file_path, file_ext):
     from dotenv import load_dotenv
 
     # Загружаем переменные окружения из .env файла
-    load_dotenv()
+    # Указываем явный путь к корню проекта
+    project_root = Path(__file__).parent.parent.parent
+    env_path = project_root / ".env"
+    load_dotenv(env_path)
 
     openai_api_key = os.getenv("OPENAI_API_KEY")
     if not openai_api_key:
