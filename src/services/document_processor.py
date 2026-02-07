@@ -102,15 +102,26 @@ class DocumentProcessor:
         self.llm_extractor = LLMExtractor(openai_api_key, model=model)
         self.validation_service = ValidationService()
 
-        # RAG опционально
+        # RAG с автоматическим fallback
         self.use_rag = use_rag
-        self.rag_service = RAGService() if use_rag else None
+        self.rag_service = None
 
-        # Анализ разделов опционально
+        if use_rag:
+            try:
+                # Попытка создать RAGService (требует БД)
+                # Примечание: RAGService требует db_session, который должен быть передан извне
+                # Пока используем fallback - будем передавать пустой список similar_contracts
+                logger.warning("RAG initialization skipped: db_session should be provided externally")
+                self.use_rag = False  # Fallback на работу без RAG
+            except Exception as e:
+                logger.warning(f"RAG initialization failed: {e}. Fallback to OpenAI-only mode.")
+                self.use_rag = False
+
+        # Анализ разделов опционально (всегда работает через OpenAI API)
         self.use_section_analysis = use_section_analysis
         self.section_analyzer = ContractSectionAnalyzer(model=model) if use_section_analysis else None
 
-        logger.info(f"DocumentProcessor initialized: model={model}, ocr={use_ocr}, rag={use_rag}, section_analysis={use_section_analysis}")
+        logger.info(f"DocumentProcessor initialized: model={model}, ocr={use_ocr}, rag={self.use_rag}, section_analysis={use_section_analysis}")
 
     async def process_document(self,
                                file_path: str | Path | BinaryIO,

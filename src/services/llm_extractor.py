@@ -160,6 +160,14 @@ class LLMExtractor:
    - БИК - 9 цифр
    - Сохраняй ВСЕ цифры, не укорачивай!
 
+4. САНКЦИИ И ШТРАФЫ (penalties):ОБЯЗАТЕЛЬНО ищи разделы "Ответственность сторон", "Санкции", "Штрафы", "Неустойка"
+   - Извлекай ВСЕ санкции, даже если их много
+   - Формат: {type, amount_formula, cap, description}
+   - Примеры type: "delay" (за просрочку), "breach" (нарушение), "termination" (расторжение)
+   - amount_formula: "0.1% per day", "500 руб за день", "двойная ставка ЦБ"
+   - cap: "не более 10% от суммы договора", "максимум 50000 руб"
+   - Если санкций нет - верни пустой массив [], НЕ null!
+
 Формат ответа:
 {
   "parties": {
@@ -249,38 +257,78 @@ class LLMExtractor:
 
     def _build_extraction_prompt(self, text: str,
                                   level1_entities: Optional[Dict[str, Any]] = None) -> str:
-        """Строит промпт для извлечения"""
+        """Строит промпт для извлечения с обязательным включением раздела Реквизиты"""
         prompt_parts = ["Извлеки структурированные данные из следующего договора:\n\n"]
 
         # Добавляем Level 1 entities как контекст (если есть)
         if level1_entities:
-            prompt_parts.append("**Контекст (Level 1 extraction):**\n")
+            prompt_parts.append("**⚠️ ОБЯЗАТЕЛЬНО используй эти данные из Level 1 extraction:**\n")
 
             if level1_entities.get('dates'):
                 dates_str = ", ".join(e.value for e in level1_entities['dates'][:5])
-                prompt_parts.append(f"- Найденные даты: {dates_str}\n")
+                prompt_parts.append(f"- ✅ Найденные даты: {dates_str} → используй для term.start_date, term.end_date\n")
 
             if level1_entities.get('amounts'):
                 amounts_str = ", ".join(f"{e.value}" for e in level1_entities['amounts'][:3])
-                prompt_parts.append(f"- Найденные суммы: {amounts_str}\n")
+                prompt_parts.append(f"- ✅ Найденные суммы: {amounts_str} → используй для financials.total_amount\n")
 
             if level1_entities.get('inns'):
                 inns_str = ", ".join(e.value for e in level1_entities['inns'])
-                prompt_parts.append(f"- ИНН: {inns_str}\n")
+                prompt_parts.append(f"- ✅ ИНН: {inns_str} → ОБЯЗАТЕЛЬНО включи в parties.supplier.inn и parties.customer.inn\n")
+
+            if level1_entities.get('ogrns'):
+                ogrns_str = ", ".join(e.value for e in level1_entities['ogrns'])
+                prompt_parts.append(f"- ✅ ОГРН: {ogrns_str} → используй для parties.supplier.ogrn и parties.customer.ogrn\n")
+
+            if level1_entities.get('kpps'):
+                kpps_str = ", ".join(e.value for e in level1_entities['kpps'])
+                prompt_parts.append(f"- ✅ КПП: {kpps_str} → используй для parties.supplier.kpp и parties.customer.kpp\n")
+
+            if level1_entities.get('orgs'):
+                orgs_str = ", ".join(e.value for e in level1_entities['orgs'][:3])
+                prompt_parts.append(f"- ✅ Организации: {orgs_str} → используй для parties.supplier.name и parties.customer.name\n")
 
             if level1_entities.get('contract_numbers'):
                 num = level1_entities['contract_numbers'][0].value
-                prompt_parts.append(f"- Номер договора: {num}\n")
+                prompt_parts.append(f"- ✅ Номер договора: {num} → используй для contract_number\n")
 
-            prompt_parts.append("\n")
+            prompt_parts.append("\n💡 Данные из Level 1 УЖЕ РАСПОЗНАНЫ - не игнорируй их! Обязательно включи в JSON.\n\n")
 
-        # Добавляем текст договора (ограничиваем до 8000 символов для GPT-4o-mini)
-        max_chars = 8000
-        contract_text = text[:max_chars]
-        if len(text) > max_chars:
-            contract_text += "\n\n[...текст обрезан...]"
+        # УМНАЯ ОБРЕЗКА: сохраняем начало + обязательно раздел Реквизиты
+        max_chars = 12000  # Увеличили лимит
+
+        # Ищем раздел "Реквизиты"
+        requisites_keywords = ["реквизиты", "адреса и реквизиты", "банковские реквизиты", "details"]
+        requisites_start = -1
+
+        text_lower = text.lower()
+        for keyword in requisites_keywords:
+            pos = text_lower.find(keyword)
+            if pos != -1:
+                # Нашли раздел, берем от начала слова (с учетом "6. " или "Раздел 6")
+                requisites_start = max(0, pos - 50)
+                break
+
+        if requisites_start != -1 and len(text) > max_chars:
+            # Если договор длинный и есть реквизиты - берем начало + реквизиты
+            head_size = max_chars // 2  # Половина на начало
+            tail_start = requisites_start
+
+            contract_text = text[:head_size] + "\n\n[...основная часть договора пропущена...]\n\n" + text[tail_start:]
+
+            # Если всё равно слишком длинно - обрезаем
+            if len(contract_text) > max_chars * 1.5:
+                contract_text = contract_text[:int(max_chars * 1.5)]
+        else:
+            # Стандартная обрезка
+            contract_text = text[:max_chars]
+            if len(text) > max_chars:
+                contract_text += "\n\n[...текст обрезан...]"
 
         prompt_parts.append(f"**Текст договора:**\n\n{contract_text}\n\n")
+
+        # КРИТИЧЕСКИ ВАЖНАЯ ИНСТРУКЦИЯ для реквизитов
+        prompt_parts.append("⚠️ ОБЯЗАТЕЛЬНО найди раздел 'Реквизиты' или 'Адреса и реквизиты сторон' и извлеки ВСЕ данные оттуда!\n")
         prompt_parts.append("Верни JSON со всеми извлеченными данными.")
 
         return "".join(prompt_parts)

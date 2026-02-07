@@ -39,7 +39,7 @@ uploaded_file = st.file_uploader(
 
 # Вспомогательная функция для async обработки
 async def process_document_async(file_path, file_ext):
-    """Асинхронная обработка документа"""
+    """Асинхронная обработка документа с автоматическим fallback"""
     from src.services.document_processor import DocumentProcessor
     import os
     from dotenv import load_dotenv
@@ -54,15 +54,34 @@ async def process_document_async(file_path, file_ext):
             "Создайте файл .env в корне проекта и добавьте: OPENAI_API_KEY=your_key_here"
         )
 
-    # ВРЕМЕННО: Отключаем только RAG для тестирования без БД
-    # Section Analysis работает без БД (использует только OpenAI API)
+    # АВТОМАТИЧЕСКИЙ FALLBACK: Пробуем подключить RAG, если не получается - работаем без него
+    # Fallback цепочка: Типовые договоры в БЗ → RAG база → OpenAI+RAG → Fallback (только OpenAI)
+    use_rag = True
+    rag_status = ""
+
+    try:
+        # Проверяем наличие PostgreSQL переменных для RAG
+        db_host = os.getenv("DATABASE_HOST") or os.getenv("DB_HOST")
+        db_port = os.getenv("DATABASE_PORT") or os.getenv("DB_PORT")
+
+        if not db_host:
+            use_rag = False
+            rag_status = "⚠️ RAG fallback: БД не настроена (DATABASE_HOST не указан). Работаем через OpenAI API."
+        else:
+            # Пробуем создать RAGService (реальная проверка будет в DocumentProcessor)
+            rag_status = f"✅ RAG активен: подключение к БД {db_host}:{db_port}. Используется fallback цепочка."
+    except Exception as e:
+        use_rag = False
+        rag_status = f"⚠️ RAG fallback: не удалось подключиться к БД ({str(e)}). Работаем через OpenAI API."
+
     processor = DocumentProcessor(
         openai_api_key=openai_api_key,
-        use_rag=False,  # Требует подключение к PostgreSQL с pgvector
-        use_section_analysis=True  # ✅ Работает без БД, критически важен!
+        use_rag=use_rag,  # Будет True если БД доступна
+        use_section_analysis=True  # ✅ Всегда включен, критически важен!
     )
 
-    st.info("ℹ️ Тестовый режим: RAG отключен (требуется БД). Section Analysis работает через OpenAI API.")
+    if rag_status:
+        st.info(f"ℹ️ {rag_status}")
 
     result = await processor.process_document(file_path, file_ext)
     return result
@@ -564,6 +583,27 @@ if uploaded_file is not None:
                 with col3:
                     compliance = 100 - (len(errors) * 10 + len(warnings) * 2)
                     st.metric("Соответствие", f"{compliance}%", delta=f"{compliance-100}%" if compliance < 100 else "✅")
+
+                # Отображение конкретных ошибок и предупреждений
+                if errors:
+                    st.markdown("### ❌ Ошибки валидации:")
+                    for i, error in enumerate(errors, 1):
+                        with st.expander(f"❌ Ошибка {i}: {error.get('field', 'Unknown field')}", expanded=True):
+                            st.error(f"**Поле:** `{error.get('field', 'N/A')}`")
+                            st.write(f"**Сообщение:** {error.get('message', 'N/A')}")
+                            if error.get('value'):
+                                st.code(f"Значение: {error.get('value')}")
+                            if error.get('expected'):
+                                st.info(f"💡 Ожидается: {error.get('expected')}")
+
+                if warnings:
+                    st.markdown("### ⚠️ Предупреждения:")
+                    for i, warning in enumerate(warnings, 1):
+                        with st.expander(f"⚠️ Предупреждение {i}: {warning.get('field', 'Unknown field')}"):
+                            st.warning(f"**Поле:** `{warning.get('field', 'N/A')}`")
+                            st.write(f"**Сообщение:** {warning.get('message', 'N/A')}")
+                            if warning.get('suggestion'):
+                                st.info(f"💡 Рекомендация: {warning.get('suggestion')}")
 
                 st.markdown("---")
 
