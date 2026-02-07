@@ -48,10 +48,16 @@ from sqlalchemy import func, and_
 
 def init_session_state():
     """Initialize session state"""
+    # ✅ ТЕСТОВЫЙ РЕЖИМ: Автоматическая аутентификация без логина
     if 'admin_user' not in st.session_state:
-        st.session_state.admin_user = None
+        st.session_state.admin_user = {
+            'id': 'test-admin',
+            'email': 'admin@test.local',
+            'name': 'Test Administrator',
+            'role': 'admin'
+        }
     if 'authenticated' not in st.session_state:
-        st.session_state.authenticated = False
+        st.session_state.authenticated = True  # ✅ Всегда авторизован
 
 
 def show_login():
@@ -363,10 +369,8 @@ def main():
     """Main app function"""
     init_session_state()
 
-    # Check authentication
-    if not st.session_state.authenticated:
-        show_login()
-        return
+    # ✅ ТЕСТОВЫЙ РЕЖИМ: Аутентификация отключена
+    # Всегда показываем главный интерфейс без логина
 
     # Sidebar
     st.sidebar.title("🔐 Admin Panel")
