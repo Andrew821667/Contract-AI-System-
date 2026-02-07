@@ -246,6 +246,33 @@ class Level1Extractor:
 
         return entities
 
+    def _clean_entity_value(self, value: str) -> str:
+        """Очищает значение сущности от предлогов и лишних слов"""
+        # Список предлогов и служебных слов для удаления
+        stopwords = [
+            'в', 'на', 'с', 'по', 'из', 'к', 'до', 'для', 'от', 'при',
+            'о', 'об', 'за', 'над', 'под', 'через', 'между', 'перед',
+            'лице', 'лица', 'имени', 'далее',
+            'именуемый', 'именуемая', 'именуемое', 'именуемые'
+        ]
+
+        cleaned = value.strip()
+
+        # Удаляем предлоги в начале
+        words = cleaned.split()
+        while words and words[0].lower() in stopwords:
+            words.pop(0)
+
+        # Удаляем предлоги в конце
+        while words and words[-1].lower() in stopwords:
+            words.pop()
+
+        # Убираем кавычки вокруг
+        cleaned = ' '.join(words).strip()
+        cleaned = cleaned.strip('"«»""')
+
+        return cleaned if cleaned else value  # Если всё удалили - вернем оригинал
+
     def _extract_with_spacy(self, text: str) -> Dict[str, List[Entity]]:
         """Извлекает именованные сущности с помощью SpaCy"""
         if not self.nlp:
@@ -263,6 +290,13 @@ class Level1Extractor:
             position = ent.start_char
             context = self._get_context(text, position)
 
+            # Очищаем значение от предлогов и лишних слов
+            cleaned_value = self._clean_entity_value(ent.text)
+
+            # Пропускаем если после очистки осталось слишком короткое значение
+            if len(cleaned_value) < 2:
+                continue
+
             entity_type_map = {
                 'ORG': 'orgs',
                 'PERSON': 'persons',
@@ -275,12 +309,12 @@ class Level1Extractor:
             if key:
                 results[key].append(Entity(
                     type=ent.label_,
-                    value=ent.text,
-                    normalized=ent.text.strip(),
+                    value=cleaned_value,  # Используем очищенное значение
+                    normalized=cleaned_value.strip(),
                     confidence=0.75,  # SpaCy doesn't provide confidence
                     position=position,
                     context=context,
-                    metadata={'label': ent.label_}
+                    metadata={'label': ent.label_, 'original_value': ent.text}
                 ))
 
         return results
