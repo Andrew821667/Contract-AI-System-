@@ -38,53 +38,43 @@ uploaded_file = st.file_uploader(
 )
 
 # Вспомогательная функция для async обработки
-async def process_document_async(file_path, file_ext):
+async def process_document_async(file_path, file_ext, use_section_analysis=False):
     """Асинхронная обработка документа с автоматическим fallback"""
     from src.services.document_processor import DocumentProcessor
     import os
     from dotenv import load_dotenv
 
     # Загружаем переменные окружения из .env файла
-    # Указываем явный путь к корню проекта
     project_root = Path(__file__).parent.parent.parent
     env_path = project_root / ".env"
     load_dotenv(env_path)
 
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if not openai_api_key:
+    # DeepSeek — основная модель (дешёвая и быстрая)
+    # Fallback на OpenAI если DeepSeek не настроен
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY")
+
+    if deepseek_key:
+        api_key = deepseek_key
+        base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+        model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    elif openai_key:
+        api_key = openai_key
+        base_url = None
+        model = os.getenv("OPENAI_MODEL_MINI", "gpt-4o-mini")
+    else:
         raise ValueError(
-            "OPENAI_API_KEY не установлен в переменных окружения.\n"
-            "Создайте файл .env в корне проекта и добавьте: OPENAI_API_KEY=your_key_here"
+            "API ключ не настроен.\n"
+            "Добавьте в .env: DEEPSEEK_API_KEY=... или OPENAI_API_KEY=..."
         )
 
-    # АВТОМАТИЧЕСКИЙ FALLBACK: Пробуем подключить RAG, если не получается - работаем без него
-    # Fallback цепочка: Типовые договоры в БЗ → RAG база → OpenAI+RAG → Fallback (только OpenAI)
-    use_rag = True
-    rag_status = ""
-
-    try:
-        # Проверяем наличие PostgreSQL переменных для RAG
-        db_host = os.getenv("DATABASE_HOST") or os.getenv("DB_HOST")
-        db_port = os.getenv("DATABASE_PORT") or os.getenv("DB_PORT")
-
-        if not db_host:
-            use_rag = False
-            rag_status = "⚠️ RAG fallback: БД не настроена (DATABASE_HOST не указан). Работаем через OpenAI API."
-        else:
-            # Пробуем создать RAGService (реальная проверка будет в DocumentProcessor)
-            rag_status = f"✅ RAG активен: подключение к БД {db_host}:{db_port}. Используется fallback цепочка."
-    except Exception as e:
-        use_rag = False
-        rag_status = f"⚠️ RAG fallback: не удалось подключиться к БД ({str(e)}). Работаем через OpenAI API."
-
     processor = DocumentProcessor(
-        openai_api_key=openai_api_key,
-        use_rag=use_rag,  # Будет True если БД доступна
-        use_section_analysis=True  # ✅ Всегда включен, критически важен!
+        api_key=api_key,
+        model=model,
+        base_url=base_url,
+        use_rag=False,
+        use_section_analysis=use_section_analysis
     )
-
-    if rag_status:
-        st.info(f"ℹ️ {rag_status}")
 
     result = await processor.process_document(file_path, file_ext)
     return result
@@ -396,6 +386,14 @@ def extract_section_text(full_text: str, start_marker: str, end_marker: str) -> 
 if uploaded_file is not None:
     st.success(f"✅ Файл загружен: **{uploaded_file.name}** ({uploaded_file.size} байт)")
 
+    # Настройки обработки
+    with st.expander("⚙️ Настройки обработки", expanded=False):
+        use_section_analysis = st.checkbox(
+            "Детальный анализ разделов (Section Analysis)",
+            value=True,
+            help="LLM-анализ каждого раздела договора с рекомендациями. Добавляет ~60-90 сек к обработке."
+        )
+
     if st.button("🚀 Начать обработку", type="primary"):
         # Сохраняем загруженный файл во временную директорию
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
@@ -408,14 +406,29 @@ if uploaded_file is not None:
             status_text = st.empty()
 
             # Запускаем реальную обработку
-            status_text.text("🚀 Инициализация обработки...")
+            if use_section_analysis:
+                status_text.text("🚀 Обработка запущена. Детальный анализ разделов займёт ~60-90 сек. Пожалуйста, подождите...")
+            else:
+                status_text.text("🚀 Обработка запущена (~15 сек)...")
             progress_bar.progress(5)
 
             # Запускаем async обработку
-            result = asyncio.run(process_document_async(
-                tmp_file_path,
-                Path(uploaded_file.name).suffix
-            ))
+            # asyncio.run() конфликтует с event loop Streamlit,
+            # используем новый event loop в отдельном потоке
+            import concurrent.futures
+            def _run_async(coro):
+                loop = asyncio.new_event_loop()
+                try:
+                    return loop.run_until_complete(coro)
+                finally:
+                    loop.close()
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(
+                    _run_async,
+                    process_document_async(tmp_file_path, Path(uploaded_file.name).suffix, use_section_analysis=use_section_analysis)
+                )
+                result = future.result(timeout=300)
 
             st.markdown("---")
             st.header("2️⃣ Ход обработки")
@@ -565,10 +578,11 @@ if uploaded_file is not None:
             with st.expander("⚠️ Validation", expanded=True):
                 used_model, optimal_model = get_optimal_model_info("validation")
 
-                validation_status = validation_result.get("status", "unknown")
-                if validation_status == "passed":
+                is_valid = validation_result.get("is_valid", False)
+                has_warnings = len(validation_result.get("warnings", [])) > 0
+                if is_valid and not has_warnings:
                     st.success("**Статус:** ✅ Валидация пройдена")
-                elif validation_status == "passed_with_warnings":
+                elif is_valid and has_warnings:
                     st.warning("**Статус:** ⚠️ Валидация пройдена с предупреждениями")
                 else:
                     st.error("**Статус:** ❌ Валидация не пройдена")
@@ -591,22 +605,18 @@ if uploaded_file is not None:
                 if errors:
                     st.markdown("### ❌ Ошибки валидации:")
                     for i, error in enumerate(errors, 1):
-                        with st.expander(f"❌ Ошибка {i}: {error.get('field', 'Unknown field')}", expanded=True):
-                            st.error(f"**Поле:** `{error.get('field', 'N/A')}`")
-                            st.write(f"**Сообщение:** {error.get('message', 'N/A')}")
-                            if error.get('value'):
-                                st.code(f"Значение: {error.get('value')}")
-                            if error.get('expected'):
-                                st.info(f"💡 Ожидается: {error.get('expected')}")
+                        if isinstance(error, dict):
+                            st.error(f"**{i}.** `{error.get('field', 'N/A')}`: {error.get('message', 'N/A')}")
+                        else:
+                            st.error(f"**{i}.** {error}")
 
                 if warnings:
                     st.markdown("### ⚠️ Предупреждения:")
                     for i, warning in enumerate(warnings, 1):
-                        with st.expander(f"⚠️ Предупреждение {i}: {warning.get('field', 'Unknown field')}"):
-                            st.warning(f"**Поле:** `{warning.get('field', 'N/A')}`")
-                            st.write(f"**Сообщение:** {warning.get('message', 'N/A')}")
-                            if warning.get('suggestion'):
-                                st.info(f"💡 Рекомендация: {warning.get('suggestion')}")
+                        if isinstance(warning, dict):
+                            st.warning(f"**{i}.** `{warning.get('field', 'N/A')}`: {warning.get('message', 'N/A')}")
+                        else:
+                            st.warning(f"**{i}.** {warning}")
 
                 st.markdown("---")
 
@@ -619,8 +629,10 @@ if uploaded_file is not None:
 
                 if section_analysis_data:
                     display_validation_section_dynamic(section_analysis_data)
+                elif use_section_analysis:
+                    st.warning("⚠️ Детальный анализ разделов не был выполнен из-за ошибки.")
                 else:
-                    st.warning("⚠️ Детальный анализ разделов не был выполнен. Возможно, use_section_analysis=False или произошла ошибка.")
+                    st.info("ℹ️ Детальный анализ разделов отключен. Включите в настройках обработки для глубокого анализа.")
 
             progress_bar.progress(100)
             status_text.empty()

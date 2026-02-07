@@ -32,6 +32,12 @@ class PaymentType(str, Enum):
     PREPAYMENT = "prepayment"
     POSTPAYMENT = "postpayment"
     INSTALLMENT = "installment"
+    FINAL_PAYMENT = "final_payment"
+    ADVANCE = "advance"
+    MILESTONE = "milestone"
+    MONTHLY = "monthly"
+    QUARTERLY = "quarterly"
+    OTHER = "other"
 
 
 class RiskSeverity(str, Enum):
@@ -69,6 +75,24 @@ class ContractTerm(BaseModel):
     end_date: Optional[date] = None
     duration_days: Optional[int] = Field(None, gt=0)
 
+    @field_validator('start_date', 'end_date', mode='before')
+    @classmethod
+    def parse_date(cls, v):
+        """Обрабатывает невалидные даты от LLM"""
+        if v is None:
+            return None
+        if isinstance(v, date):
+            return v
+        if isinstance(v, str):
+            v = v.strip()
+            if not v or v.upper() in ('YYYY-MM-DD', 'N/A', 'NULL', 'NONE', 'TBD', 'НЕТ', ''):
+                return None
+            try:
+                return date.fromisoformat(v[:10])
+            except (ValueError, IndexError):
+                return None
+        return None
+
     @field_validator('end_date')
     @classmethod
     def end_after_start(cls, v, info):
@@ -84,13 +108,55 @@ class Financials(BaseModel):
     vat_included: bool = True
     vat_rate: Optional[int] = Field(None, ge=0, le=100)
 
+    @field_validator('vat_included', mode='before')
+    @classmethod
+    def parse_bool(cls, v):
+        """LLM может вернуть строку вместо bool"""
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            return v.lower().strip() in ('true', 'yes', 'да', '1', 'включен', 'включено')
+        return bool(v)
+
 
 class PaymentScheduleItem(BaseModel):
     """Элемент платежного графика"""
-    type: PaymentType
+    type: PaymentType = PaymentType.OTHER
+
+    @field_validator('type', mode='before')
+    @classmethod
+    def normalize_payment_type(cls, v):
+        """Нормализует тип платежа от LLM в допустимый enum"""
+        if isinstance(v, PaymentType):
+            return v
+        if isinstance(v, str):
+            try:
+                return PaymentType(v.lower().strip())
+            except ValueError:
+                return PaymentType.OTHER
+        return PaymentType.OTHER
     amount: Decimal = Field(gt=0)
     due_date: Optional[date] = None
     description: Optional[str] = None
+
+    @field_validator('due_date', mode='before')
+    @classmethod
+    def parse_due_date(cls, v):
+        """Обрабатывает невалидные даты от LLM (например 'YYYY-MM-DD', 'N/A', '')"""
+        if v is None:
+            return None
+        if isinstance(v, date):
+            return v
+        if isinstance(v, str):
+            v = v.strip()
+            # Отбрасываем шаблонные/пустые значения
+            if not v or v.upper() in ('YYYY-MM-DD', 'N/A', 'NULL', 'NONE', 'TBD', 'НЕТ', ''):
+                return None
+            try:
+                return date.fromisoformat(v[:10])
+            except (ValueError, IndexError):
+                return None
+        return None
 
 
 class Payment(BaseModel):
@@ -158,6 +224,19 @@ class ValidationService:
     """
 
     @staticmethod
+    def _clean_meta_fields(data: Any) -> Any:
+        """Удаляет служебные _meta поля из LLM-ответа рекурсивно"""
+        if isinstance(data, dict):
+            return {
+                k: ValidationService._clean_meta_fields(v)
+                for k, v in data.items()
+                if not k.startswith('_')
+            }
+        elif isinstance(data, list):
+            return [ValidationService._clean_meta_fields(item) for item in data]
+        return data
+
+    @staticmethod
     def validate(data: Dict[str, Any]) -> ValidationResult:
         """
         Валидирует извлеченные данные
@@ -172,8 +251,11 @@ class ValidationService:
         warnings = []
 
         try:
+            # Очищаем служебные поля от LLM
+            cleaned_data = ValidationService._clean_meta_fields(data)
+
             # Пытаемся валидировать через Pydantic
-            validated = ExtractedContractData(**data)
+            validated = ExtractedContractData(**cleaned_data)
 
             # Дополнительные business-logic проверки
             additional_warnings = ValidationService._business_logic_checks(validated)
