@@ -33,8 +33,8 @@ st.header("1️⃣ Загрузка документа")
 
 uploaded_file = st.file_uploader(
     "Выберите файл договора",
-    type=['pdf', 'docx', 'txt', 'png', 'jpg', 'jpeg'],
-    help="Поддерживаются: PDF, DOCX, TXT, изображения (с OCR)"
+    type=['pdf', 'docx', 'txt', 'xml', 'html', 'htm', 'png', 'jpg', 'jpeg'],
+    help="Поддерживаются: PDF, DOCX, TXT, XML, HTML, изображения (с OCR)"
 )
 
 # Вспомогательная функция для async обработки
@@ -49,23 +49,23 @@ async def process_document_async(file_path, file_ext, use_section_analysis=False
     env_path = project_root / ".env"
     load_dotenv(env_path)
 
-    # DeepSeek — основная модель (дешёвая и быстрая)
-    # Fallback на OpenAI если DeepSeek не настроен
-    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
+    # GPT-4o-mini — основная модель для интерактивной обработки (быстрая, ~11с extraction)
+    # DeepSeek — для batch-задач (дешевле, но в 3.4x медленнее)
     openai_key = os.getenv("OPENAI_API_KEY")
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
 
-    if deepseek_key:
-        api_key = deepseek_key
-        base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-        model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-    elif openai_key:
+    if openai_key:
         api_key = openai_key
         base_url = None
         model = os.getenv("OPENAI_MODEL_MINI", "gpt-4o-mini")
+    elif deepseek_key:
+        api_key = deepseek_key
+        base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+        model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
     else:
         raise ValueError(
             "API ключ не настроен.\n"
-            "Добавьте в .env: DEEPSEEK_API_KEY=... или OPENAI_API_KEY=..."
+            "Добавьте в .env: OPENAI_API_KEY=... или DEEPSEEK_API_KEY=..."
         )
 
     processor = DocumentProcessor(

@@ -461,11 +461,15 @@ priority: "critical" (критично - нарушает закон) | "importa
         # 1. Извлекаем разделы
         sections = await self.extract_sections(contract_text)
 
-        # 2. Анализируем каждый раздел
-        section_analyses = []
-        for section in sections:
-            analysis = await self.analyze_section(section, similar_contracts, contract_text)
-            section_analyses.append(analysis)
+        # 2. Анализируем все разделы ПАРАЛЛЕЛЬНО (asyncio.gather)
+        import asyncio
+        logger.info(f"Starting parallel analysis of {len(sections)} sections...")
+        section_analyses = await asyncio.gather(
+            *[self.analyze_section(section, similar_contracts, contract_text)
+              for section in sections]
+        )
+        section_analyses = list(section_analyses)
+        logger.info(f"Parallel analysis completed: {len(section_analyses)} sections analyzed")
 
         # 3. Комплексный анализ
         complex_analysis = await self.complex_analysis(
