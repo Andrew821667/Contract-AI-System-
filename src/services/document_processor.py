@@ -60,8 +60,13 @@ class DocumentProcessingResult:
     # Текст документа
     raw_text: str
 
+    # Данные для сохранения форматирования
+    original_file_bytes: Optional[bytes] = None
+    docx_file_bytes: Optional[bytes] = None
+    original_format: str = ''
+
     def to_dict(self) -> Dict[str, Any]:
-        """Конвертирует в dict для JSON"""
+        """Конвертирует в dict для JSON (без бинарных данных)"""
         return {
             'document_id': self.document_id,
             'status': self.status,
@@ -71,7 +76,9 @@ class DocumentProcessingResult:
             'total_time_sec': self.total_time_sec,
             'total_cost_usd': self.total_cost_usd,
             'model_used': self.model_used,
-            'raw_text': self.raw_text
+            'raw_text': self.raw_text,
+            'original_format': self.original_format,
+            'has_docx': self.docx_file_bytes is not None
         }
 
 
@@ -156,6 +163,11 @@ class DocumentProcessor:
             extraction_result = self.text_extractor.extract(file_path, file_extension)
             raw_text = extraction_result.text
 
+            # Сохраняем bytes файлов для работы с форматированием
+            original_file_bytes = extraction_result.original_file_bytes
+            docx_file_bytes = extraction_result.docx_file_bytes
+            original_format = extraction_result.original_format
+
             stages.append(ProcessingStage(
                 name="text_extraction",
                 status="success",
@@ -165,7 +177,9 @@ class DocumentProcessor:
                     "pages": extraction_result.pages,
                     "chars": len(raw_text),
                     "confidence": extraction_result.confidence,
-                    "metadata": extraction_result.metadata
+                    "metadata": extraction_result.metadata,
+                    "original_format": original_format,
+                    "has_docx": docx_file_bytes is not None
                 },
                 metadata={"text_preview": raw_text[:500]}  # Превью для UI
             ))
@@ -370,13 +384,18 @@ class DocumentProcessor:
                 total_time_sec=total_time,
                 total_cost_usd=total_cost,
                 model_used=llm_result.model_used,
-                raw_text=raw_text
+                raw_text=raw_text,
+                original_file_bytes=original_file_bytes,
+                docx_file_bytes=docx_file_bytes,
+                original_format=original_format
             )
 
             logger.info(f"Document processing completed: "
                        f"status={result.status}, "
                        f"time={total_time:.2f}s, "
-                       f"cost=${total_cost:.6f}")
+                       f"cost=${total_cost:.6f}, "
+                       f"format={original_format}, "
+                       f"has_docx={'yes' if docx_file_bytes else 'no'}")
 
             return result
 
