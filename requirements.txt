@@ -39,6 +39,7 @@ reportlab==4.0.9  # PDF generation
 lxml==5.1.0
 mammoth==1.6.0
 python-magic==0.4.27
+pdf2docx>=0.5.6  # PDF → DOCX с сохранением форматирования
 
 # OCR and additional formats
 pytesseract==0.3.10

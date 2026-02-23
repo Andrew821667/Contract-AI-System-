@@ -1,6 +1,7 @@
 """
 Обработка документов - "Стеклянный ящик"
 Показывает ВСЕ промежуточные результаты обработки
+Поддерживает два режима: "Новый договор" и "Подписанный договор"
 """
 
 import streamlit as st
@@ -12,6 +13,7 @@ import os
 import tempfile
 import pandas as pd
 from typing import Dict, Any
+import io
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
@@ -30,6 +32,17 @@ st.markdown("---")
 
 # Загрузка файла
 st.header("1️⃣ Загрузка документа")
+
+# Выбор режима работы
+contract_mode = st.radio(
+    "Режим работы с договором:",
+    ["Новый договор (Pre-Execution)", "Подписанный договор (Post-Execution)"],
+    help="**Новый договор** — правки вносятся прямо в DOCX-документ.\n\n"
+         "**Подписанный договор** — оригинал не трогаем, формируем протокол разногласий.",
+    horizontal=True
+)
+
+is_new_contract = contract_mode.startswith("Новый")
 
 uploaded_file = st.file_uploader(
     "Выберите файл договора",
@@ -78,6 +91,25 @@ async def process_document_async(file_path, file_ext, use_section_analysis=False
 
     result = await processor.process_document(file_path, file_ext)
     return result
+
+
+def render_docx_preview(docx_bytes: bytes) -> str:
+    """Конвертирует DOCX bytes в HTML через mammoth для предпросмотра"""
+    try:
+        import mammoth
+        result = mammoth.convert_to_html(io.BytesIO(docx_bytes))
+        html = result.value
+        # Оборачиваем в стили для лучшего отображения
+        styled_html = f"""
+        <div style="background: white; color: black; padding: 20px; border: 1px solid #ddd;
+                    border-radius: 8px; font-family: 'Times New Roman', serif; line-height: 1.6;
+                    max-height: 600px; overflow-y: auto;">
+            {html}
+        </div>
+        """
+        return styled_html
+    except Exception as e:
+        return f"<p style='color:red;'>Ошибка предпросмотра: {e}</p>"
 
 
 def get_entity_purpose(entity_type: str) -> str:
@@ -138,7 +170,7 @@ def get_optimal_model_info(stage: str) -> tuple[str, str]:
     return models.get(stage, ("N/A", "N/A"))
 
 
-def display_validation_section_dynamic(section_analysis_data: Dict[str, Any]):
+def display_validation_section_dynamic(section_analysis_data: Dict[str, Any], is_new_contract: bool = True):
     """Отображает детальную валидацию по разделам договора (ДИНАМИЧЕСКИ из LLM)"""
 
     if not section_analysis_data:
@@ -146,6 +178,12 @@ def display_validation_section_dynamic(section_analysis_data: Dict[str, Any]):
         return
 
     st.subheader("📋 Детальный разбор по разделам договора")
+
+    # Показываем текущий режим
+    if is_new_contract:
+        st.info("📝 **Режим: Новый договор** — принятые рекомендации будут внесены в DOCX-документ")
+    else:
+        st.info("📋 **Режим: Подписанный договор** — принятые рекомендации будут собраны в протокол разногласий")
 
     sections = section_analysis_data.get("sections", [])
     section_analyses = section_analysis_data.get("section_analyses", [])
@@ -160,6 +198,10 @@ def display_validation_section_dynamic(section_analysis_data: Dict[str, Any]):
     # Динамически создаем вкладки
     tab_names = [f"Раздел {s.number}" for s in sections] + ["🔍 Комплексный анализ"]
     tabs = st.tabs(tab_names)
+
+    # Инициализируем список принятых рекомендаций для протокола разногласий
+    if "accepted_recommendations" not in st.session_state:
+        st.session_state.accepted_recommendations = []
 
     # Отображаем каждый раздел ДИНАМИЧЕСКИ
     for idx, (section, analysis) in enumerate(zip(sections, section_analyses)):
@@ -215,16 +257,12 @@ def display_validation_section_dynamic(section_analysis_data: Dict[str, Any]):
                     if hasattr(rec, 'priority'):
                         if rec.priority == "critical":
                             priority_badge = "🔴 **КРИТИЧНО**"
-                            container_type = "error"
                         elif rec.priority == "important":
                             priority_badge = "🟡 **ВАЖНО**"
-                            container_type = "warning"
                         else:
                             priority_badge = "🟢 **РЕКОМЕНДОВАНО**"
-                            container_type = "info"
                     else:
                         priority_badge = "💡"
-                        container_type = "info"
 
                     # Определяем тип действия
                     if hasattr(rec, 'action_type'):
@@ -259,11 +297,23 @@ def display_validation_section_dynamic(section_analysis_data: Dict[str, Any]):
                                 label_visibility="collapsed"
                             )
 
-                            # Кнопки действий
+                            # Кнопки действий — зависят от режима
                             col1, col2, col3 = st.columns(3)
                             with col1:
-                                if st.button("✅ Принять", key=f"accept_{section.number}_{i}", type="primary"):
-                                    st.success("✅ Рекомендация принята. Текст будет добавлен в договор.")
+                                accept_label = "✅ Принять в DOCX" if is_new_contract else "✅ В протокол разногласий"
+                                if st.button(accept_label, key=f"accept_{section.number}_{i}", type="primary"):
+                                    if is_new_contract:
+                                        st.success("✅ Рекомендация принята. Правка будет внесена в DOCX-документ.")
+                                    else:
+                                        # Добавляем в протокол разногласий
+                                        st.session_state.accepted_recommendations.append({
+                                            "section_number": section.number,
+                                            "section_title": section.title,
+                                            "original_text": section.text[:200] + "...",
+                                            "proposed_text": rec.proposed_text,
+                                            "reason": rec.reason if hasattr(rec, 'reason') else str(rec)
+                                        })
+                                        st.success("✅ Добавлено в протокол разногласий.")
                             with col2:
                                 if st.button("✏️ Редактировать", key=f"edit_{section.number}_{i}"):
                                     st.info("✏️ Откройте редактор для изменения текста.")
@@ -413,8 +463,6 @@ if uploaded_file is not None:
             progress_bar.progress(5)
 
             # Запускаем async обработку
-            # asyncio.run() конфликтует с event loop Streamlit,
-            # используем новый event loop в отдельном потоке
             import concurrent.futures
             def _run_async(coro):
                 loop = asyncio.new_event_loop()
@@ -446,7 +494,7 @@ if uploaded_file is not None:
 
                     with st.expander(f"✅ Извлечение текста ({stage.duration_sec:.1f} сек)", expanded=True):
                         used_model, optimal_model = get_optimal_model_info("text_extraction")
-                        st.success(f"**Метод:** {stage.results.get('method', 'N/A')}")
+                        st.success(f"**Метод:** {stage.results.get('method', 'N/A')} | **Формат:** {stage.results.get('original_format', 'N/A')} | **DOCX-версия:** {'✅ Есть' if stage.results.get('has_docx') else '❌ Нет'}")
                         st.info(f"**Модель:** {used_model} | **Оптимально:** {optimal_model}")
 
                         col1, col2, col3 = st.columns(3)
@@ -458,8 +506,36 @@ if uploaded_file is not None:
                             confidence = stage.results.get("confidence")
                             st.metric("Confidence", f"{confidence:.2f}" if confidence else "N/A")
 
-                        st.subheader("📋 ПОЛНЫЙ извлеченный текст")
-                        st.text_area("Весь текст документа (прокрутите вниз):", value=result.raw_text, height=400, key="full_text_area")
+                        # Предпросмотр с форматированием (если есть DOCX)
+                        if result.docx_file_bytes:
+                            st.subheader("📄 Предпросмотр документа (с форматированием)")
+                            preview_html = render_docx_preview(result.docx_file_bytes)
+                            st.markdown(preview_html, unsafe_allow_html=True)
+
+                            # Кнопки скачивания
+                            st.markdown("---")
+                            dl_col1, dl_col2 = st.columns(2)
+                            with dl_col1:
+                                if result.original_file_bytes:
+                                    orig_ext = result.original_format or 'bin'
+                                    st.download_button(
+                                        f"📥 Скачать оригинал (.{orig_ext})",
+                                        data=result.original_file_bytes,
+                                        file_name=f"original_{uploaded_file.name}",
+                                        mime="application/octet-stream",
+                                        key="download_original"
+                                    )
+                            with dl_col2:
+                                st.download_button(
+                                    "📥 Скачать DOCX-версию",
+                                    data=result.docx_file_bytes,
+                                    file_name=f"{Path(uploaded_file.name).stem}.docx",
+                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                    key="download_docx"
+                                )
+                        else:
+                            st.subheader("📋 Извлечённый текст")
+                            st.text_area("Весь текст документа (прокрутите вниз):", value=result.raw_text, height=400, key="full_text_area")
 
                 # Stage 2: Level 1 Extraction
                 elif stage.name == "level1_extraction":
@@ -473,8 +549,8 @@ if uploaded_file is not None:
                         # Метрики по типам
                         by_type = stage.results.get("by_type", {})
                         cols = st.columns(min(len(by_type), 3))
-                        for idx, (entity_type, count) in enumerate(by_type.items()):
-                            with cols[idx % 3]:
+                        for idx2, (entity_type, count) in enumerate(by_type.items()):
+                            with cols[idx2 % 3]:
                                 st.metric(entity_type, count)
 
                         # Детальная таблица
@@ -628,7 +704,7 @@ if uploaded_file is not None:
                         break
 
                 if section_analysis_data:
-                    display_validation_section_dynamic(section_analysis_data)
+                    display_validation_section_dynamic(section_analysis_data, is_new_contract=is_new_contract)
                 elif use_section_analysis:
                     st.warning("⚠️ Детальный анализ разделов не был выполнен из-за ошибки.")
                 else:
@@ -683,12 +759,51 @@ if uploaded_file is not None:
                     )
 
             with col3:
-                if st.button("📄 Экспорт в Word", use_container_width=True):
-                    st.info("Экспорт в Word (в разработке)")
+                # Скачивание DOCX-версии
+                if result.docx_file_bytes:
+                    st.download_button(
+                        "📄 Скачать DOCX",
+                        data=result.docx_file_bytes,
+                        file_name=f"{Path(uploaded_file.name).stem}_result.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True,
+                        key="download_docx_final"
+                    )
+                else:
+                    if st.button("📄 Экспорт в Word", use_container_width=True):
+                        st.info("DOCX-версия недоступна для данного формата")
 
             with col4:
                 if st.button("❌ Отклонить", use_container_width=True):
                     st.error("Документ отклонен")
+
+            # Протокол разногласий (только для подписанных договоров)
+            if not is_new_contract and st.session_state.get("accepted_recommendations"):
+                st.markdown("---")
+                st.header("📋 Протокол разногласий")
+                st.info(f"Собрано рекомендаций: {len(st.session_state.accepted_recommendations)}")
+
+                protocol_data = []
+                for i, rec in enumerate(st.session_state.accepted_recommendations, 1):
+                    protocol_data.append({
+                        "№": i,
+                        "Раздел": f"{rec['section_number']}. {rec['section_title']}",
+                        "Текст оригинала": rec["original_text"],
+                        "Предлагаемая редакция": rec["proposed_text"],
+                        "Обоснование": rec["reason"]
+                    })
+
+                st.dataframe(protocol_data, use_container_width=True)
+
+                # Скачать протокол как JSON
+                protocol_json = json.dumps(protocol_data, ensure_ascii=False, indent=2)
+                st.download_button(
+                    "📥 Скачать протокол разногласий (JSON)",
+                    protocol_json,
+                    file_name=f"protocol_{uploaded_file.name}.json",
+                    mime="application/json",
+                    key="download_protocol"
+                )
 
         except Exception as e:
             st.error(f"Ошибка обработки: {str(e)}")
