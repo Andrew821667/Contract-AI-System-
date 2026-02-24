@@ -12,8 +12,9 @@ import json
 import os
 import tempfile
 import pandas as pd
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 import io
+import hashlib
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
@@ -29,6 +30,71 @@ st.title("📄 Обработка документов")
 st.markdown("**Стеклянный ящик:** видны все промежуточные результаты работы системы")
 
 st.markdown("---")
+
+
+def _ensure_recommendation_state() -> None:
+    """Гарантирует наличие state для принятых рекомендаций."""
+    if "accepted_recommendations" not in st.session_state:
+        st.session_state["accepted_recommendations"] = []
+    if "accepted_recommendation_keys" not in st.session_state:
+        st.session_state["accepted_recommendation_keys"] = []
+
+
+def _build_recommendation_key(payload: Dict[str, Any]) -> str:
+    """Детерминированный ключ для защиты от дублей."""
+    section_number = str(payload.get("section_number", "")).strip()
+    section_title = str(payload.get("section_title", "")).strip()
+    source = str(payload.get("source", "")).strip()
+    action_type = str(payload.get("action_type", "")).strip()
+    proposed_text = str(payload.get("proposed_text", "")).strip()[:180]
+    return "|".join([source, section_number, section_title, action_type, proposed_text])
+
+
+def add_accepted_recommendation(payload: Dict[str, Any]) -> bool:
+    """
+    Добавляет принятую рекомендацию в session_state.
+    Возвращает True, если запись добавлена, иначе False (дубль).
+    """
+    _ensure_recommendation_state()
+    key = _build_recommendation_key(payload)
+    existing_keys = st.session_state.get("accepted_recommendation_keys", [])
+    if key in existing_keys:
+        return False
+
+    normalized_payload = {
+        "section_number": payload.get("section_number", ""),
+        "section_title": payload.get("section_title", ""),
+        "original_text": payload.get("original_text", ""),
+        "proposed_text": payload.get("proposed_text", ""),
+        "reason": payload.get("reason", ""),
+        "action_type": payload.get("action_type", "modify"),
+        "priority": payload.get("priority", "optional"),
+        "source": payload.get("source", "section_analysis"),
+        "target": payload.get("target", "docx"),
+        "rec_key": key
+    }
+
+    st.session_state["accepted_recommendations"].append(normalized_payload)
+    st.session_state["accepted_recommendation_keys"] = existing_keys + [key]
+    return True
+
+
+def _extract_section_analysis_data(result: Any) -> Optional[Dict[str, Any]]:
+    """Достаёт полные данные section analysis из стадий обработки."""
+    for stage in result.stages:
+        if stage.name == "section_analysis" and stage.status == "success":
+            return stage.results.get("full_data")
+    return None
+
+
+def _risk_level_ru(level: str) -> str:
+    mapping = {
+        "critical": "Критический",
+        "high": "Высокий",
+        "medium": "Средний",
+        "low": "Низкий",
+    }
+    return mapping.get(str(level).lower(), str(level))
 
 # Загрузка файла
 st.header("1️⃣ Загрузка документа")
@@ -49,6 +115,58 @@ uploaded_file = st.file_uploader(
     type=['pdf', 'docx', 'txt', 'xml', 'html', 'htm', 'png', 'jpg', 'jpeg'],
     help="Поддерживаются: PDF, DOCX, TXT, XML, HTML, изображения (с OCR)"
 )
+
+# Загрузка эталонного шаблона (Stage 2.2: Pre-Execution)
+if is_new_contract:
+    st.markdown("---")
+    st.header("📋 Эталонный шаблон (Playbook)")
+    st.markdown("Загрузите эталонный шаблон договора для автоматического сравнения с черновиком. "
+                "Система выявит все отклонения от стандарта компании.")
+
+    template_file = st.file_uploader(
+        "Выберите файл шаблона (эталон)",
+        type=['pdf', 'docx', 'txt', 'xml', 'html', 'htm'],
+        help="Эталонный шаблон, с которым будет сравниваться черновик",
+        key="template_uploader"
+    )
+else:
+    template_file = None
+
+def extract_text_from_file(file_path: str, file_ext: str) -> str:
+    """Извлекает текст из файла (для шаблона) синхронно"""
+    from src.services.text_extractor import TextExtractor
+    extractor = TextExtractor(use_ocr=False)
+    result = extractor.extract(file_path, file_ext)
+    return result.text
+
+
+async def compare_with_template_async(draft_text: str, template_text: str, contract_type: str = "неизвестный"):
+    """Асинхронное сравнение черновика с шаблоном"""
+    from src.services.template_comparator import TemplateComparator
+    import os
+    from dotenv import load_dotenv
+
+    project_root = Path(__file__).parent.parent.parent
+    env_path = project_root / ".env"
+    load_dotenv(env_path)
+
+    deepseek_key = os.getenv("DEEPSEEK_API_KEY")
+    openai_key = os.getenv("OPENAI_API_KEY")
+
+    if deepseek_key:
+        api_key = deepseek_key
+        base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+        model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    elif openai_key:
+        api_key = openai_key
+        base_url = None
+        model = os.getenv("OPENAI_MODEL_MINI", "gpt-4o-mini")
+    else:
+        raise ValueError("API ключ не настроен.")
+
+    comparator = TemplateComparator(model=model, api_key=api_key, base_url=base_url)
+    return await comparator.compare(draft_text, template_text, contract_type)
+
 
 # Вспомогательная функция для async обработки
 async def process_document_async(file_path, file_ext, use_section_analysis=False):
@@ -139,7 +257,7 @@ def get_entity_purpose(entity_type: str) -> str:
     return purposes.get(entity_type)
 
 
-def get_optimal_model_info(stage: str) -> tuple[str, str]:
+def get_optimal_model_info(stage: str):
     """Возвращает информацию об оптимальной модели для этапа (актуализировано 2026)"""
     models = {
         "text_extraction": (
@@ -199,9 +317,8 @@ def display_validation_section_dynamic(section_analysis_data: Dict[str, Any], is
     tab_names = [f"Раздел {s.number}" for s in sections] + ["🔍 Комплексный анализ"]
     tabs = st.tabs(tab_names)
 
-    # Инициализируем список принятых рекомендаций для протокола разногласий
-    if "accepted_recommendations" not in st.session_state:
-        st.session_state.accepted_recommendations = []
+    # Инициализируем состояние принятых рекомендаций
+    _ensure_recommendation_state()
 
     # Отображаем каждый раздел ДИНАМИЧЕСКИ
     for idx, (section, analysis) in enumerate(zip(sections, section_analyses)):
@@ -302,18 +419,25 @@ def display_validation_section_dynamic(section_analysis_data: Dict[str, Any], is
                             with col1:
                                 accept_label = "✅ Принять в DOCX" if is_new_contract else "✅ В протокол разногласий"
                                 if st.button(accept_label, key=f"accept_{section.number}_{i}", type="primary"):
-                                    if is_new_contract:
-                                        st.success("✅ Рекомендация принята. Правка будет внесена в DOCX-документ.")
+                                    payload = {
+                                        "section_number": section.number,
+                                        "section_title": section.title,
+                                        "original_text": section.text[:400] + ("..." if len(section.text) > 400 else ""),
+                                        "proposed_text": rec.proposed_text,
+                                        "reason": rec.reason if hasattr(rec, "reason") else str(rec),
+                                        "action_type": rec.action_type if hasattr(rec, "action_type") else "modify",
+                                        "priority": rec.priority if hasattr(rec, "priority") else "optional",
+                                        "source": "section_analysis",
+                                        "target": "docx" if is_new_contract else "protocol",
+                                    }
+                                    added = add_accepted_recommendation(payload)
+                                    if added:
+                                        if is_new_contract:
+                                            st.success("✅ Рекомендация принята. Будет включена в исправленный DOCX (Stage 2.4).")
+                                        else:
+                                            st.success("✅ Добавлено в протокол разногласий.")
                                     else:
-                                        # Добавляем в протокол разногласий
-                                        st.session_state.accepted_recommendations.append({
-                                            "section_number": section.number,
-                                            "section_title": section.title,
-                                            "original_text": section.text[:200] + "...",
-                                            "proposed_text": rec.proposed_text,
-                                            "reason": rec.reason if hasattr(rec, 'reason') else str(rec)
-                                        })
-                                        st.success("✅ Добавлено в протокол разногласий.")
+                                        st.info("ℹ️ Эта рекомендация уже была принята ранее.")
                             with col2:
                                 if st.button("✏️ Редактировать", key=f"edit_{section.number}_{i}"):
                                     st.info("✏️ Откройте редактор для изменения текста.")
@@ -447,7 +571,7 @@ if uploaded_file is not None:
     if st.button("🚀 Начать обработку", type="primary"):
         # Сохраняем загруженный файл во временную директорию
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
-            tmp_file.write(uploaded_file.read())
+            tmp_file.write(uploaded_file.getvalue())
             tmp_file_path = tmp_file.name
 
         try:
@@ -478,332 +602,30 @@ if uploaded_file is not None:
                 )
                 result = future.result(timeout=300)
 
-            st.markdown("---")
-            st.header("2️⃣ Ход обработки")
+            # Сохраняем результат в session_state чтобы он не пропадал при перерисовке
+            st.session_state["processing_result"] = result
+            st.session_state["processing_file_name"] = uploaded_file.name
+            st.session_state["processing_use_section_analysis"] = use_section_analysis
+            st.session_state["processing_is_new_contract"] = is_new_contract
+            st.session_state["processing_result_signature"] = f"{uploaded_file.name}:{len(result.raw_text)}:{result.model_used}"
 
-            # Отображаем результаты каждого этапа
-            total_stages = len(result.stages)
-
-            for idx, stage in enumerate(result.stages):
-                progress = int((idx + 1) / total_stages * 90)
-                progress_bar.progress(progress)
-
-                # Stage 1: Text Extraction
-                if stage.name == "text_extraction":
-                    status_text.text("📄 Извлечение текста...")
-
-                    with st.expander(f"✅ Извлечение текста ({stage.duration_sec:.1f} сек)", expanded=True):
-                        used_model, optimal_model = get_optimal_model_info("text_extraction")
-                        st.success(f"**Метод:** {stage.results.get('method', 'N/A')} | **Формат:** {stage.results.get('original_format', 'N/A')} | **DOCX-версия:** {'✅ Есть' if stage.results.get('has_docx') else '❌ Нет'}")
-                        st.info(f"**Модель:** {used_model} | **Оптимально:** {optimal_model}")
-
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("Страниц", stage.results.get("pages", "N/A"))
-                        with col2:
-                            st.metric("Символов", f"{stage.results.get('chars', 0):,}")
-                        with col3:
-                            confidence = stage.results.get("confidence")
-                            st.metric("Confidence", f"{confidence:.2f}" if confidence else "N/A")
-
-                        # Предпросмотр с форматированием (если есть DOCX)
-                        if result.docx_file_bytes:
-                            st.subheader("📄 Предпросмотр документа (с форматированием)")
-                            preview_html = render_docx_preview(result.docx_file_bytes)
-                            st.markdown(preview_html, unsafe_allow_html=True)
-
-                            # Кнопки скачивания
-                            st.markdown("---")
-                            dl_col1, dl_col2 = st.columns(2)
-                            with dl_col1:
-                                if result.original_file_bytes:
-                                    orig_ext = result.original_format or 'bin'
-                                    st.download_button(
-                                        f"📥 Скачать оригинал (.{orig_ext})",
-                                        data=result.original_file_bytes,
-                                        file_name=f"original_{uploaded_file.name}",
-                                        mime="application/octet-stream",
-                                        key="download_original"
-                                    )
-                            with dl_col2:
-                                st.download_button(
-                                    "📥 Скачать DOCX-версию",
-                                    data=result.docx_file_bytes,
-                                    file_name=f"{Path(uploaded_file.name).stem}.docx",
-                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                    key="download_docx"
-                                )
-                        else:
-                            st.subheader("📋 Извлечённый текст")
-                            st.text_area("Весь текст документа (прокрутите вниз):", value=result.raw_text, height=400, key="full_text_area")
-
-                # Stage 2: Level 1 Extraction
-                elif stage.name == "level1_extraction":
-                    status_text.text("🔍 Level 1: Извлечение базовых сущностей...")
-
-                    with st.expander(f"✅ Level 1 Extraction ({stage.duration_sec:.1f} сек)", expanded=True):
-                        used_model, optimal_model = get_optimal_model_info("level1")
-                        st.success(f"**Найдено сущностей:** {stage.results.get('entities_count', 0)}")
-                        st.info(f"**Модель:** {used_model} | **Оптимально:** {optimal_model}")
-
-                        # Метрики по типам
-                        by_type = stage.results.get("by_type", {})
-                        cols = st.columns(min(len(by_type), 3))
-                        for idx2, (entity_type, count) in enumerate(by_type.items()):
-                            with cols[idx2 % 3]:
-                                st.metric(entity_type, count)
-
-                        # Детальная таблица
-                        st.subheader("📋 Детальная таблица сущностей")
-                        details = stage.results.get("details", {})
-
-                        all_entities = []
-                        for entity_type, entities in details.items():
-                            for ent in entities:
-                                all_entities.append({
-                                    "Тип": entity_type,
-                                    "Значение": ent.get("value", ""),
-                                    "Назначение": get_entity_purpose(entity_type),
-                                    "Confidence": f"{ent.get('confidence', 0):.2f}",
-                                    "Контекст": ent.get("context", "")[:80] + "..."
-                                })
-
-                        if all_entities:
-                            st.dataframe(all_entities, use_container_width=True)
-                            st.caption("💡 **Назначение** показывает, для чего используется каждая сущность в системе")
-
-                # Stage 3: LLM Extraction
-                elif stage.name == "llm_extraction":
-                    status_text.text("🤖 LLM извлечение структурированных данных...")
-
-                    with st.expander(f"✅ LLM Extraction ({stage.duration_sec:.1f} сек)", expanded=True):
-                        model_used = stage.results.get("model", "N/A")
-                        used_model, optimal_model = get_optimal_model_info("llm")
-
-                        st.success(f"**Модель использована:** {model_used}")
-                        st.info(f"**Оптимальная модель:** {optimal_model}")
-
-                        # Метрики обработки
-                        st.subheader("📊 Метрики обработки")
-                        tokens_in = stage.results.get("tokens_input", 0)
-                        tokens_out = stage.results.get("tokens_output", 0)
-                        cost = stage.results.get("cost_usd", 0)
-                        confidence = stage.results.get("confidence", 0)
-
-                        metrics_data = [
-                            {"Параметр": "Токены (вход)", "Значение": f"{tokens_in:,}", "Описание": "Токенов отправлено в модель"},
-                            {"Параметр": "Токены (выход)", "Значение": f"{tokens_out:,}", "Описание": "Токенов получено от модели"},
-                            {"Параметр": "Всего токенов", "Значение": f"{tokens_in + tokens_out:,}", "Описание": "Суммарное использование"},
-                            {"Параметр": "Стоимость", "Значение": f"${cost:.5f}", "Описание": f"{model_used}: см. тарифы провайдера"},
-                            {"Параметр": "Confidence", "Значение": f"{confidence:.2f} ({confidence*100:.0f}%)", "Описание": "Средняя уверенность модели"},
-                        ]
-                        st.table(metrics_data)
-
-                        # Извлеченные данные
-                        st.subheader("📊 Извлеченные данные")
-                        extracted_data = stage.results.get("data", {})
-
-                        tab1, tab2, tab3, tab4, tab5 = st.tabs(["Стороны", "Предмет", "Финансы", "Сроки", "Санкции"])
-
-                        with tab1:
-                            st.json(extracted_data.get("parties", {}))
-
-                        with tab2:
-                            st.json(extracted_data.get("subject", {}))
-
-                        with tab3:
-                            st.json(extracted_data.get("financials", {}))
-
-                        with tab4:
-                            st.json(extracted_data.get("terms", {}))
-
-                        with tab5:
-                            st.json(extracted_data.get("penalties", {}))
-
-                # Stage 4: RAG Filter
-                elif stage.name == "rag_filter":
-                    status_text.text("🔍 RAG: Поиск похожих договоров...")
-
-                    with st.expander(f"✅ RAG Filter ({stage.duration_sec:.1f} сек)", expanded=False):
-                        used_model, optimal_model = get_optimal_model_info("rag")
-                        similar_count = stage.results.get("similar_contracts_found", 0)
-
-                        st.success(f"**Найдено похожих:** {similar_count} договоров")
-                        st.info(f"**Модель:** {used_model} | **Оптимально:** {optimal_model}")
-
-                        contracts = stage.results.get("contracts", [])
-                        if contracts:
-                            similar_data = []
-                            for c in contracts:
-                                similar_data.append({
-                                    "Договор": c.get("contract_number", "N/A"),
-                                    "Схожесть": f"{c.get('similarity', 0):.2f}",
-                                    "Тип": c.get("doc_type", "N/A"),
-                                    "Сумма": f"₽{c.get('amount', 0):,.0f}"
-                                })
-                            st.dataframe(similar_data, use_container_width=True)
-                        else:
-                            st.info("Похожие договоры не найдены (база пуста или нет совпадений)")
-
-            # Stage 5: Validation
-            progress_bar.progress(95)
-            status_text.text("✅ Валидация извлеченных данных...")
-
-            validation_result = result.validation_result or {}
-
-            with st.expander("⚠️ Validation", expanded=True):
-                used_model, optimal_model = get_optimal_model_info("validation")
-
-                is_valid = validation_result.get("is_valid", False)
-                has_warnings = len(validation_result.get("warnings", [])) > 0
-                if is_valid and not has_warnings:
-                    st.success("**Статус:** ✅ Валидация пройдена")
-                elif is_valid and has_warnings:
-                    st.warning("**Статус:** ⚠️ Валидация пройдена с предупреждениями")
-                else:
-                    st.error("**Статус:** ❌ Валидация не пройдена")
-
-                st.info(f"**Модель:** {used_model} | **Оптимально:** {optimal_model}")
-
-                errors = validation_result.get("errors", [])
-                warnings = validation_result.get("warnings", [])
-
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Ошибок", len(errors), delta="✅" if len(errors) == 0 else "❌")
-                with col2:
-                    st.metric("Предупреждений", len(warnings), delta="⚠️" if len(warnings) > 0 else "✅")
-                with col3:
-                    compliance = 100 - (len(errors) * 10 + len(warnings) * 2)
-                    st.metric("Соответствие", f"{compliance}%", delta=f"{compliance-100}%" if compliance < 100 else "✅")
-
-                # Отображение конкретных ошибок и предупреждений
-                if errors:
-                    st.markdown("### ❌ Ошибки валидации:")
-                    for i, error in enumerate(errors, 1):
-                        if isinstance(error, dict):
-                            st.error(f"**{i}.** `{error.get('field', 'N/A')}`: {error.get('message', 'N/A')}")
-                        else:
-                            st.error(f"**{i}.** {error}")
-
-                if warnings:
-                    st.markdown("### ⚠️ Предупреждения:")
-                    for i, warning in enumerate(warnings, 1):
-                        if isinstance(warning, dict):
-                            st.warning(f"**{i}.** `{warning.get('field', 'N/A')}`: {warning.get('message', 'N/A')}")
-                        else:
-                            st.warning(f"**{i}.** {warning}")
-
-                st.markdown("---")
-
-                # Детальная валидация по разделам (ДИНАМИЧЕСКИ из LLM)
-                section_analysis_data = None
-                for stage in result.stages:
-                    if stage.name == "section_analysis" and stage.status == "success":
-                        section_analysis_data = stage.results.get("full_data")
-                        break
-
-                if section_analysis_data:
-                    display_validation_section_dynamic(section_analysis_data, is_new_contract=is_new_contract)
-                elif use_section_analysis:
-                    st.warning("⚠️ Детальный анализ разделов не был выполнен из-за ошибки.")
-                else:
-                    st.info("ℹ️ Детальный анализ разделов отключен. Включите в настройках обработки для глубокого анализа.")
+            # Сбрасываем производные данные Stage 2 при новом запуске обработки
+            for key in [
+                "template_comparison",
+                "template_comparison_signature",
+                "accepted_recommendations",
+                "accepted_recommendation_keys",
+                "risk_scoring",
+                "risk_scoring_signature",
+                "final_corrected_docx",
+                "final_protocol_docx",
+                "final_protocol_json",
+            ]:
+                st.session_state.pop(key, None)
 
             progress_bar.progress(100)
-            status_text.empty()
-
-            st.markdown("---")
-
-            # Финальные метрики
-            st.header("3️⃣ Итоговые метрики")
-
-            col1, col2, col3, col4 = st.columns(4)
-
-            with col1:
-                st.metric("⏱️ Время обработки", f"{result.total_time_sec:.1f} сек")
-
-            with col2:
-                st.metric("💰 Стоимость", f"${result.total_cost_usd:.5f}")
-
-            with col3:
-                st.metric("🤖 Модель", result.model_used)
-
-            with col4:
-                avg_confidence = 0
-                for stage in result.stages:
-                    if stage.name == "llm_extraction":
-                        avg_confidence = stage.results.get("confidence", 0)
-                st.metric("🎯 Уверенность", f"{avg_confidence*100:.0f}%")
-
-            st.markdown("---")
-
-            # Кнопки действий
-            st.header("4️⃣ Действия с результатами")
-
-            col1, col2, col3, col4 = st.columns(4)
-
-            with col1:
-                if st.button("✅ Утвердить", type="primary", use_container_width=True):
-                    st.success("✅ Документ утвержден и сохранен в базу данных!")
-                    st.balloons()
-
-            with col2:
-                if st.button("💾 Сохранить JSON", use_container_width=True):
-                    json_data = json.dumps(result.to_dict(), ensure_ascii=False, indent=2)
-                    st.download_button(
-                        "Скачать результат",
-                        json_data,
-                        file_name=f"contract_analysis_{uploaded_file.name}.json",
-                        mime="application/json"
-                    )
-
-            with col3:
-                # Скачивание DOCX-версии
-                if result.docx_file_bytes:
-                    st.download_button(
-                        "📄 Скачать DOCX",
-                        data=result.docx_file_bytes,
-                        file_name=f"{Path(uploaded_file.name).stem}_result.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        use_container_width=True,
-                        key="download_docx_final"
-                    )
-                else:
-                    if st.button("📄 Экспорт в Word", use_container_width=True):
-                        st.info("DOCX-версия недоступна для данного формата")
-
-            with col4:
-                if st.button("❌ Отклонить", use_container_width=True):
-                    st.error("Документ отклонен")
-
-            # Протокол разногласий (только для подписанных договоров)
-            if not is_new_contract and st.session_state.get("accepted_recommendations"):
-                st.markdown("---")
-                st.header("📋 Протокол разногласий")
-                st.info(f"Собрано рекомендаций: {len(st.session_state.accepted_recommendations)}")
-
-                protocol_data = []
-                for i, rec in enumerate(st.session_state.accepted_recommendations, 1):
-                    protocol_data.append({
-                        "№": i,
-                        "Раздел": f"{rec['section_number']}. {rec['section_title']}",
-                        "Текст оригинала": rec["original_text"],
-                        "Предлагаемая редакция": rec["proposed_text"],
-                        "Обоснование": rec["reason"]
-                    })
-
-                st.dataframe(protocol_data, use_container_width=True)
-
-                # Скачать протокол как JSON
-                protocol_json = json.dumps(protocol_data, ensure_ascii=False, indent=2)
-                st.download_button(
-                    "📥 Скачать протокол разногласий (JSON)",
-                    protocol_json,
-                    file_name=f"protocol_{uploaded_file.name}.json",
-                    mime="application/json",
-                    key="download_protocol"
-                )
+            status_text.text("✅ Обработка завершена!")
+            st.rerun()
 
         except Exception as e:
             st.error(f"Ошибка обработки: {str(e)}")
@@ -814,6 +636,761 @@ if uploaded_file is not None:
             # Удаляем временный файл
             if os.path.exists(tmp_file_path):
                 os.unlink(tmp_file_path)
+
+    # ═══════════════════════════════════════════════════════
+    # ОТОБРАЖЕНИЕ РЕЗУЛЬТАТОВ (вне блока кнопки, из session_state)
+    # ═══════════════════════════════════════════════════════
+    if "processing_result" in st.session_state:
+        result = st.session_state["processing_result"]
+        _file_name = st.session_state.get("processing_file_name", "document")
+        _use_section_analysis = st.session_state.get("processing_use_section_analysis", True)
+        _is_new_contract = st.session_state.get("processing_is_new_contract", True)
+        _ensure_recommendation_state()
+
+        # Кнопка сброса результатов
+        if st.button("🔄 Новый анализ", help="Очистить результаты и загрузить новый документ"):
+            for key in [
+                "processing_result",
+                "processing_file_name",
+                "processing_use_section_analysis",
+                "processing_is_new_contract",
+                "processing_result_signature",
+                "template_comparison",
+                "template_comparison_signature",
+                "accepted_recommendations",
+                "accepted_recommendation_keys",
+                "risk_scoring",
+                "risk_scoring_signature",
+                "final_corrected_docx",
+                "final_protocol_docx",
+                "final_protocol_json",
+            ]:
+                st.session_state.pop(key, None)
+            st.rerun()
+
+        st.markdown("---")
+        st.header("2️⃣ Ход обработки")
+
+        # Отображаем результаты каждого этапа
+        for idx, stage in enumerate(result.stages):
+
+            # Stage 1: Text Extraction
+            if stage.name == "text_extraction":
+                with st.expander(f"✅ Извлечение текста ({stage.duration_sec:.1f} сек)", expanded=True):
+                    used_model, optimal_model = get_optimal_model_info("text_extraction")
+                    st.success(f"**Метод:** {stage.results.get('method', 'N/A')} | **Формат:** {stage.results.get('original_format', 'N/A')} | **DOCX-версия:** {'✅ Есть' if stage.results.get('has_docx') else '❌ Нет'}")
+                    st.info(f"**Модель:** {used_model} | **Оптимально:** {optimal_model}")
+
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Страниц", stage.results.get("pages", "N/A"))
+                    with col2:
+                        st.metric("Символов", f"{stage.results.get('chars', 0):,}")
+                    with col3:
+                        confidence = stage.results.get("confidence")
+                        st.metric("Confidence", f"{confidence:.2f}" if confidence else "N/A")
+
+                    # Извлечённый текст
+                    with st.expander("📋 Извлечённый текст (plain text)", expanded=False):
+                        st.text_area("Весь текст документа:", value=result.raw_text, height=400, key="full_text_area")
+
+            # Stage 2: Level 1 Extraction
+            elif stage.name == "level1_extraction":
+                with st.expander(f"✅ Level 1 Extraction ({stage.duration_sec:.1f} сек)", expanded=True):
+                    used_model, optimal_model = get_optimal_model_info("level1")
+                    st.success(f"**Найдено сущностей:** {stage.results.get('entities_count', 0)}")
+                    st.info(f"**Модель:** {used_model} | **Оптимально:** {optimal_model}")
+
+                    # Метрики по типам
+                    by_type = stage.results.get("by_type", {})
+                    if by_type:
+                        cols = st.columns(min(len(by_type), 3))
+                        for idx2, (entity_type, count) in enumerate(by_type.items()):
+                            with cols[idx2 % 3]:
+                                st.metric(entity_type, count)
+
+                    # Детальная таблица
+                    st.subheader("📋 Детальная таблица сущностей")
+                    details = stage.results.get("details", {})
+
+                    all_entities = []
+                    for entity_type, entities in details.items():
+                        for ent in entities:
+                            all_entities.append({
+                                "Тип": entity_type,
+                                "Значение": ent.get("value", ""),
+                                "Назначение": get_entity_purpose(entity_type),
+                                "Confidence": f"{ent.get('confidence', 0):.2f}",
+                                "Контекст": ent.get("context", "")[:80] + "..."
+                            })
+
+                    if all_entities:
+                        st.dataframe(all_entities, use_container_width=True)
+                        st.caption("💡 **Назначение** показывает, для чего используется каждая сущность в системе")
+
+            # Stage 3: LLM Extraction
+            elif stage.name == "llm_extraction":
+                with st.expander(f"✅ LLM Extraction ({stage.duration_sec:.1f} сек)", expanded=True):
+                    model_used = stage.results.get("model", "N/A")
+                    used_model, optimal_model = get_optimal_model_info("llm")
+
+                    st.success(f"**Модель использована:** {model_used}")
+                    st.info(f"**Оптимальная модель:** {optimal_model}")
+
+                    # Метрики обработки
+                    st.subheader("📊 Метрики обработки")
+                    tokens_in = stage.results.get("tokens_input", 0)
+                    tokens_out = stage.results.get("tokens_output", 0)
+                    cost = stage.results.get("cost_usd", 0)
+                    confidence = stage.results.get("confidence", 0)
+
+                    metrics_data = [
+                        {"Параметр": "Токены (вход)", "Значение": f"{tokens_in:,}", "Описание": "Токенов отправлено в модель"},
+                        {"Параметр": "Токены (выход)", "Значение": f"{tokens_out:,}", "Описание": "Токенов получено от модели"},
+                        {"Параметр": "Всего токенов", "Значение": f"{tokens_in + tokens_out:,}", "Описание": "Суммарное использование"},
+                        {"Параметр": "Стоимость", "Значение": f"${cost:.5f}", "Описание": f"{model_used}: см. тарифы провайдера"},
+                        {"Параметр": "Confidence", "Значение": f"{confidence:.2f} ({confidence*100:.0f}%)", "Описание": "Средняя уверенность модели"},
+                    ]
+                    st.table(metrics_data)
+
+                    # Извлеченные данные
+                    st.subheader("📊 Извлеченные данные")
+                    extracted_data = stage.results.get("data", {})
+
+                    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Стороны", "Предмет", "Финансы", "Сроки", "Санкции"])
+
+                    with tab1:
+                        st.json(extracted_data.get("parties", {}))
+
+                    with tab2:
+                        st.json(extracted_data.get("subject", {}))
+
+                    with tab3:
+                        st.json(extracted_data.get("financials", {}))
+
+                    with tab4:
+                        st.json(extracted_data.get("terms", {}))
+
+                    with tab5:
+                        st.json(extracted_data.get("penalties", {}))
+
+            # Stage 4: RAG Filter
+            elif stage.name == "rag_filter":
+                with st.expander(f"✅ RAG Filter ({stage.duration_sec:.1f} сек)", expanded=False):
+                    used_model, optimal_model = get_optimal_model_info("rag")
+                    similar_count = stage.results.get("similar_contracts_found", 0)
+
+                    st.success(f"**Найдено похожих:** {similar_count} договоров")
+                    st.info(f"**Модель:** {used_model} | **Оптимально:** {optimal_model}")
+
+                    contracts = stage.results.get("contracts", [])
+                    if contracts:
+                        similar_data = []
+                        for c in contracts:
+                            similar_data.append({
+                                "Договор": c.get("contract_number", "N/A"),
+                                "Схожесть": f"{c.get('similarity', 0):.2f}",
+                                "Тип": c.get("doc_type", "N/A"),
+                                "Сумма": f"₽{c.get('amount', 0):,.0f}"
+                            })
+                        st.dataframe(similar_data, use_container_width=True)
+                    else:
+                        st.info("Похожие договоры не найдены (база пуста или нет совпадений)")
+
+        # ═══════════════════════════════════════════════════════
+        # ОТДЕЛЬНЫЙ РАЗДЕЛ: Проверка форматирования (DOCX-версия)
+        # ═══════════════════════════════════════════════════════
+        st.markdown("---")
+        st.header("📄 Проверка форматирования документа")
+        st.markdown("Документ извлечён в формат DOCX с сохранением исходного форматирования. "
+                    "Проверьте корректность распознавания структуры, заголовков, списков и отступов.")
+
+        if result.docx_file_bytes:
+            # Информация о конвертации
+            orig_fmt = result.original_format or 'unknown'
+            fmt_labels = {
+                'pdf': '📕 PDF → DOCX (pdf2docx, сохранение макета и таблиц)',
+                'docx': '📘 DOCX (оригинал, форматирование сохранено полностью)',
+                'txt': '📝 TXT → DOCX (воссоздание структуры из plain text)',
+                'xml': '📋 XML → DOCX (извлечение и структурирование)',
+                'html': '🌐 HTML → DOCX (конвертация с сохранением стилей)',
+                'image': '🖼️ Изображение → OCR → DOCX (распознавание текста)',
+            }
+            st.info(f"**Метод конвертации:** {fmt_labels.get(orig_fmt, f'Формат: {orig_fmt}')}")
+
+            # Предпросмотр DOCX в виде HTML
+            preview_html = render_docx_preview(result.docx_file_bytes)
+            st.markdown(preview_html, unsafe_allow_html=True)
+
+            # Кнопки скачивания
+            st.markdown("---")
+            dl_col1, dl_col2, dl_col3 = st.columns(3)
+            with dl_col1:
+                if result.original_file_bytes:
+                    orig_ext = result.original_format or 'bin'
+                    st.download_button(
+                        f"📥 Скачать оригинал (.{orig_ext})",
+                        data=result.original_file_bytes,
+                        file_name=f"original_{_file_name}",
+                        mime="application/octet-stream",
+                        key="download_original"
+                    )
+            with dl_col2:
+                st.download_button(
+                    "📥 Скачать DOCX-версию",
+                    data=result.docx_file_bytes,
+                    file_name=f"{Path(_file_name).stem}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    key="download_docx"
+                )
+            with dl_col3:
+                docx_size_kb = len(result.docx_file_bytes) / 1024
+                orig_size_kb = len(result.original_file_bytes) / 1024 if result.original_file_bytes else 0
+                st.metric("Размер DOCX", f"{docx_size_kb:.1f} КБ",
+                         delta=f"Оригинал: {orig_size_kb:.1f} КБ")
+        else:
+            st.error("DOCX-версия не была сгенерирована. Проверьте наличие библиотеки python-docx.")
+
+        st.markdown("---")
+
+        # Stage 5: Validation
+        section_analysis_data = _extract_section_analysis_data(result)
+        validation_result = result.validation_result or {}
+
+        with st.expander("⚠️ Validation", expanded=True):
+            used_model, optimal_model = get_optimal_model_info("validation")
+
+            is_valid = validation_result.get("is_valid", False)
+            has_warnings = len(validation_result.get("warnings", [])) > 0
+            if is_valid and not has_warnings:
+                st.success("**Статус:** ✅ Валидация пройдена")
+            elif is_valid and has_warnings:
+                st.warning("**Статус:** ⚠️ Валидация пройдена с предупреждениями")
+            else:
+                st.error("**Статус:** ❌ Валидация не пройдена")
+
+            st.info(f"**Модель:** {used_model} | **Оптимально:** {optimal_model}")
+
+            errors = validation_result.get("errors", [])
+            warnings = validation_result.get("warnings", [])
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Ошибок", len(errors), delta="✅" if len(errors) == 0 else "❌")
+            with col2:
+                st.metric("Предупреждений", len(warnings), delta="⚠️" if len(warnings) > 0 else "✅")
+            with col3:
+                compliance = 100 - (len(errors) * 10 + len(warnings) * 2)
+                st.metric("Соответствие", f"{compliance}%", delta=f"{compliance-100}%" if compliance < 100 else "✅")
+
+            # Отображение конкретных ошибок и предупреждений
+            if errors:
+                st.markdown("### ❌ Ошибки валидации:")
+                for i, error in enumerate(errors, 1):
+                    if isinstance(error, dict):
+                        st.error(f"**{i}.** `{error.get('field', 'N/A')}`: {error.get('message', 'N/A')}")
+                    else:
+                        st.error(f"**{i}.** {error}")
+
+            if warnings:
+                st.markdown("### ⚠️ Предупреждения:")
+                for i, warning in enumerate(warnings, 1):
+                    if isinstance(warning, dict):
+                        st.warning(f"**{i}.** `{warning.get('field', 'N/A')}`: {warning.get('message', 'N/A')}")
+                    else:
+                        st.warning(f"**{i}.** {warning}")
+
+            st.markdown("---")
+
+            if section_analysis_data:
+                display_validation_section_dynamic(section_analysis_data, is_new_contract=_is_new_contract)
+            elif _use_section_analysis:
+                st.warning("⚠️ Детальный анализ разделов не был выполнен из-за ошибки.")
+            else:
+                st.info("ℹ️ Детальный анализ разделов отключен. Включите в настройках обработки для глубокого анализа.")
+
+        # ═══════════════════════════════════════════════════════
+        # Stage 2.2: Сравнение с шаблоном (Pre-Execution only)
+        # ═══════════════════════════════════════════════════════
+        template_signature = None
+        if _is_new_contract and template_file is not None:
+            template_bytes = template_file.getvalue()
+            template_signature = hashlib.sha256(template_bytes).hexdigest()
+        else:
+            # В режиме без шаблона убираем результаты сравнения, чтобы не показывать устаревшие данные
+            st.session_state.pop("template_comparison", None)
+            st.session_state.pop("template_comparison_signature", None)
+
+        needs_template_comparison = (
+            _is_new_contract
+            and template_file is not None
+            and st.session_state.get("template_comparison_signature") != template_signature
+        )
+
+        if needs_template_comparison:
+            st.markdown("---")
+            st.header("📋 Сравнение с эталонным шаблоном (Playbook)")
+            st.markdown("Автоматическое выявление отклонений черновика от стандарта компании")
+
+            with st.spinner("🔍 Сравнение черновика с шаблоном..."):
+                tmp_tpl_path = None
+                try:
+                    # Извлекаем текст шаблона
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(template_file.name).suffix) as tmp_tpl:
+                        tmp_tpl.write(template_file.getvalue())
+                        tmp_tpl_path = tmp_tpl.name
+
+                    template_text = extract_text_from_file(tmp_tpl_path, Path(template_file.name).suffix)
+
+                    # Определяем тип договора из LLM extraction
+                    contract_type = "неизвестный"
+                    if result.extracted_data:
+                        ct = result.extracted_data.get("metadata", {}).get("doc_type", "")
+                        if ct:
+                            contract_type = ct
+
+                    # Запускаем сравнение
+                    def _run_comparison():
+                        loop = asyncio.new_event_loop()
+                        try:
+                            return loop.run_until_complete(
+                                compare_with_template_async(result.raw_text, template_text, contract_type)
+                            )
+                        finally:
+                            loop.close()
+
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(_run_comparison)
+                        comparison = future.result(timeout=120)
+
+                    # Сохранение результатов сравнения в session_state
+                    st.session_state["template_comparison"] = comparison
+                    st.session_state["template_comparison_signature"] = template_signature
+                    st.rerun()
+
+                except Exception as e:
+                    st.error(f"Ошибка сравнения с шаблоном: {str(e)}")
+                    import traceback
+                    st.code(traceback.format_exc())
+                finally:
+                    if tmp_tpl_path and os.path.exists(tmp_tpl_path):
+                        os.unlink(tmp_tpl_path)
+
+        # Отображение сохраненных результатов сравнения с шаблоном
+        if "template_comparison" in st.session_state:
+            comparison = st.session_state["template_comparison"]
+
+            st.markdown("---")
+            st.header("📋 Сравнение с эталонным шаблоном (Playbook)")
+            st.markdown("Автоматическое выявление отклонений черновика от стандарта компании")
+
+            # Вердикт
+            verdict_map = {
+                "approved": ("✅ СООТВЕТСТВУЕТ", "success"),
+                "minor_changes": ("⚠️ НЕЗНАЧИТЕЛЬНЫЕ ОТКЛОНЕНИЯ", "warning"),
+                "major_changes": ("🔴 СУЩЕСТВЕННЫЕ ОТКЛОНЕНИЯ", "error"),
+                "reject": ("❌ НЕ СООТВЕТСТВУЕТ ШАБЛОНУ", "error"),
+            }
+            verdict_text, verdict_type = verdict_map.get(comparison.verdict, ("❓", "info"))
+
+            if verdict_type == "success":
+                st.success(f"**Вердикт:** {verdict_text}")
+            elif verdict_type == "warning":
+                st.warning(f"**Вердикт:** {verdict_text}")
+            else:
+                st.error(f"**Вердикт:** {verdict_text}")
+
+            st.markdown(f"**Итог:** {comparison.summary}")
+
+            # Метрики
+            mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+            with mc1:
+                score_delta = "✅" if comparison.compliance_score >= 80 else ("⚠️" if comparison.compliance_score >= 60 else "❌")
+                st.metric("Соответствие шаблону", f"{comparison.compliance_score}%", delta=score_delta)
+            with mc2:
+                st.metric("🔴 Критичных", comparison.critical_count)
+            with mc3:
+                st.metric("🟠 Высоких", comparison.high_count)
+            with mc4:
+                st.metric("🟡 Средних", comparison.medium_count)
+            with mc5:
+                st.metric("🟢 Низких", comparison.low_count)
+
+            # Пропущенные и лишние разделы
+            if comparison.missing_sections or comparison.extra_sections:
+                miss_col, extra_col = st.columns(2)
+                with miss_col:
+                    if comparison.missing_sections:
+                        st.markdown("**❌ Разделы шаблона, отсутствующие в черновике:**")
+                        for ms in comparison.missing_sections:
+                            st.error(f"• {ms}")
+                with extra_col:
+                    if comparison.extra_sections:
+                        st.markdown("**➕ Разделы черновика, отсутствующие в шаблоне:**")
+                        for es in comparison.extra_sections:
+                            st.info(f"• {es}")
+
+            # Таблица отклонений
+            if comparison.deviations:
+                st.markdown("---")
+                st.subheader(f"📊 Детальный список отклонений ({comparison.total_deviations})")
+
+                # Фильтр по severity
+                severity_filter = st.multiselect(
+                    "Фильтр по важности:",
+                    ["critical", "high", "medium", "low"],
+                    default=["critical", "high", "medium", "low"],
+                    key="severity_filter"
+                )
+
+                severity_icons = {
+                    "critical": "🔴",
+                    "high": "🟠",
+                    "medium": "🟡",
+                    "low": "🟢"
+                }
+                type_icons = {
+                    "missing": "❌ Отсутствует",
+                    "modified": "✏️ Изменено",
+                    "added": "➕ Добавлено",
+                    "weakened": "⬇️ Ослаблено",
+                    "contradicts": "⚡ Противоречит"
+                }
+
+                for dev_idx, dev in enumerate(comparison.deviations):
+                    if dev.severity not in severity_filter:
+                        continue
+
+                    sev_icon = severity_icons.get(dev.severity, "❓")
+                    type_label = type_icons.get(dev.deviation_type, dev.deviation_type)
+
+                    with st.expander(
+                        f"{sev_icon} {dev.section} — {type_label}: {dev.description[:80]}...",
+                        expanded=(dev.severity in ["critical", "high"])
+                    ):
+                        st.markdown(f"**Важность:** {sev_icon} {dev.severity.upper()}")
+                        st.markdown(f"**Тип отклонения:** {type_label}")
+                        st.markdown(f"**Описание:** {dev.description}")
+                        st.markdown(f"**Риск:** {dev.risk}")
+
+                        if dev.template_text:
+                            st.markdown("**Текст в шаблоне (эталон):**")
+                            st.text_area("", value=dev.template_text, height=100,
+                                        key=f"tpl_text_{dev_idx}", disabled=True)
+
+                        if dev.draft_text:
+                            st.markdown("**Текст в черновике:**")
+                            st.text_area("", value=dev.draft_text, height=100,
+                                        key=f"draft_text_{dev_idx}", disabled=True)
+
+                        st.markdown(f"**💡 Рекомендация:** {dev.recommendation}")
+
+                        # Кнопки действий
+                        bc1, bc2, bc3 = st.columns(3)
+                        with bc1:
+                            if st.button("✅ Принять рекомендацию", key=f"cmp_accept_{dev_idx}", type="primary"):
+                                priority_map = {
+                                    "critical": "critical",
+                                    "high": "important",
+                                    "medium": "optional",
+                                    "low": "optional",
+                                }
+                                payload = {
+                                    "section_number": dev.section,
+                                    "section_title": dev.section,
+                                    "original_text": dev.draft_text or dev.template_text or "",
+                                    "proposed_text": dev.recommendation,
+                                    "reason": f"{dev.description}. Риск: {dev.risk}",
+                                    "action_type": dev.deviation_type,
+                                    "priority": priority_map.get(dev.severity, "optional"),
+                                    "source": "template_comparison",
+                                    "target": "docx",
+                                }
+                                added = add_accepted_recommendation(payload)
+                                if added:
+                                    st.success("✅ Рекомендация добавлена в список правок Stage 2.4.")
+                                else:
+                                    st.info("ℹ️ Эта рекомендация уже была принята ранее.")
+                        with bc2:
+                            if st.button("⏭️ Пропустить", key=f"cmp_skip_{dev_idx}"):
+                                st.info("Отклонение пропущено.")
+                        with bc3:
+                            if st.button("❌ Оставить как есть", key=f"cmp_keep_{dev_idx}"):
+                                st.warning("Оставлено без изменений.")
+
+        st.markdown("---")
+        st.header("🎯 Risk Scoring Engine (Stage 2.3)")
+
+        template_comparison = st.session_state.get("template_comparison")
+        template_deviations = 0
+        if template_comparison is not None:
+            template_deviations = int(getattr(template_comparison, "total_deviations", 0))
+
+        accepted_count = len(st.session_state.get("accepted_recommendations", []))
+        result_signature = st.session_state.get("processing_result_signature", "")
+        risk_signature = f"{result_signature}:{template_deviations}:{accepted_count}"
+
+        if st.session_state.get("risk_scoring_signature") != risk_signature:
+            try:
+                from src.services.risk_scorer import RiskScorer
+
+                scorer = RiskScorer()
+                risk_scoring = scorer.score(
+                    raw_text=result.raw_text,
+                    extracted_data=result.extracted_data or {},
+                    validation_result=result.validation_result or {},
+                    template_comparison=template_comparison,
+                    section_analysis=section_analysis_data,
+                    accepted_recommendations=st.session_state.get("accepted_recommendations", []),
+                )
+                st.session_state["risk_scoring"] = risk_scoring
+                st.session_state["risk_scoring_signature"] = risk_signature
+            except Exception as e:
+                st.error(f"Ошибка расчета риск-скоринга: {str(e)}")
+
+        risk_scoring = st.session_state.get("risk_scoring")
+        if risk_scoring is not None:
+            risk_data = risk_scoring.to_dict() if hasattr(risk_scoring, "to_dict") else risk_scoring
+            base_level = risk_data.get("risk_level", "low")
+            residual_level = risk_data.get("residual_risk_level", "low")
+
+            if base_level == "critical":
+                st.error(f"🔴 **Текущий риск:** {_risk_level_ru(base_level)}")
+            elif base_level == "high":
+                st.warning(f"🟠 **Текущий риск:** {_risk_level_ru(base_level)}")
+            elif base_level == "medium":
+                st.warning(f"🟡 **Текущий риск:** {_risk_level_ru(base_level)}")
+            else:
+                st.success(f"🟢 **Текущий риск:** {_risk_level_ru(base_level)}")
+
+            st.markdown(risk_data.get("summary", ""))
+
+            rc1, rc2, rc3, rc4, rc5 = st.columns(5)
+            with rc1:
+                st.metric("Базовый риск", f"{risk_data.get('overall_score', 0)}/100")
+            with rc2:
+                st.metric("Остаточный риск", f"{risk_data.get('mitigated_score', 0)}/100")
+            with rc3:
+                st.metric("Уровень после правок", _risk_level_ru(residual_level))
+            with rc4:
+                st.metric("Критичных факторов", risk_data.get("critical_factors", 0))
+            with rc5:
+                st.metric("Принято правок", accepted_count)
+
+            factors = risk_data.get("factors", [])
+            if factors:
+                st.subheader("📋 Факторы риска")
+                factor_rows = []
+                severity_order = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+                sorted_factors = sorted(
+                    factors,
+                    key=lambda x: (
+                        severity_order.get(str(x.get("severity", "low")).lower(), 0),
+                        int(x.get("points", 0))
+                    ),
+                    reverse=True
+                )
+                for item in sorted_factors:
+                    factor_rows.append(
+                        {
+                            "Важность": _risk_level_ru(item.get("severity", "low")),
+                            "Фактор": item.get("title", ""),
+                            "Баллы": item.get("points", 0),
+                            "Описание": item.get("description", ""),
+                            "Рекомендация": item.get("recommendation", ""),
+                            "Источник": item.get("source", ""),
+                        }
+                    )
+                st.dataframe(factor_rows, use_container_width=True)
+
+            section_risks = risk_data.get("section_risks", [])
+            if section_risks:
+                st.subheader("📊 Риск по разделам")
+                section_rows = []
+                for item in section_risks:
+                    section_rows.append(
+                        {
+                            "Раздел": f"{item.get('section_number', '')}. {item.get('section_title', '')}",
+                            "Риск (0-100)": item.get("score", 0),
+                            "Уровень": _risk_level_ru(item.get("level", "low")),
+                            "Предупреждений": item.get("warnings_count", 0),
+                            "Рекомендаций": item.get("recommendations_count", 0),
+                        }
+                    )
+                st.dataframe(section_rows, use_container_width=True)
+
+        st.markdown("---")
+        st.header("🛠️ Генерация итогового документа (Stage 2.4)")
+
+        accepted_recommendations = st.session_state.get("accepted_recommendations", [])
+        st.info(f"Принято рекомендаций для финализации: {len(accepted_recommendations)}")
+
+        if accepted_recommendations:
+            preview_rows = []
+            for idx, rec in enumerate(accepted_recommendations, 1):
+                preview_rows.append(
+                    {
+                        "№": idx,
+                        "Раздел": f"{rec.get('section_number', '')}. {rec.get('section_title', '')}",
+                        "Тип": rec.get("action_type", "modify"),
+                        "Приоритет": rec.get("priority", "optional"),
+                        "Источник": rec.get("source", "section_analysis"),
+                    }
+                )
+            st.dataframe(preview_rows, use_container_width=True)
+
+            if _is_new_contract:
+                generation_variant = st.radio(
+                    "Выберите вариант финального документа:",
+                    ["Вариант A: Исправленный DOCX", "Вариант B: Протокол разногласий"],
+                    horizontal=True,
+                    key="stage24_variant",
+                )
+            else:
+                generation_variant = "Вариант B: Протокол разногласий"
+                st.info("Для подписанных договоров используется вариант B: формирование протокола разногласий.")
+
+            if st.button("⚙️ Сгенерировать итоговый документ", key="stage24_generate_btn", type="primary"):
+                try:
+                    from src.services.stage2_document_generator import Stage2DocumentGenerator
+
+                    generator = Stage2DocumentGenerator()
+                    if generation_variant.startswith("Вариант A"):
+                        final_docx = generator.generate_corrected_docx(
+                            base_docx_bytes=result.docx_file_bytes,
+                            accepted_recommendations=accepted_recommendations,
+                            source_file_name=_file_name,
+                        )
+                        st.session_state["final_corrected_docx"] = final_docx
+                        st.session_state.pop("final_protocol_docx", None)
+                        st.session_state.pop("final_protocol_json", None)
+                        st.success("✅ Исправленный DOCX сформирован.")
+                    else:
+                        protocol_docx = generator.generate_disagreement_protocol_docx(
+                            accepted_recommendations=accepted_recommendations,
+                            source_file_name=_file_name,
+                        )
+                        protocol_json = generator.generate_disagreement_protocol_json(
+                            accepted_recommendations=accepted_recommendations
+                        )
+                        st.session_state["final_protocol_docx"] = protocol_docx
+                        st.session_state["final_protocol_json"] = protocol_json
+                        st.success("✅ Протокол разногласий сформирован.")
+                except Exception as e:
+                    st.error(f"Ошибка генерации итогового документа: {str(e)}")
+
+            fd_col1, fd_col2, fd_col3 = st.columns(3)
+            with fd_col1:
+                if st.session_state.get("final_corrected_docx"):
+                    st.download_button(
+                        "📥 Скачать исправленный DOCX",
+                        data=st.session_state["final_corrected_docx"],
+                        file_name=f"{Path(_file_name).stem}_corrected.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        key="download_final_corrected_docx",
+                    )
+            with fd_col2:
+                if st.session_state.get("final_protocol_docx"):
+                    st.download_button(
+                        "📥 Скачать протокол (DOCX)",
+                        data=st.session_state["final_protocol_docx"],
+                        file_name=f"{Path(_file_name).stem}_protocol.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        key="download_final_protocol_docx",
+                    )
+            with fd_col3:
+                if st.session_state.get("final_protocol_json"):
+                    st.download_button(
+                        "📥 Скачать протокол (JSON)",
+                        data=st.session_state["final_protocol_json"],
+                        file_name=f"{Path(_file_name).stem}_protocol.json",
+                        mime="application/json",
+                        key="download_final_protocol_json",
+                    )
+        else:
+            st.warning("Примите минимум одну рекомендацию в разделах анализа или в сравнении с шаблоном.")
+
+        st.markdown("---")
+
+        # Финальные метрики
+        st.header("3️⃣ Итоговые метрики")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric("⏱️ Время обработки", f"{result.total_time_sec:.1f} сек")
+
+        with col2:
+            st.metric("💰 Стоимость", f"${result.total_cost_usd:.5f}")
+
+        with col3:
+            st.metric("🤖 Модель", result.model_used)
+
+        with col4:
+            avg_confidence = 0
+            for stg in result.stages:
+                if stg.name == "llm_extraction":
+                    avg_confidence = stg.results.get("confidence", 0)
+            st.metric("🎯 Уверенность", f"{avg_confidence*100:.0f}%")
+
+        st.markdown("---")
+
+        # Кнопки действий
+        st.header("4️⃣ Действия с результатами")
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            if st.button("✅ Утвердить", type="primary", use_container_width=True):
+                st.success("✅ Документ утвержден и сохранен в базу данных!")
+                st.balloons()
+
+        with col2:
+            json_data = json.dumps(result.to_dict(), ensure_ascii=False, indent=2)
+            st.download_button(
+                "💾 Сохранить JSON",
+                json_data,
+                file_name=f"contract_analysis_{_file_name}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+
+        with col3:
+            # Скачивание DOCX-версии (всегда доступна)
+            if result.docx_file_bytes:
+                st.download_button(
+                    "📄 Скачать DOCX",
+                    data=result.docx_file_bytes,
+                    file_name=f"{Path(_file_name).stem}_result.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True,
+                    key="download_docx_final"
+                )
+
+        with col4:
+            if st.button("❌ Отклонить", use_container_width=True):
+                st.error("Документ отклонен")
+
+        # Протокол разногласий (только для подписанных договоров)
+        if not _is_new_contract and st.session_state.get("accepted_recommendations"):
+            st.markdown("---")
+            st.header("📋 Протокол разногласий (предпросмотр)")
+            st.info(f"Собрано рекомендаций: {len(st.session_state.get('accepted_recommendations', []))}")
+
+            protocol_data = []
+            for i, rec in enumerate(st.session_state.get("accepted_recommendations", []), 1):
+                protocol_data.append({
+                    "№": i,
+                    "Раздел": f"{rec.get('section_number', '')}. {rec.get('section_title', '')}",
+                    "Текст оригинала": rec.get("original_text", ""),
+                    "Предлагаемая редакция": rec.get("proposed_text", ""),
+                    "Обоснование": rec.get("reason", "")
+                })
+
+            st.dataframe(protocol_data, use_container_width=True)
+
+            st.caption("Для выгрузки DOCX/JSON используйте блок Stage 2.4 выше.")
 
 else:
     st.info("👆 Загрузите файл договора для начала обработки")
