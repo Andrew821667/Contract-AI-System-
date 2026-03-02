@@ -120,6 +120,160 @@ class TextExtractor:
             file_path.seek(pos)
             return data if isinstance(data, bytes) else data.encode('utf-8')
 
+    def _text_to_docx(self, text: str) -> Optional[bytes]:
+        """Конвертирует plain text в DOCX с воссозданием форматирования исходного документа"""
+        if not DocxDocument:
+            logger.warning("python-docx not available, skipping text→DOCX conversion")
+            return None
+
+        try:
+            import re
+            from docx.shared import Pt, Cm, RGBColor
+            from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+            doc = DocxDocument()
+
+            # Настраиваем стиль по умолчанию — стандартный юридический формат
+            style = doc.styles['Normal']
+            font = style.font
+            font.name = 'Times New Roman'
+            font.size = Pt(12)
+            style.paragraph_format.space_after = Pt(0)
+            style.paragraph_format.space_before = Pt(0)
+            style.paragraph_format.line_spacing = 1.15
+
+            # Настраиваем поля страницы (ГОСТ Р 7.0.97-2016)
+            for section in doc.sections:
+                section.top_margin = Cm(2)
+                section.bottom_margin = Cm(2)
+                section.left_margin = Cm(3)
+                section.right_margin = Cm(1.5)
+
+            lines = text.split('\n')
+            i = 0
+            while i < len(lines):
+                line = lines[i]
+                stripped = line.strip()
+
+                # Пустая строка
+                if not stripped:
+                    doc.add_paragraph('')
+                    i += 1
+                    continue
+
+                # Определяем отступ оригинала (кол-во пробелов)
+                leading_spaces = len(line) - len(line.lstrip())
+
+                # Определяем тип строки
+                is_title = (
+                    stripped.isupper() and 3 < len(stripped) < 120
+                    and not stripped.startswith(('—', '-', '•'))
+                )
+                is_section_header = bool(re.match(
+                    r'^(\d+\.?\s+|РАЗДЕЛ|СТАТЬЯ|ГЛАВА|Раздел|Статья|Глава|ПРИЛОЖЕНИЕ|Приложение)',
+                    stripped
+                )) and len(stripped) < 120
+                is_numbered_item = bool(re.match(r'^\d+[\.\)]\s', stripped))
+                is_sub_item = bool(re.match(r'^[\d]+\.[\d]+[\.\)]\s', stripped))
+                is_bullet = stripped.startswith(('- ', '— ', '• ', '* '))
+                is_signature_block = bool(re.match(
+                    r'^(Заказчик|Исполнитель|Покупатель|Поставщик|Арендатор|Арендодатель|Подрядчик|Сторона)\s*[:.]?\s*$',
+                    stripped, re.IGNORECASE
+                ))
+
+                p = doc.add_paragraph()
+
+                if is_title:
+                    # Заголовок документа — жирный, центрированный, 14pt
+                    run = p.add_run(stripped)
+                    run.bold = True
+                    run.font.size = Pt(14)
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    p.paragraph_format.space_before = Pt(12)
+                    p.paragraph_format.space_after = Pt(6)
+
+                elif is_section_header and not is_sub_item:
+                    # Заголовок раздела — жирный, 13pt
+                    run = p.add_run(stripped)
+                    run.bold = True
+                    run.font.size = Pt(13)
+                    p.paragraph_format.space_before = Pt(12)
+                    p.paragraph_format.space_after = Pt(4)
+                    # Центрируем если заглавными
+                    if stripped.split(maxsplit=1)[-1].isupper() if len(stripped.split()) > 1 else False:
+                        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+                elif is_bullet:
+                    # Маркированный список
+                    bullet_text = re.sub(r'^[-—•\*]\s+', '', stripped)
+                    run = p.add_run(bullet_text)
+                    try:
+                        p.style = doc.styles['List Bullet']
+                    except KeyError:
+                        pass  # Используем Normal если List Bullet нет
+                    p.paragraph_format.left_indent = Cm(1.25)
+
+                elif is_sub_item:
+                    # Подпункт (2.1, 3.2.1 и т.д.)
+                    run = p.add_run(stripped)
+                    p.paragraph_format.left_indent = Cm(1.25)
+                    p.paragraph_format.first_line_indent = Cm(0)
+
+                elif is_numbered_item:
+                    # Нумерованный пункт
+                    run = p.add_run(stripped)
+                    p.paragraph_format.first_line_indent = Cm(1.25)
+
+                elif is_signature_block:
+                    # Блок подписи
+                    run = p.add_run(stripped)
+                    run.bold = True
+                    p.paragraph_format.space_before = Pt(24)
+
+                else:
+                    # Обычный параграф — сохраняем отступ из оригинала
+                    run = p.add_run(stripped)
+                    if leading_spaces >= 4:
+                        p.paragraph_format.first_line_indent = Cm(1.25)
+                    elif leading_spaces > 0:
+                        p.paragraph_format.left_indent = Cm(leading_spaces * 0.125)
+
+                i += 1
+
+            # Сохраняем в bytes
+            buffer = io.BytesIO()
+            doc.save(buffer)
+            docx_bytes = buffer.getvalue()
+
+            logger.info(f"Text→DOCX conversion successful: {len(docx_bytes)} bytes, {len(lines)} lines")
+            return docx_bytes
+
+        except Exception as e:
+            logger.error(f"Text→DOCX conversion failed: {e}")
+            return None
+
+    def _html_to_docx(self, html_content: str) -> Optional[bytes]:
+        """Конвертирует HTML в DOCX с сохранением форматирования"""
+        try:
+            from htmldocx import HtmlToDocx
+
+            parser = HtmlToDocx()
+            doc = DocxDocument()
+            parser.add_html_to_document(html_content, doc)
+
+            buffer = io.BytesIO()
+            doc.save(buffer)
+            docx_bytes = buffer.getvalue()
+
+            logger.info(f"HTML→DOCX conversion successful: {len(docx_bytes)} bytes")
+            return docx_bytes
+        except ImportError:
+            logger.warning("htmldocx not installed, falling back to text conversion")
+            return None
+        except Exception as e:
+            logger.error(f"HTML→DOCX conversion failed: {e}")
+            return None
+
     def _convert_pdf_to_docx(self, pdf_path: Union[Path, str], pdf_bytes: bytes) -> Optional[bytes]:
         """Конвертирует PDF в DOCX с сохранением форматирования"""
         if not Pdf2DocxConverter:
@@ -258,6 +412,10 @@ class TextExtractor:
 
             # Конвертируем PDF → DOCX для редактирования
             docx_bytes = self._convert_pdf_to_docx(file_path, original_bytes)
+            # Fallback: если pdf2docx не сработал — создаём DOCX из текста
+            if docx_bytes is None and full_text:
+                logger.info("PDF→DOCX conversion failed, falling back to text→DOCX")
+                docx_bytes = self._text_to_docx(full_text)
 
             return ExtractionResult(
                 text=full_text,
@@ -324,6 +482,9 @@ class TextExtractor:
 
             # Конвертируем PDF → DOCX
             docx_bytes = self._convert_pdf_to_docx(file_path, original_bytes)
+            if docx_bytes is None and full_text:
+                logger.info("PDF→DOCX (OCR path) failed, falling back to text→DOCX")
+                docx_bytes = self._text_to_docx(full_text)
 
             return ExtractionResult(
                 text=full_text,
@@ -426,6 +587,9 @@ class TextExtractor:
             full_text = "\n".join(text_parts)
             avg_confidence = total_confidence / conf_count if conf_count > 0 else 0.0
 
+            # Генерируем DOCX из распознанного текста
+            docx_bytes = self._text_to_docx(full_text)
+
             return ExtractionResult(
                 text=full_text,
                 method='ocr',
@@ -438,7 +602,7 @@ class TextExtractor:
                     'image_size': image.size
                 },
                 original_file_bytes=original_bytes,
-                docx_file_bytes=None,
+                docx_file_bytes=docx_bytes,
                 original_format='image'
             )
 
@@ -457,6 +621,9 @@ class TextExtractor:
             else:
                 text = original_bytes.decode('utf-8') if isinstance(original_bytes, bytes) else original_bytes
 
+            # Генерируем DOCX из текста
+            docx_bytes = self._text_to_docx(text)
+
             return ExtractionResult(
                 text=text,
                 method='txt',
@@ -468,7 +635,7 @@ class TextExtractor:
                     'lines': text.count('\n') + 1
                 },
                 original_file_bytes=original_bytes,
-                docx_file_bytes=None,
+                docx_file_bytes=docx_bytes,
                 original_format='txt'
             )
 
@@ -506,6 +673,9 @@ class TextExtractor:
             text_parts = extract_text_recursive(root)
             text = "\n".join(text_parts)
 
+            # Генерируем DOCX из текста
+            docx_bytes = self._text_to_docx(text)
+
             return ExtractionResult(
                 text=text,
                 method='xml',
@@ -519,7 +689,7 @@ class TextExtractor:
                     'raw_xml_chars': len(raw_content)
                 },
                 original_file_bytes=original_bytes,
-                docx_file_bytes=None,
+                docx_file_bytes=docx_bytes,
                 original_format='xml'
             )
 
@@ -538,6 +708,8 @@ class TextExtractor:
             text = re.sub(r'<[^>]+>', ' ', text)
             text = re.sub(r'\s+', ' ', text).strip()
 
+            docx_bytes = self._text_to_docx(text)
+
             return ExtractionResult(
                 text=text,
                 method='xml_fallback',
@@ -546,7 +718,7 @@ class TextExtractor:
                 processing_time=0,
                 metadata={'total_chars': len(text), 'parse_error': str(e)},
                 original_file_bytes=original_bytes,
-                docx_file_bytes=None,
+                docx_file_bytes=docx_bytes,
                 original_format='xml'
             )
 
@@ -586,6 +758,11 @@ class TextExtractor:
             text = re.sub(r'\n\s*\n', '\n\n', text)
             text = text.strip()
 
+            # Генерируем DOCX из HTML с сохранением форматирования
+            docx_bytes = self._html_to_docx(raw_content)
+            if docx_bytes is None:
+                docx_bytes = self._text_to_docx(text)
+
             return ExtractionResult(
                 text=text,
                 method='html',
@@ -598,7 +775,7 @@ class TextExtractor:
                     'raw_html_chars': len(raw_content)
                 },
                 original_file_bytes=original_bytes,
-                docx_file_bytes=None,
+                docx_file_bytes=docx_bytes,
                 original_format='html'
             )
 

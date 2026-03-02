@@ -13,10 +13,10 @@ Pipeline:
 import logging
 import time
 import json
-from typing import Dict, Any, Optional, BinaryIO
+from typing import Dict, Any, Optional, List, BinaryIO, Union
 from pathlib import Path
 from datetime import datetime
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 
 from src.services.text_extractor import TextExtractor
 from src.services.level1_extractor import Level1Extractor
@@ -46,7 +46,7 @@ class DocumentProcessingResult:
     status: str  # 'completed', 'failed', 'pending_approval'
 
     # Промежуточные результаты (для стеклянного ящика)
-    stages: list[ProcessingStage]
+    stages: List[ProcessingStage]
 
     # Финальные извлеченные данные
     extracted_data: Optional[Dict[str, Any]]
@@ -139,7 +139,7 @@ class DocumentProcessor:
         logger.info(f"DocumentProcessor initialized: model={model}, base_url={base_url or 'default'}, ocr={use_ocr}, rag={self.use_rag}, section_analysis={use_section_analysis}")
 
     async def process_document(self,
-                               file_path: str | Path | BinaryIO,
+                               file_path: Union[str, Path, BinaryIO],
                                file_extension: Optional[str] = None) -> DocumentProcessingResult:
         """
         Обрабатывает документ через весь пайплайн

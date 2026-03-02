@@ -600,7 +600,7 @@ if uploaded_file is not None:
                     _run_async,
                     process_document_async(tmp_file_path, Path(uploaded_file.name).suffix, use_section_analysis=use_section_analysis)
                 )
-                result = future.result(timeout=300)
+                result = future.result(timeout=600)
 
             # Сохраняем результат в session_state чтобы он не пропадал при перерисовке
             st.session_state["processing_result"] = result
@@ -1261,6 +1261,7 @@ if uploaded_file is not None:
                             base_docx_bytes=result.docx_file_bytes,
                             accepted_recommendations=accepted_recommendations,
                             source_file_name=_file_name,
+                            raw_text=result.raw_text,
                         )
                         st.session_state["final_corrected_docx"] = final_docx
                         st.session_state.pop("final_protocol_docx", None)

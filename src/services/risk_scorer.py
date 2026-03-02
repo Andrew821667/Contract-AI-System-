@@ -329,17 +329,14 @@ class RiskScorer:
                     )
                 )
 
-        # 5) Mitigation by accepted recommendations
-        accepted_count = len(accepted_recommendations)
-        critical_accepted = 0
-        for item in accepted_recommendations:
-            priority = (item.get("priority") or "").lower()
-            if priority == "critical":
-                critical_accepted += 1
-
-        mitigation_points = min(35, accepted_count * 3 + critical_accepted * 4)
+        # 5) Mitigation by accepted recommendations — привязка к факторам
         raw_score = min(100, max(0, score))
-        mitigated = max(0, raw_score - mitigation_points)
+        mitigated = raw_score
+
+        if accepted_recommendations:
+            mitigated = self._calculate_mitigation(
+                raw_score, factors, accepted_recommendations
+            )
 
         critical_count = sum(1 for f in factors if f.severity == "critical")
         high_count = sum(1 for f in factors if f.severity == "high")
@@ -367,6 +364,106 @@ class RiskScorer:
             section_risks=section_risks,
             summary=summary,
         )
+
+    def _calculate_mitigation(
+        self,
+        raw_score: int,
+        factors: List[RiskFactor],
+        accepted_recommendations: List[Dict[str, Any]],
+    ) -> int:
+        """
+        Рассчитывает остаточный риск после принятия рекомендаций.
+        Привязывает каждую рекомендацию к фактору через source.
+        """
+        # Маппинг source рекомендации → код фактора
+        source_to_factor = {
+            "template_comparison": ["template_deviations", "missing_sections"],
+            "section_analysis": ["section_risks"],
+            "validation": ["validation_errors", "validation_warnings"],
+        }
+
+        # Группируем принятые рекомендации по source
+        recs_by_source: Dict[str, List[Dict[str, Any]]] = {}
+        for rec in accepted_recommendations:
+            src = (rec.get("source") or "section_analysis").lower()
+            recs_by_source.setdefault(src, []).append(rec)
+
+        total_reduction = 0
+
+        for factor in factors:
+            # Находим рекомендации, которые закрывают этот фактор
+            related_recs: List[Dict[str, Any]] = []
+            for src, factor_codes in source_to_factor.items():
+                if factor.code in factor_codes and src in recs_by_source:
+                    related_recs.extend(recs_by_source[src])
+
+            # Также проверяем прямое совпадение source фактора
+            if factor.source in recs_by_source:
+                for rec in recs_by_source[factor.source]:
+                    if rec not in related_recs:
+                        related_recs.append(rec)
+
+            if not related_recs:
+                continue
+
+            # Считаем процент снижения по фактору
+            reduction_pct = self._calc_factor_reduction(related_recs, factor)
+            factor_reduction = int(factor.points * reduction_pct)
+            total_reduction += factor_reduction
+
+        # Также: общий бонус за рекомендации, не привязанные к факторам
+        # (например, text_heuristics рекомендации)
+        unmatched_recs = []
+        matched_sources = set()
+        for src, codes in source_to_factor.items():
+            matched_sources.add(src)
+        for factor in factors:
+            matched_sources.add(factor.source)
+
+        for rec in accepted_recommendations:
+            src = (rec.get("source") or "section_analysis").lower()
+            # Рекомендации без привязки к факторам — небольшой общий бонус
+            priority = (rec.get("priority") or "optional").lower()
+            if priority == "critical":
+                total_reduction += 3
+            elif priority == "important":
+                total_reduction += 2
+            else:
+                total_reduction += 1
+
+        # Cap: mitigation не может превышать 90% от raw_score
+        max_mitigation = int(raw_score * 0.9)
+        total_reduction = min(total_reduction, max_mitigation)
+
+        return max(0, raw_score - total_reduction)
+
+    def _calc_factor_reduction(
+        self,
+        related_recs: List[Dict[str, Any]],
+        factor: RiskFactor,
+    ) -> float:
+        """
+        Рассчитывает процент снижения фактора на основе принятых рекомендаций.
+        Возвращает 0.0-0.85 (максимум 85% снижения одного фактора).
+        """
+        if not related_recs:
+            return 0.0
+
+        # Считаем вес принятых рекомендаций
+        weight = 0.0
+        for rec in related_recs:
+            priority = (rec.get("priority") or "optional").lower()
+            if priority == "critical":
+                weight += 0.35
+            elif priority in ("important", "high"):
+                weight += 0.25
+            elif priority in ("medium",):
+                weight += 0.15
+            else:
+                weight += 0.10
+
+        # Cap на 85% снижения одного фактора
+        return min(0.85, weight)
 
     def _score_sections(self, section_analysis: Dict[str, Any]) -> List[SectionRisk]:
         """Score risks by section analysis output."""

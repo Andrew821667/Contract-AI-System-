@@ -6,6 +6,7 @@ Contract Section Analyzer - Динамический анализ раздело
 
 import logging
 import json
+from datetime import datetime
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from openai import AsyncOpenAI
@@ -80,102 +81,62 @@ class ContractSectionAnalyzer:
 
     async def extract_sections(self, contract_text: str) -> List[ContractSection]:
         """
-        Извлекает структуру документа (разделы и подразделы)
-
-        Args:
-            contract_text: Полный текст договора
-
-        Returns:
-            Список разделов договора
+        Извлекает структуру документа (разделы и подразделы) через regex.
+        Быстрый парсер без LLM-вызова (~0 сек вместо ~70 сек).
         """
-        logger.info("Extracting contract sections...")
-
-        prompt = f"""Проанализируй структуру договора и извлеки все разделы.
-
-ДОГОВОР:
-{contract_text}
-
-ЗАДАЧА:
-Определи все основные разделы договора (1, 2, 3... или I, II, III...).
-Для каждого раздела укажи:
-- Номер раздела
-- Название раздела
-- Полный текст раздела
-
-Верни результат в JSON формате:
-{{
-  "sections": [
-    {{
-      "number": "1",
-      "title": "ПРЕДМЕТ ДОГОВОРА",
-      "text": "полный текст раздела...",
-      "start_pos": 123,
-      "end_pos": 456
-    }},
-    ...
-  ]
-}}
-
-ВАЖНО:
-- Извлекай ТОЛЬКО основные разделы (не подпункты типа 1.1, 1.2)
-- Включай полный текст каждого раздела
-- Если раздел содержит подпункты - включай их в текст раздела
-- start_pos и end_pos - примерные позиции символов в тексте
-"""
-
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "Ты эксперт по анализу юридических документов. Точно извлекаешь структуру договоров."},
-                    {"role": "user", "content": prompt}
-                ],
-                response_format={"type": "json_object"},
-                temperature=0.1
-            )
-
-            result = json.loads(response.choices[0].message.content)
-            sections = []
-
-            for s in result.get("sections", []):
-                section = ContractSection(
-                    number=s.get("number", ""),
-                    title=s.get("title", ""),
-                    text=s.get("text", ""),
-                    start_pos=s.get("start_pos", 0),
-                    end_pos=s.get("end_pos", 0)
-                )
-                sections.append(section)
-
-            logger.info(f"Extracted {len(sections)} sections")
-            return sections
-
-        except Exception as e:
-            logger.error(f"Error extracting sections: {e}")
-            # Fallback: простое разбиение по типовым разделам
-            return self._fallback_section_extraction(contract_text)
-
-    def _fallback_section_extraction(self, text: str) -> List[ContractSection]:
-        """Резервный метод извлечения разделов по простым правилам"""
-        sections = []
+        logger.info("Extracting contract sections (regex)...")
         import re
 
-        # Ищем паттерны типа "1. НАЗВАНИЕ", "2. НАЗВАНИЕ" и т.д.
-        pattern = r'(\d+)\.\s+([А-ЯЁ\s]+)\n'
-        matches = list(re.finditer(pattern, text))
+        sections = []
 
-        for i, match in enumerate(matches):
-            number = match.group(1)
-            title = match.group(2).strip()
-            start_pos = match.end()
+        # Паттерны заголовков разделов:
+        # "1. ПРЕДМЕТ ДОГОВОРА", "2. ЦЕНА И ПОРЯДОК РАСЧЕТОВ"
+        # "Раздел 1. ПРЕДМЕТ", "РАЗДЕЛ I. ПРЕДМЕТ"
+        # "I. ПРЕДМЕТ ДОГОВОРА", "II. ЦЕНА"
+        # Также: "1. Предмет договора" (смешанный регистр)
+        patterns = [
+            # "1. НАЗВАНИЕ" или "1. Название" — цифра + точка + текст (>= 2 слов заглавных ИЛИ первое слово заглавное)
+            r'^[ \t]*(\d+)\.\s+([А-ЯЁA-Z][А-ЯЁа-яёA-Za-z\s,\-\(\)]+)',
+            # "Раздел 1. НАЗВАНИЕ"
+            r'^[ \t]*[Рр]аздел\s+(\d+)[\.\)]\s*([А-ЯЁA-Z][А-ЯЁа-яёA-Za-z\s,\-\(\)]+)',
+            # Римские цифры: "I. НАЗВАНИЕ", "II. НАЗВАНИЕ"
+            r'^[ \t]*((?:X{0,3}(?:IX|IV|V?I{0,3})))\.\s+([А-ЯЁA-Z][А-ЯЁа-яёA-Za-z\s,\-\(\)]+)',
+        ]
 
-            # Текст раздела - до начала следующего раздела
-            if i + 1 < len(matches):
-                end_pos = matches[i + 1].start()
+        # Пробуем каждый паттерн, берём тот, что даёт >= 3 совпадений
+        best_matches = []
+        best_pattern = None
+
+        for pattern in patterns:
+            matches = list(re.finditer(pattern, contract_text, re.MULTILINE))
+            # Фильтруем — заголовок должен быть >= 3 символов и не быть подпунктом
+            filtered = []
+            for m in matches:
+                title = m.group(2).strip()
+                # Пропускаем слишком короткие (подпункты типа "1.1")
+                if len(title) >= 3:
+                    filtered.append(m)
+            if len(filtered) > len(best_matches):
+                best_matches = filtered
+                best_pattern = pattern
+
+        if not best_matches:
+            logger.warning("No section headers found by regex, trying LLM fallback...")
+            return await self._llm_extract_sections(contract_text)
+
+        logger.info(f"Found {len(best_matches)} section headers with pattern: {best_pattern}")
+
+        for i, match in enumerate(best_matches):
+            number = match.group(1).strip()
+            title = match.group(2).strip().rstrip('.')
+
+            start_pos = match.start()
+            if i + 1 < len(best_matches):
+                end_pos = best_matches[i + 1].start()
             else:
-                end_pos = len(text)
+                end_pos = len(contract_text)
 
-            section_text = text[start_pos:end_pos].strip()
+            section_text = contract_text[start_pos:end_pos].strip()
 
             sections.append(ContractSection(
                 number=number,
@@ -185,7 +146,56 @@ class ContractSectionAnalyzer:
                 end_pos=end_pos
             ))
 
+        logger.info(f"Extracted {len(sections)} sections via regex")
         return sections
+
+    async def _llm_extract_sections(self, contract_text: str) -> List[ContractSection]:
+        """LLM-fallback для извлечения разделов (если regex не сработал)"""
+        logger.info("Using LLM fallback for section extraction...")
+
+        prompt = f"""Проанализируй структуру договора и извлеки все разделы.
+
+ДОГОВОР:
+{contract_text}
+
+Верни JSON:
+{{
+  "sections": [
+    {{"number": "1", "title": "ПРЕДМЕТ ДОГОВОРА", "text": "полный текст раздела...", "start_pos": 0, "end_pos": 100}},
+    ...
+  ]
+}}
+
+ВАЖНО: только основные разделы (не подпункты 1.1, 1.2), полный текст каждого раздела.
+"""
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "Ты эксперт по анализу юридических документов."},
+                    {"role": "user", "content": prompt}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1
+            )
+
+            result = json.loads(response.choices[0].message.content)
+            sections = []
+            for s in result.get("sections", []):
+                sections.append(ContractSection(
+                    number=s.get("number", ""),
+                    title=s.get("title", ""),
+                    text=s.get("text", ""),
+                    start_pos=s.get("start_pos", 0),
+                    end_pos=s.get("end_pos", 0)
+                ))
+            logger.info(f"LLM extracted {len(sections)} sections")
+            return sections
+
+        except Exception as e:
+            logger.error(f"LLM section extraction failed: {e}")
+            return []
 
     async def analyze_section(
         self,
@@ -215,29 +225,46 @@ class ContractSectionAnalyzer:
 
         prompt = f"""Проведи детальный юридический анализ раздела договора.
 
+📅 ТЕКУЩАЯ ДАТА: {datetime.now().strftime('%d.%m.%Y')} — учитывай при проверке сроков и дат в договоре!
+
 РАЗДЕЛ {section.number}: {section.title}
 {section.text}
+
+ПОЛНЫЙ ТЕКСТ ДОГОВОРА (для системного контекста):
+{full_contract_text}
 
 {similar_context}
 
 ПОРЯДОК АНАЛИЗА:
-1️⃣ Сравни с типовыми/эталонными договорами
-2️⃣ Проверь по актуальной правовой базе РФ (ГК РФ, НК РФ, АПК РФ, отраслевые законы)
-3️⃣ Если база пуста - используй свои знания законодательства
+1️⃣ СИСТЕМНЫЙ анализ раздела В КОНТЕКСТЕ ВСЕГО ДОГОВОРА (не изолированно!)
+2️⃣ Сравни с типовыми/эталонными договорами
+3️⃣ Проверь по актуальной правовой базе РФ (ГК РФ, НК РФ, АПК РФ, отраслевые законы)
+4️⃣ Проверь арифметическую корректность (суммы, проценты, итоги должны сходиться)
+5️⃣ Проверь актуальность дат (текущая дата: {datetime.now().strftime('%d.%m.%Y')})
+
+⚠️ ПРИНЦИПЫ СИСТЕМНОГО АНАЛИЗА:
+- Предмет договора часто РАСКРЫВАЕТСЯ в других разделах и приложениях. Если в разделе "Предмет" есть ссылка на приложение — НЕ считай предмет неопределённым!
+- При обнаружении неполноты в любом разделе — ПРОВЕРЬ, не раскрыта ли информация в других частях договора
+- Суммы этапов ДОЛЖНЫ совпадать с общей суммой. Если не сходятся — это арифметическая ошибка
+- Даты: если срок уже истёк (раньше {datetime.now().strftime('%d.%m.%Y')}) — отметь это
+- НЕ предлагай добавлять условия, которые УЖЕ ЕСТЬ в других разделах договора
 
 ТРЕБУЕТСЯ:
 1. Оценка соответствия эталонным договорам (✅/⚠️/❌)
 2. Детальные проверки элементов раздела (3-5 ключевых элементов)
 3. Проверка по законодательству РФ
 4. Ссылки на конкретные статьи законов
-5. Итоговый вывод
-6. Предупреждения (если есть)
-7. Рекомендации по улучшению С ПРЕДЛАГАЕМЫМ ТЕКСТОМ ПУНКТА
+5. Арифметическая проверка (суммы, проценты, итоги)
+6. Проверка актуальности дат
+7. Итоговый вывод
+8. Предупреждения (если есть)
+9. Рекомендации по улучшению С ПРЕДЛАГАЕМЫМ ТЕКСТОМ ПУНКТА
 
 ⚠️ ВАЖНО ДЛЯ РЕКОМЕНДАЦИЙ:
 - Каждая рекомендация должна включать КОНКРЕТНЫЙ текст пункта/положения договора
 - Формат: "reason" (почему нужно), "proposed_text" (что именно добавить/изменить), "action_type", "priority"
 - Предлагаемый текст должен быть готов к использованию (юридически корректен, конкретен)
+- НЕ предлагай добавлять то, что уже есть в других разделах/приложениях договора
 
 Верни результат в JSON:
 {{
@@ -271,7 +298,32 @@ class ContractSectionAnalyzer:
 - "remove" - УДАЛИТЬ пункт (пункт противоречит закону или ущемляет права)
   Пример: Штраф 50% - незаконно по ГК РФ → action_type="remove"
 
-priority: "critical" (критично - нарушает закон) | "important" (важно - риски) | "optional" (рекомендовано - best practices)
+priority: "critical" | "important" | "optional" (см. матрицу ниже)
+
+⚠️ МАТРИЦА ПРИОРИТЕТОВ (СТРОГО СОБЛЮДАЙ):
+
+🔴 "critical" — ТОЛЬКО если:
+  - Нарушает императивную норму закона (ничтожность/оспоримость сделки по ст. 168, 432 ГК РФ)
+  - Делает договор юридически недействительным
+  - Создаёт реальный финансовый ущерб > 30% суммы договора
+  Примеры: отсутствие существенных условий, противоречие закону, кабальные условия
+
+🟡 "important" — если:
+  - Создаёт умеренный юридический/финансовый риск
+  - Отсутствует рекомендуемый (но не обязательный по закону) раздел
+  - Формулировка двусмысленна и может привести к спорам
+  Примеры: нет порядка приёмки, нечёткие сроки, слабая ответственность
+
+🟢 "optional" — если:
+  - Опечатки, орфографические ошибки (напр. "Мсква" → "Москва")
+  - Незаполненные данные сторон (адрес, ИНН, ОГРН) — это НЕ риск, а необходимость дозаполнить
+  - Стилистические улучшения, best practices, форматирование
+  Примеры: опечатка в фамилии, пустое поле реквизитов, отсутствие нумерации страниц
+
+⛔ НЕ ПУТАЙ "отсутствие данных" и "юридический дефект":
+- Пустое поле ИНН/адреса/реквизитов = optional (просто нужно заполнить перед подписанием)
+- Отсутствие целого раздела об ответственности = important или critical
+- Опечатка в названии города = optional (не влияет на юридическую силу)
 """
 
         try:
