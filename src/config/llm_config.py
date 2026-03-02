@@ -4,7 +4,7 @@ Supports: DeepSeek-V3, Claude 4.5 Sonnet, GPT-4o, GPT-4o-mini
 """
 from pydantic_settings import BaseSettings
 from pydantic import Field
-from typing import Optional
+from typing import Optional, Tuple
 from functools import lru_cache
 
 
@@ -22,7 +22,7 @@ class LLMConfig(BaseSettings):
     # ========================================
     # DeepSeek Configuration
     # ========================================
-    DEEPSEEK_API_KEY: str = Field(..., description="DeepSeek API key")
+    DEEPSEEK_API_KEY: str = Field(default="", description="DeepSeek API key")
     DEEPSEEK_BASE_URL: str = Field(
         default="https://api.deepseek.com/v1",
         description="DeepSeek API base URL"
@@ -43,7 +43,7 @@ class LLMConfig(BaseSettings):
     # ========================================
     # Anthropic Claude Configuration
     # ========================================
-    ANTHROPIC_API_KEY: str = Field(..., description="Anthropic API key")
+    ANTHROPIC_API_KEY: str = Field(default="", description="Anthropic API key")
     ANTHROPIC_MODEL: str = Field(
         default="claude-sonnet-4-20250514",
         description="Claude model name"
@@ -60,7 +60,7 @@ class LLMConfig(BaseSettings):
     # ========================================
     # OpenAI Configuration
     # ========================================
-    OPENAI_API_KEY: str = Field(..., description="OpenAI API key")
+    OPENAI_API_KEY: str = Field(default="", description="OpenAI API key")
     OPENAI_MODEL: str = Field(
         default="gpt-4o",
         description="GPT-4o model name"
@@ -151,7 +151,39 @@ class LLMConfig(BaseSettings):
         env_file_encoding = "utf-8"
         case_sensitive = True
 
-    def get_model_costs(self, model: str) -> tuple[float, float]:
+    def get_model_credentials(self, model: str) -> Tuple[str, Optional[str]]:
+        """
+        Get API key and base_url for a given model.
+
+        Returns:
+            Tuple of (api_key, base_url). base_url is None for OpenAI/Anthropic.
+        """
+        if model in (self.DEEPSEEK_MODEL, "deepseek-chat", "deepseek-v3"):
+            return self.DEEPSEEK_API_KEY, self.DEEPSEEK_BASE_URL
+        elif model in (self.ANTHROPIC_MODEL, "claude-sonnet-4-20250514"):
+            return self.ANTHROPIC_API_KEY, None
+        elif model in (self.OPENAI_MODEL, self.OPENAI_MODEL_MINI, "gpt-4o", "gpt-4o-mini"):
+            return self.OPENAI_API_KEY, None
+        else:
+            # Default to DeepSeek
+            return self.DEEPSEEK_API_KEY, self.DEEPSEEK_BASE_URL
+
+    def is_model_available(self, model: str) -> bool:
+        """Check if a model has a valid API key configured."""
+        api_key, _ = self.get_model_credentials(model)
+        return bool(api_key) and not api_key.startswith("your_")
+
+    def get_available_models(self):
+        """Return list of models with valid API keys."""
+        all_models = [
+            self.DEEPSEEK_MODEL,
+            self.ANTHROPIC_MODEL,
+            self.OPENAI_MODEL,
+            self.OPENAI_MODEL_MINI,
+        ]
+        return [m for m in all_models if self.is_model_available(m)]
+
+    def get_model_costs(self, model: str) -> Tuple[float, float]:
         """
         Get input and output costs per 1M tokens for a given model.
 

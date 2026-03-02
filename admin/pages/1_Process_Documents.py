@@ -169,8 +169,8 @@ async def compare_with_template_async(draft_text: str, template_text: str, contr
 
 
 # Вспомогательная функция для async обработки
-async def process_document_async(file_path, file_ext, use_section_analysis=False):
-    """Асинхронная обработка документа с автоматическим fallback"""
+async def process_document_async(file_path, file_ext, use_section_analysis=False, user_mode="optimal"):
+    """Асинхронная обработка документа через Smart Router"""
     from src.services.document_processor import DocumentProcessor
     import os
     from dotenv import load_dotenv
@@ -180,32 +180,47 @@ async def process_document_async(file_path, file_ext, use_section_analysis=False
     env_path = project_root / ".env"
     load_dotenv(env_path)
 
-    # DeepSeek — основная модель (дешевле, $0.14/1M токенов)
-    # GPT-4o-mini — fallback
+    # Определяем параметры модели
     deepseek_key = os.getenv("DEEPSEEK_API_KEY")
     openai_key = os.getenv("OPENAI_API_KEY")
 
-    if deepseek_key:
-        api_key = deepseek_key
-        base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
-        model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    if user_mode == "force_deepseek":
+        # Принудительно DeepSeek
+        if not deepseek_key:
+            raise ValueError("DeepSeek API ключ не настроен в .env")
+        processor = DocumentProcessor(
+            api_key=deepseek_key,
+            model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+            base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
+            use_rag=False,
+            use_section_analysis=use_section_analysis,
+            user_mode=user_mode
+        )
+    elif deepseek_key:
+        # Smart Router: передаём DeepSeek credentials, router выберет модель
+        processor = DocumentProcessor(
+            api_key=deepseek_key,
+            model=None,  # Router выберет
+            base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
+            use_rag=False,
+            use_section_analysis=use_section_analysis,
+            user_mode=user_mode
+        )
     elif openai_key:
-        api_key = openai_key
-        base_url = None
-        model = os.getenv("OPENAI_MODEL_MINI", "gpt-4o-mini")
+        # Fallback на OpenAI
+        processor = DocumentProcessor(
+            api_key=openai_key,
+            model=os.getenv("OPENAI_MODEL_MINI", "gpt-4o-mini"),
+            base_url=None,
+            use_rag=False,
+            use_section_analysis=use_section_analysis,
+            user_mode=user_mode
+        )
     else:
         raise ValueError(
             "API ключ не настроен.\n"
-            "Добавьте в .env: OPENAI_API_KEY=... или DEEPSEEK_API_KEY=..."
+            "Добавьте в .env: DEEPSEEK_API_KEY=... или OPENAI_API_KEY=..."
         )
-
-    processor = DocumentProcessor(
-        api_key=api_key,
-        model=model,
-        base_url=base_url,
-        use_rag=False,
-        use_section_analysis=use_section_analysis
-    )
 
     result = await processor.process_document(file_path, file_ext)
     return result
@@ -568,6 +583,19 @@ if uploaded_file is not None:
             help="LLM-анализ каждого раздела договора с рекомендациями. Добавляет ~60-90 сек к обработке."
         )
 
+        model_mode = st.selectbox(
+            "🤖 Режим выбора модели",
+            options=["optimal", "force_deepseek"],
+            format_func=lambda x: {
+                "optimal": "Автоматический (Smart Router)",
+                "force_deepseek": "DeepSeek (фиксированный)",
+            }.get(x, x),
+            index=0,
+            help="Smart Router автоматически выбирает модель по сложности документа. "
+                 "При добавлении API ключей Claude/GPT-4o в .env — Router сможет переключаться на них.",
+            key="model_mode_select"
+        )
+
     if st.button("🚀 Начать обработку", type="primary"):
         # Сохраняем загруженный файл во временную директорию
         with tempfile.NamedTemporaryFile(delete=False, suffix=Path(uploaded_file.name).suffix) as tmp_file:
@@ -598,7 +626,7 @@ if uploaded_file is not None:
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(
                     _run_async,
-                    process_document_async(tmp_file_path, Path(uploaded_file.name).suffix, use_section_analysis=use_section_analysis)
+                    process_document_async(tmp_file_path, Path(uploaded_file.name).suffix, use_section_analysis=use_section_analysis, user_mode=model_mode)
                 )
                 result = future.result(timeout=600)
 
@@ -608,6 +636,24 @@ if uploaded_file is not None:
             st.session_state["processing_use_section_analysis"] = use_section_analysis
             st.session_state["processing_is_new_contract"] = is_new_contract
             st.session_state["processing_result_signature"] = f"{uploaded_file.name}:{len(result.raw_text)}:{result.model_used}"
+
+            # Записываем метрики для dashboard
+            if "processing_metrics" not in st.session_state:
+                st.session_state.processing_metrics = []
+            llm_stage = next((s for s in result.stages if s.name == "llm_extraction"), None)
+            st.session_state.processing_metrics.append({
+                "timestamp": __import__("datetime").datetime.now().isoformat(),
+                "file_name": uploaded_file.name,
+                "model_used": result.model_used,
+                "model_selected_by": getattr(result, "model_selected_by", ""),
+                "complexity_score": getattr(result, "complexity_score", 0.0),
+                "tokens_input": llm_stage.results.get("tokens_input", 0) if llm_stage else 0,
+                "tokens_output": llm_stage.results.get("tokens_output", 0) if llm_stage else 0,
+                "cost_usd": result.total_cost_usd,
+                "processing_time_sec": result.total_time_sec,
+                "confidence": llm_stage.results.get("confidence", 0) if llm_stage else 0,
+                "status": llm_stage.results.get("status", llm_stage.status) if llm_stage else result.status,
+            })
 
             # Сбрасываем производные данные Stage 2 при новом запуске обработки
             for key in [
@@ -1334,6 +1380,25 @@ if uploaded_file is not None:
                 if stg.name == "llm_extraction":
                     avg_confidence = stg.results.get("confidence", 0)
             st.metric("🎯 Уверенность", f"{avg_confidence*100:.0f}%")
+
+        # Smart Router метрики
+        complexity = getattr(result, 'complexity_score', 0.0)
+        selected_by = getattr(result, 'model_selected_by', '')
+        if complexity > 0 or selected_by:
+            col_r1, col_r2, col_r3 = st.columns(3)
+            with col_r1:
+                complexity_label = "простой" if complexity < 0.5 else ("средний" if complexity < 0.8 else "сложный")
+                st.metric("📊 Сложность документа", f"{complexity:.2f} ({complexity_label})")
+            with col_r2:
+                by_label = {"router": "Smart Router", "force": "Ручной выбор", "fallback": "Fallback", "default": "По умолчанию"}.get(selected_by, selected_by)
+                st.metric("🔀 Выбор модели", by_label)
+            with col_r3:
+                llm_status = ""
+                for stg in result.stages:
+                    if stg.name == "llm_extraction":
+                        llm_status = stg.results.get("status", stg.status)
+                status_label = {"success": "Успешно", "fallback_used": "Fallback", "retry_success": "После retry"}.get(llm_status, llm_status)
+                st.metric("📡 Статус LLM", status_label)
 
         st.markdown("---")
 

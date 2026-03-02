@@ -1,7 +1,7 @@
 # 📊 Contract AI System - Текущее состояние проекта
 
-**Последнее обновление:** 2026-02-24
-**Статус:** Stage 2 — Pre-Execution (в процессе финальной приемки: 2.1-2.4 реализованы, требуется ручное UI-тестирование)
+**Последнее обновление:** 2026-03-02
+**Статус:** Stage 3 Smart Router Production — ЗАВЕРШЁН ✅
 
 ---
 
@@ -148,7 +148,8 @@ Contract-AI-System-/
 ├── config/settings.py                      # Pydantic Settings
 ├── admin/
 │   └── pages/
-│       └── 1_Process_Documents.py          # ⭐⭐⭐ СТЕКЛЯННЫЙ ЯЩИК (единый UI)
+│       ├── 1_Process_Documents.py          # ⭐⭐⭐ СТЕКЛЯННЫЙ ЯЩИК (единый UI)
+│       └── 3_Model_Metrics.py             # 📊 Dashboard метрик Smart Router
 ├── src/
 │   ├── services/
 │   │   ├── document_processor.py           # ⭐ Оркестратор пайплайна (6 этапов)
@@ -160,6 +161,8 @@ Contract-AI-System-/
 │   │   ├── template_comparator.py          # ⭐ Stage 2.2: Сравнение с шаблоном (НОВЫЙ)
 │   │   ├── risk_scorer.py                  # ⭐ Stage 2.3: Rule-based риск-скоринг 0-100
 │   │   ├── stage2_document_generator.py    # ⭐ Stage 2.4: Исправленный DOCX + протокол разногласий
+│   │   ├── complexity_scorer.py             # ⭐ Stage 3: Оценка сложности документа (0.0-1.0)
+│   │   ├── model_router.py                 # ⭐ Stage 3: Smart Router (выбор модели по сложности)
 │   │   ├── template_manager.py             # Управление шаблонами (Jinja2 + DOCX)
 │   │   └── rag_service.py                  # RAG (отключён, нужен PostgreSQL)
 │   ├── models/database.py                  # SQLAlchemy модели (14 таблиц)
@@ -299,10 +302,32 @@ with concurrent.futures.ThreadPoolExecutor() as executor:
 
 ## 📋 Оставшиеся этапы (после Stage 2)
 
-### Stage 3: Smart Router Production
-- Оценка сложности документа (complexity_score)
-- Автоматическое переключение DeepSeek ↔ Claude
-- Метрики качества и стоимости
+### ✅ Stage 3: Smart Router Production — ГОТОВ
+
+Что реализовано:
+- `src/services/complexity_scorer.py` — Rule-based оценка сложности документа (0.0-1.0)
+  - Факторы: страницы, OCR confidence, объём текста, секции, таблицы, метод извлечения, плотность
+- `src/services/model_router.py` — Smart Router (выбор модели по сложности)
+  - `select_model(complexity, is_scanned, user_mode)` → model name
+  - `get_fallback_model(current_model)` → fallback model
+  - Пороги: <0.5 → DeepSeek, 0.5-0.8 → DeepSeek/GPT-4o, >0.8 → Claude
+- `src/config/llm_config.py` — Multi-model конфигурация
+  - `get_model_credentials()`, `is_model_available()`, `get_available_models()`
+  - Cost tracking per model (input/output per 1M tokens)
+- **Интеграция в DocumentProcessor:**
+  - После text extraction → ComplexityScorer → Router → выбор модели
+  - Fallback при ошибке LLM → альтернативная модель → retry
+  - `model_selected_by`: router / force / fallback / default
+- **UI в 1_Process_Documents.py:**
+  - Selectbox режима модели (Smart Router / Force DeepSeek)
+  - Отображение complexity score, способа выбора модели, статуса LLM
+- **Dashboard:** `admin/pages/3_Model_Metrics.py`
+  - Сводка за сессию (документы, стоимость, время, сложность)
+  - Группировка по моделям и статусу
+  - Графики: стоимость, сложность, время по документам
+  - Таблица всех обработок
+  - Конфигурация моделей и доступность API ключей
+- **Ограничение:** сейчас доступен только DeepSeek API key. Claude и GPT-4o подготовлены — нужно только добавить ключи в .env
 
 ### Stage 4: Интеграции + UI
 - Векторный поиск похожих договоров (pgvector)

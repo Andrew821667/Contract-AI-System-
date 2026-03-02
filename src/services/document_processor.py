@@ -24,6 +24,8 @@ from src.services.llm_extractor import LLMExtractor
 from src.services.validation_service import ValidationService
 from src.services.rag_service import RAGService
 from src.services.contract_section_analyzer import ContractSectionAnalyzer
+from src.services.complexity_scorer import ComplexityScorer
+from src.services.model_router import ModelRouter
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +67,10 @@ class DocumentProcessingResult:
     docx_file_bytes: Optional[bytes] = None
     original_format: str = ''
 
+    # Smart Router метрики
+    complexity_score: float = 0.0
+    model_selected_by: str = ''  # 'router', 'force', 'fallback', 'default'
+
     def to_dict(self) -> Dict[str, Any]:
         """Конвертирует в dict для JSON (без бинарных данных)"""
         return {
@@ -78,7 +84,9 @@ class DocumentProcessingResult:
             'model_used': self.model_used,
             'raw_text': self.raw_text,
             'original_format': self.original_format,
-            'has_docx': self.docx_file_bytes is not None
+            'has_docx': self.docx_file_bytes is not None,
+            'complexity_score': self.complexity_score,
+            'model_selected_by': self.model_selected_by,
         }
 
 
@@ -92,29 +100,46 @@ class DocumentProcessor:
 
     def __init__(self,
                  api_key: str = None,
-                 model: str = "deepseek-chat",
+                 model: str = None,
                  base_url: str = None,
                  openai_api_key: str = None,
                  use_ocr: bool = True,
                  use_rag: bool = True,
-                 use_section_analysis: bool = True):
+                 use_section_analysis: bool = True,
+                 user_mode: str = "optimal"):
         """
         Args:
-            api_key: API ключ (DeepSeek или OpenAI)
-            model: Модель для LLM extraction
-            base_url: Base URL API (для DeepSeek: https://api.deepseek.com/v1)
+            api_key: API ключ (DeepSeek или OpenAI). Если None — берём из LLMConfig.
+            model: Модель для LLM extraction. Если None — Smart Router выберет.
+            base_url: Base URL API. Если None — определяется автоматически.
             openai_api_key: Deprecated, используйте api_key
             use_ocr: Использовать ли OCR для сканов
             use_rag: Использовать ли RAG filter
             use_section_analysis: Использовать ли детальный анализ разделов
+            user_mode: Режим Smart Router ('optimal', 'expert', 'testing')
         """
-        # Обратная совместимость: openai_api_key -> api_key
-        effective_key = api_key or openai_api_key
+        self.user_mode = user_mode
+        self.force_model = model  # Если явно указана модель — router не участвует
+        self._explicit_api_key = api_key or openai_api_key
+        self._explicit_base_url = base_url
+
+        # Smart Router и Complexity Scorer
+        self.complexity_scorer = ComplexityScorer()
+        try:
+            self.router = ModelRouter()
+        except Exception as e:
+            logger.warning(f"ModelRouter init failed (missing config?): {e}. Using direct model selection.")
+            self.router = None
+
+        # Определяем начальную модель и credentials
+        effective_model, effective_key, effective_base_url = self._resolve_model_credentials(
+            model, api_key or openai_api_key, base_url
+        )
 
         self.text_extractor = TextExtractor(use_ocr=use_ocr)
         self.level1_extractor = Level1Extractor()
         self.llm_extractor = LLMExtractor(
-            api_key=effective_key, model=model, base_url=base_url
+            api_key=effective_key, model=effective_model, base_url=effective_base_url
         )
         self.validation_service = ValidationService()
 
@@ -133,10 +158,49 @@ class DocumentProcessor:
         # Анализ разделов
         self.use_section_analysis = use_section_analysis
         self.section_analyzer = ContractSectionAnalyzer(
-            model=model, api_key=effective_key, base_url=base_url
+            model=effective_model, api_key=effective_key, base_url=effective_base_url
         ) if use_section_analysis else None
 
-        logger.info(f"DocumentProcessor initialized: model={model}, base_url={base_url or 'default'}, ocr={use_ocr}, rag={self.use_rag}, section_analysis={use_section_analysis}")
+        self._current_model = effective_model
+        self._current_key = effective_key
+        self._current_base_url = effective_base_url
+
+        logger.info(
+            f"DocumentProcessor initialized: model={effective_model}, "
+            f"base_url={effective_base_url or 'default'}, ocr={use_ocr}, "
+            f"rag={self.use_rag}, section_analysis={use_section_analysis}, "
+            f"user_mode={user_mode}, force_model={'yes' if model else 'no (Smart Router)'}"
+        )
+
+    def _resolve_model_credentials(self, model, api_key, base_url):
+        """Определяет модель и credentials — из явных параметров или из LLMConfig."""
+        if model and api_key:
+            # Всё задано явно
+            return model, api_key, base_url
+
+        # Пробуем через LLMConfig
+        try:
+            from src.config.llm_config import get_llm_config
+            config = get_llm_config()
+
+            if not model:
+                model = config.DEEPSEEK_MODEL if config.is_model_available(config.DEEPSEEK_MODEL) else "deepseek-chat"
+
+            if not api_key:
+                api_key, base_url = config.get_model_credentials(model)
+
+            return model, api_key, base_url
+        except Exception as e:
+            logger.warning(f"LLMConfig not available: {e}")
+            # Fallback на переменные окружения
+            import os
+            if not api_key:
+                api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY", "")
+            if not model:
+                model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+            if not base_url and os.getenv("DEEPSEEK_API_KEY"):
+                base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+            return model, api_key, base_url
 
     async def process_document(self,
                                file_path: Union[str, Path, BinaryIO],
@@ -168,6 +232,42 @@ class DocumentProcessor:
             docx_file_bytes = extraction_result.docx_file_bytes
             original_format = extraction_result.original_format
 
+            # Complexity scoring
+            complexity_score = self.complexity_scorer.score(extraction_result)
+            is_scanned = extraction_result.method == "ocr"
+
+            # Smart Router: выбираем модель после анализа сложности
+            model_selected_by = "default"
+            if self.router and not self.force_model:
+                try:
+                    selected_model = self.router.select_model(
+                        doc_complexity_score=complexity_score,
+                        is_scanned_image=is_scanned,
+                        user_mode=self.user_mode
+                    )
+                    # Проверяем доступность выбранной модели
+                    from src.config.llm_config import get_llm_config
+                    config = get_llm_config()
+                    if config.is_model_available(selected_model):
+                        new_key, new_base_url = config.get_model_credentials(selected_model)
+                        # Пересоздаём LLM extractor с выбранной моделью
+                        if selected_model != self._current_model:
+                            self.llm_extractor = LLMExtractor(
+                                api_key=new_key, model=selected_model, base_url=new_base_url
+                            )
+                            self._current_model = selected_model
+                            self._current_key = new_key
+                            self._current_base_url = new_base_url
+                            logger.info(f"Smart Router switched model to: {selected_model}")
+                        model_selected_by = "router"
+                    else:
+                        logger.info(f"Router selected {selected_model} but API key missing, keeping {self._current_model}")
+                        model_selected_by = "default"
+                except Exception as e:
+                    logger.warning(f"Smart Router failed: {e}. Keeping current model.")
+            elif self.force_model:
+                model_selected_by = "force"
+
             stages.append(ProcessingStage(
                 name="text_extraction",
                 status="success",
@@ -179,9 +279,12 @@ class DocumentProcessor:
                     "confidence": extraction_result.confidence,
                     "metadata": extraction_result.metadata,
                     "original_format": original_format,
-                    "has_docx": docx_file_bytes is not None
+                    "has_docx": docx_file_bytes is not None,
+                    "complexity_score": complexity_score,
+                    "model_selected": self._current_model,
+                    "model_selected_by": model_selected_by,
                 },
-                metadata={"text_preview": raw_text[:500]}  # Превью для UI
+                metadata={"text_preview": raw_text[:500]}
             ))
 
             # Stage 2: Level 1 Extraction
@@ -216,16 +319,54 @@ class DocumentProcessor:
                 }
             ))
 
-            # Stage 3: LLM Extraction
-            logger.info("Stage 3: LLM Extraction...")
+            # Stage 3: LLM Extraction (with fallback)
+            logger.info(f"Stage 3: LLM Extraction (model={self._current_model})...")
             stage_start = time.time()
+            llm_status = "success"
 
-            llm_result = await self.llm_extractor.extract(raw_text, level1_results)
+            try:
+                llm_result = await self.llm_extractor.extract(raw_text, level1_results)
+            except Exception as llm_error:
+                logger.error(f"LLM extraction failed with {self._current_model}: {llm_error}")
+                llm_result = None
+
+                # Try fallback model
+                if self.router:
+                    fallback_model = self.router.get_fallback_model(self._current_model)
+                    if fallback_model:
+                        try:
+                            from src.config.llm_config import get_llm_config
+                            config = get_llm_config()
+                            if config.is_model_available(fallback_model):
+                                fb_key, fb_url = config.get_model_credentials(fallback_model)
+                                logger.info(f"Trying fallback model: {fallback_model}")
+                                fb_extractor = LLMExtractor(
+                                    api_key=fb_key, model=fallback_model, base_url=fb_url
+                                )
+                                llm_result = await fb_extractor.extract(raw_text, level1_results)
+                                model_selected_by = "fallback"
+                                llm_status = "fallback_used"
+                                logger.info(f"Fallback model {fallback_model} succeeded")
+                        except Exception as fb_error:
+                            logger.error(f"Fallback model {fallback_model} also failed: {fb_error}")
+
+                # Retry same model (e.g. transient error)
+                if llm_result is None:
+                    logger.info(f"Retrying {self._current_model} after 2s delay...")
+                    import asyncio
+                    await asyncio.sleep(2)
+                    try:
+                        llm_result = await self.llm_extractor.extract(raw_text, level1_results)
+                        llm_status = "retry_success"
+                    except Exception as retry_error:
+                        logger.error(f"Retry also failed: {retry_error}")
+                        raise retry_error
+
             total_cost += llm_result.cost_usd
 
             stages.append(ProcessingStage(
                 name="llm_extraction",
-                status="success",
+                status=llm_status,
                 duration_sec=llm_result.processing_time,
                 results={
                     "data": llm_result.data,
@@ -233,7 +374,8 @@ class DocumentProcessor:
                     "tokens_input": llm_result.tokens_input,
                     "tokens_output": llm_result.tokens_output,
                     "cost_usd": llm_result.cost_usd,
-                    "confidence": llm_result.confidence
+                    "confidence": llm_result.confidence,
+                    "status": llm_status,
                 },
                 metadata={"raw_response_preview": llm_result.raw_response[:500]}
             ))
@@ -387,7 +529,9 @@ class DocumentProcessor:
                 raw_text=raw_text,
                 original_file_bytes=original_file_bytes,
                 docx_file_bytes=docx_file_bytes,
-                original_format=original_format
+                original_format=original_format,
+                complexity_score=complexity_score,
+                model_selected_by=model_selected_by,
             )
 
             logger.info(f"Document processing completed: "
