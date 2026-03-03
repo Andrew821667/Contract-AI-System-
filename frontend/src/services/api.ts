@@ -58,6 +58,52 @@ export interface DemoLinkResponse {
   max_llm_requests: number;
 }
 
+// Digital Contract types
+export interface DigitalContract {
+  id: string;
+  contract_id: string;
+  version: number;
+  content_hash: string;
+  signature: string;
+  parent_id: string | null;
+  status: 'active' | 'superseded' | 'revoked';
+  metadata?: Record<string, any> | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface VerificationResult {
+  valid: boolean;
+  digital_id: string;
+  version: number;
+  content_hash: string;
+  content_hash_match: boolean | null;
+  signature_valid: boolean;
+  chain_valid: boolean;
+  status: string;
+  created_at: string;
+}
+
+export interface HashChainResponse {
+  chain: DigitalContract[];
+  length: number;
+}
+
+export interface DAGResponse {
+  nodes: Array<{
+    id: string;
+    version: number;
+    content_hash: string;
+    status: string;
+    created_at: string;
+  }>;
+  edges: Array<{
+    from: string;
+    to: string;
+    type: 'chain' | 'merge';
+  }>;
+}
+
 // API Client
 class APIClient {
   private client: AxiosInstance;
@@ -332,6 +378,41 @@ class APIClient {
         params: { format },
         responseType: 'blob',
       }
+    );
+    return response.data;
+  }
+
+  // ==================== Digital Contract Operations ====================
+
+  async digitalizeContract(contractId: string): Promise<DigitalContract> {
+    const response = await this.client.post<DigitalContract>(
+      `/api/v1/contracts/${contractId}/digitalize`
+    );
+    return response.data;
+  }
+
+  async getDigitalVersions(contractId: string): Promise<{ versions: DigitalContract[]; total: number }> {
+    const response = await this.client.get(`/api/v1/contracts/${contractId}/digital`);
+    return response.data;
+  }
+
+  async verifyDigital(contractId: string, digitalId: string): Promise<VerificationResult> {
+    const response = await this.client.get<VerificationResult>(
+      `/api/v1/contracts/${contractId}/digital/${digitalId}/verify`
+    );
+    return response.data;
+  }
+
+  async getHashChain(contractId: string): Promise<HashChainResponse> {
+    const response = await this.client.get<HashChainResponse>(
+      `/api/v1/contracts/${contractId}/digital/chain`
+    );
+    return response.data;
+  }
+
+  async getDAG(contractId: string): Promise<DAGResponse> {
+    const response = await this.client.get<DAGResponse>(
+      `/api/v1/contracts/${contractId}/digital/dag`
     );
     return response.data;
   }

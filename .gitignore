@@ -75,7 +75,7 @@ chroma_data/
 *.chroma
 
 # ML Models (generated during training/testing)
-models/
+/models/
 *.pkl
 
 # Generated Reports

@@ -44,6 +44,7 @@ from src.api.auth.routes import router as auth_router
 from src.api.contracts import router as contracts_router
 from src.api.websocket import router as websocket_router
 from src.api.payments import router as payments_router
+from src.api.contracts.digital_routes import router as digital_router
 
 
 @asynccontextmanager
@@ -136,6 +137,7 @@ async def root() -> Dict[str, Any]:
 # Include routers
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(contracts_router, prefix="/api/v1/contracts", tags=["Contracts"])
+app.include_router(digital_router, prefix="/api/v1/contracts", tags=["Digital Verification"])
 app.include_router(websocket_router, prefix="/api/v1/ws", tags=["WebSocket"])
 app.include_router(payments_router, prefix="/api/v1/payments", tags=["Payments"])
 

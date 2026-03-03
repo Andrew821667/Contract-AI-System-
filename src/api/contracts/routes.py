@@ -29,6 +29,7 @@ from src.agents.quick_export_agent import QuickExportAgent
 from src.services.llm_gateway import LLMGateway
 from src.utils.file_validator import save_uploaded_file_securely, FileValidationError
 from config.settings import settings
+from src.services.digital_service import DigitalContractService
 
 
 router = APIRouter()
@@ -255,6 +256,17 @@ async def analyze_contract_background(
         if result.success:
             contract.status = 'completed'
             logger.info(f"Contract {contract_id} analyzed successfully")
+
+            # Auto-digitalize after successful analysis
+            try:
+                if contract.file_path and os.path.exists(contract.file_path):
+                    with open(contract.file_path, "rb") as f:
+                        file_content = f.read()
+                    digital_service = DigitalContractService(db)
+                    digital_service.digitalize(contract_id, file_content, user_id)
+                    logger.info(f"Contract {contract_id} auto-digitalized")
+            except Exception as dig_err:
+                logger.warning(f"Auto-digitalization failed for {contract_id}: {dig_err}")
         else:
             contract.status = 'error'
             logger.error(f"Contract {contract_id} analysis failed: {result.error}")

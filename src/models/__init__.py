@@ -14,6 +14,7 @@ from .disagreement_models import Disagreement, DisagreementObjection, Disagreeme
 from .changes_models import ContractVersion, ContractChange, ChangeAnalysisResult, ChangeReviewFeedback
 from .analytics_models import AnalyticsMetricLog, AggregatedMetric
 from .ml_feedback_models import RiskPredictionFeedback, ModelTrainingBatch
+from .digital_models import DigitalContract
 
 # !>740=85 engine
 engine = create_engine(
@@ -97,5 +98,7 @@ __all__ = [
     "AggregatedMetric",
     # ML Feedback models
     "RiskPredictionFeedback",
-    "ModelTrainingBatch"
+    "ModelTrainingBatch",
+    # Digital contract models
+    "DigitalContract"
 ]

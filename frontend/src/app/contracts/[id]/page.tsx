@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
@@ -7,7 +8,7 @@ import { toast } from 'react-hot-toast'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
-import api from '@/services/api'
+import api, { DigitalContract, VerificationResult } from '@/services/api'
 
 interface Risk {
   risk_type: string
@@ -382,6 +383,9 @@ export default function ContractDetailPage() {
           </>
         )}
 
+        {/* Digital Verification Section */}
+        <DigitalVerificationSection contractId={contractId} />
+
         {/* Export Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -408,5 +412,185 @@ export default function ContractDetailPage() {
         </motion.div>
       </div>
     </div>
+  )
+}
+
+
+// ==================== Digital Verification Section ====================
+
+function DigitalVerificationSection({ contractId }: { contractId: string }) {
+  const [verifyResult, setVerifyResult] = useState<VerificationResult | null>(null)
+  const [verifying, setVerifying] = useState(false)
+
+  const { data: digitalData, isLoading: loadingVersions, refetch } = useQuery({
+    queryKey: ['digital-versions', contractId],
+    queryFn: () => api.getDigitalVersions(contractId),
+  })
+
+  const { data: chainData } = useQuery({
+    queryKey: ['digital-chain', contractId],
+    queryFn: () => api.getHashChain(contractId),
+    enabled: (digitalData?.total ?? 0) > 0,
+  })
+
+  const digitalizeMutation = useMutation({
+    mutationFn: () => api.digitalizeContract(contractId),
+    onSuccess: () => {
+      toast.success('Цифровая версия создана')
+      refetch()
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Ошибка цифровизации')
+    },
+  })
+
+  const handleVerify = async (digitalId: string) => {
+    setVerifying(true)
+    setVerifyResult(null)
+    try {
+      const result = await api.verifyDigital(contractId, digitalId)
+      setVerifyResult(result)
+      if (result.valid) {
+        toast.success('Целостность подтверждена')
+      } else {
+        toast.error('Целостность нарушена!')
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Ошибка верификации')
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  const versions: DigitalContract[] = digitalData?.versions || []
+  const activeVersion = versions.find((v) => v.status === 'active')
+  const chain = chainData?.chain || []
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.35 }}
+      className="mb-8"
+    >
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-gray-900">Цифровая верификация</h2>
+          <div className="flex items-center gap-3">
+            {activeVersion ? (
+              <Badge variant="success" size="sm">Цифровая версия v{activeVersion.version}</Badge>
+            ) : (
+              <Badge variant="default" size="sm">Не цифровизирован</Badge>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              loading={digitalizeMutation.isPending}
+              onClick={() => digitalizeMutation.mutate()}
+            >
+              {activeVersion ? 'Новая версия' : 'Цифровизировать'}
+            </Button>
+          </div>
+        </div>
+
+        {/* Verification result */}
+        {verifyResult && (
+          <div className={`rounded-lg p-4 mb-4 border ${verifyResult.valid ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">{verifyResult.valid ? '\u2705' : '\u274C'}</span>
+              <span className={`font-semibold ${verifyResult.valid ? 'text-green-800' : 'text-red-800'}`}>
+                {verifyResult.valid ? 'Целостность подтверждена' : 'Целостность нарушена'}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+              <div className="flex items-center gap-1">
+                <span>{verifyResult.signature_valid ? '\u2705' : '\u274C'}</span>
+                <span className="text-gray-700">HMAC-подпись</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span>{verifyResult.content_hash_match === null ? '\u2754' : verifyResult.content_hash_match ? '\u2705' : '\u274C'}</span>
+                <span className="text-gray-700">Хеш содержимого</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span>{verifyResult.chain_valid ? '\u2705' : '\u274C'}</span>
+                <span className="text-gray-700">Цепочка версий</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Hash chain timeline */}
+        {chain.length > 0 && (
+          <div className="mt-4">
+            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-3">
+              Цепочка версий ({chain.length})
+            </h3>
+            <div className="space-y-3">
+              {chain.map((item: any, idx: number) => (
+                <div key={item.id} className="flex items-start gap-3">
+                  {/* Timeline connector */}
+                  <div className="flex flex-col items-center">
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 ${
+                      item.status === 'active'
+                        ? 'bg-green-100 border-green-400 text-green-700'
+                        : item.status === 'revoked'
+                          ? 'bg-red-100 border-red-400 text-red-700'
+                          : 'bg-gray-100 border-gray-300 text-gray-500'
+                    }`}>
+                      {item.version}
+                    </div>
+                    {idx < chain.length - 1 && (
+                      <div className="w-0.5 h-6 bg-gray-300 mt-1" />
+                    )}
+                  </div>
+
+                  {/* Version info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium text-gray-900">Версия {item.version}</span>
+                      <Badge
+                        variant={item.status === 'active' ? 'success' : item.status === 'revoked' ? 'danger' : 'default'}
+                        size="sm"
+                      >
+                        {item.status === 'active' ? 'Активна' : item.status === 'revoked' ? 'Отозвана' : 'Заменена'}
+                      </Badge>
+                      {item.status === 'active' && (
+                        <button
+                          onClick={() => handleVerify(item.id)}
+                          disabled={verifying}
+                          className="text-xs text-primary-600 hover:text-primary-800 font-medium disabled:opacity-50"
+                        >
+                          {verifying ? 'Проверка...' : 'Верифицировать'}
+                        </button>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5 font-mono truncate">
+                      SHA-256: {item.content_hash}
+                    </div>
+                    {item.created_at && (
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        {new Date(item.created_at).toLocaleString('ru-RU')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!loadingVersions && versions.length === 0 && (
+          <div className="text-center py-6 text-gray-500">
+            <div className="text-3xl mb-2">{'\uD83D\uDD10'}</div>
+            <p className="text-sm">Нет цифровых версий. Нажмите «Цифровизировать» для создания.</p>
+          </div>
+        )}
+
+        {loadingVersions && (
+          <div className="text-center py-4 text-gray-400 text-sm">Загрузка...</div>
+        )}
+      </Card>
+    </motion.div>
   )
 }
