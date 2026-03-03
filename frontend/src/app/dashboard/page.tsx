@@ -45,12 +45,9 @@ export default function DashboardPage() {
   // Check authentication and default password
   useEffect(() => {
     const token = localStorage.getItem('access_token')
-    console.log('🔍 Dashboard checking token:', token)
     if (!token) {
-      console.log('❌ No token found, redirecting to login')
       router.push('/login')
     } else {
-      console.log('✅ Token found, user authenticated')
       // Check if using default password
       const passwordChanged = localStorage.getItem('passwordChanged')
       const userStr = localStorage.getItem('user')
@@ -67,7 +64,7 @@ export default function DashboardPage() {
             }, 2000)
           }
         } catch (e) {
-          console.error('Error parsing user data:', e)
+          // ignore parse errors
         }
       }
 
@@ -103,7 +100,6 @@ export default function DashboardPage() {
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
     toast.success('Вы вышли из системы', {
-      icon: '👋',
       style: { borderRadius: '12px' }
     })
     router.push('/login')
@@ -126,7 +122,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      {/* Modern Header with Gradient */}
+      {/* Modern Header */}
       <header className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-white/20 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
@@ -135,19 +131,19 @@ export default function DashboardPage() {
               animate={{ opacity: 1, x: 0 }}
               className="flex items-center space-x-4"
             >
-              <div className="w-12 h-12 bg-gradient-primary rounded-xl shadow-glow flex items-center justify-center">
-                <span className="text-2xl">📄</span>
+              <div className="w-12 h-12 bg-primary-600 rounded-xl shadow-sm flex items-center justify-center">
+                <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               </div>
               <div>
-                <h1 className="text-2xl font-bold gradient-text">Contract AI System</h1>
-                <p className="text-sm text-gray-600">Привет, {user?.name}! 👋</p>
+                <h1 className="text-2xl font-bold text-slate-800">Contract AI System</h1>
+                <p className="text-sm text-gray-600">Привет, {user?.name}!</p>
               </div>
             </motion.div>
 
             <div className="flex items-center space-x-4">
               <motion.div
                 whileHover={{ scale: 1.05 }}
-                className="px-4 py-2 bg-gradient-primary text-white rounded-xl shadow-lg font-semibold text-sm"
+                className="px-4 py-2 bg-primary-600 text-white rounded-xl shadow-sm font-semibold text-sm"
               >
                 {user?.subscription_tier.toUpperCase()}
               </motion.div>
@@ -181,9 +177,11 @@ export default function DashboardPage() {
           >
             <div className="text-center mb-6">
               <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br ${roleColor.gradient} mb-4`}>
-                <span className="text-4xl">👋</span>
+                <svg className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
               </div>
-              <h2 className="text-3xl font-bold gradient-text mb-2">
+              <h2 className="text-3xl font-bold text-slate-800 mb-2">
                 Добро пожаловать, {user?.name || 'Пользователь'}!
               </h2>
               <p className={`text-lg font-semibold ${roleColor.text}`}>
@@ -231,7 +229,7 @@ export default function DashboardPage() {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => setShowWelcome(false)}
-              className={`w-full py-4 rounded-xl font-semibold text-white shadow-lg bg-gradient-to-r ${roleColor.gradient}`}
+              className={`w-full py-4 rounded-xl font-semibold text-white shadow-sm bg-primary-600 hover:bg-primary-700`}
             >
               Начать работу
             </motion.button>
@@ -248,7 +246,7 @@ export default function DashboardPage() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards with Gradients */}
+        {/* Stats Cards */}
         <motion.div
           variants={containerVariants}
           initial="hidden"
@@ -258,20 +256,19 @@ export default function DashboardPage() {
           {/* Contracts Card */}
           <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="relative">
             <div className="card-modern overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-400/20 to-blue-600/20 rounded-full blur-2xl" />
               <div className="relative z-10">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <p className="text-sm font-semibold text-gray-600 mb-1">Контракты сегодня</p>
-                    <p className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                    <p className="text-4xl font-bold text-primary-700">
                       {user?.contracts_today || 0}
                       <span className="text-lg text-gray-400 font-normal"> / {user?.max_contracts_per_day}</span>
                     </p>
                   </div>
                   <motion.div
-                    whileHover={{ rotate: 360 }}
-                    transition={{ duration: 0.5 }}
-                    className="p-4 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl shadow-lg"
+                    whileHover={{ scale: 1.05 }}
+                    transition={{ duration: 0.3 }}
+                    className="p-4 bg-primary-600 rounded-2xl shadow-sm"
                   >
                     <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -285,7 +282,7 @@ export default function DashboardPage() {
                     initial={{ width: 0 }}
                     animate={{ width: `${contractsUsagePercent}%` }}
                     transition={{ duration: 1, delay: 0.5 }}
-                    className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-cyan-600 rounded-full shadow-lg"
+                    className="absolute inset-y-0 left-0 bg-primary-600 rounded-full"
                   />
                 </div>
                 <p className="text-xs text-gray-500 mt-2">Использовано {contractsUsagePercent.toFixed(0)}%</p>
@@ -296,20 +293,19 @@ export default function DashboardPage() {
           {/* LLM Requests Card */}
           <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="relative">
             <div className="card-modern overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-400/20 to-pink-600/20 rounded-full blur-2xl" />
               <div className="relative z-10">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <p className="text-sm font-semibold text-gray-600 mb-1">LLM запросы</p>
-                    <p className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                    <p className="text-4xl font-bold text-slate-800">
                       {user?.llm_requests_today || 0}
                       <span className="text-lg text-gray-400 font-normal"> / {user?.max_llm_requests_per_day}</span>
                     </p>
                   </div>
                   <motion.div
-                    whileHover={{ scale: 1.1 }}
+                    whileHover={{ scale: 1.05 }}
                     transition={{ type: "spring", stiffness: 300 }}
-                    className="p-4 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl shadow-lg"
+                    className="p-4 bg-slate-700 rounded-2xl shadow-sm"
                   >
                     <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -323,7 +319,7 @@ export default function DashboardPage() {
                     initial={{ width: 0 }}
                     animate={{ width: `${llmUsagePercent}%` }}
                     transition={{ duration: 1, delay: 0.7 }}
-                    className="absolute inset-y-0 left-0 bg-gradient-to-r from-purple-500 to-pink-600 rounded-full shadow-lg"
+                    className="absolute inset-y-0 left-0 bg-slate-600 rounded-full"
                   />
                 </div>
                 <p className="text-xs text-gray-500 mt-2">Использовано {llmUsagePercent.toFixed(0)}%</p>
@@ -334,19 +330,18 @@ export default function DashboardPage() {
           {/* Subscription Card */}
           <motion.div variants={itemVariants} whileHover={{ y: -4 }} className="relative">
             <div className="card-modern overflow-hidden bg-gradient-to-br from-amber-50 to-orange-50">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-orange-400/20 to-amber-600/20 rounded-full blur-2xl" />
               <div className="relative z-10">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <p className="text-sm font-semibold text-gray-600 mb-1">Тарифный план</p>
-                    <p className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent capitalize">
+                    <p className="text-3xl font-bold text-slate-800 capitalize">
                       {user?.subscription_tier}
                     </p>
                   </div>
                   <motion.div
-                    whileHover={{ rotate: 180 }}
-                    transition={{ duration: 0.5 }}
-                    className="p-4 bg-gradient-to-br from-orange-500 to-amber-600 rounded-2xl shadow-lg"
+                    whileHover={{ scale: 1.05 }}
+                    transition={{ duration: 0.3 }}
+                    className="p-4 bg-accent-500 rounded-2xl shadow-sm"
                   >
                     <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -357,7 +352,7 @@ export default function DashboardPage() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => router.push('/pricing')}
-                  className="w-full mt-2 py-2 bg-gradient-to-r from-orange-500 to-amber-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
+                  className="w-full mt-2 py-2 bg-accent-500 hover:bg-accent-600 text-white font-semibold rounded-xl shadow-sm transition-all duration-300"
                 >
                   Улучшить тариф
                 </motion.button>
@@ -373,13 +368,13 @@ export default function DashboardPage() {
           transition={{ delay: 0.3 }}
           className="card-modern mb-8"
         >
-          <h2 className="text-2xl font-bold gradient-text mb-6">Быстрые действия</h2>
+          <h2 className="text-2xl font-bold text-slate-800 mb-6">Быстрые действия</h2>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {[
-              { icon: '📤', label: 'Загрузить договор', route: '/contracts/upload', gradient: 'from-blue-500 to-cyan-600', permission: 'canAnalyze' },
-              { icon: '✨', label: 'Генерировать', route: '/contracts/generate', gradient: 'from-purple-500 to-pink-600', permission: 'canGenerate' },
-              { icon: '📋', label: 'Все договоры', route: '/contracts', gradient: 'from-green-500 to-emerald-600', permission: null },
-              { icon: '💎', label: 'Тарифы', route: '/pricing', gradient: 'from-orange-500 to-amber-600', permission: null }
+              { icon: <svg className="h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>, label: 'Загрузить договор', route: '/contracts/upload', color: 'border-l-primary-500', permission: 'canAnalyze' },
+              { icon: <svg className="h-8 w-8 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>, label: 'Генерировать', route: '/contracts/generate', color: 'border-l-violet-500', permission: 'canGenerate' },
+              { icon: <svg className="h-8 w-8 text-success-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>, label: 'Все договоры', route: '/contracts', color: 'border-l-success-500', permission: null },
+              { icon: <svg className="h-8 w-8 text-accent-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>, label: 'Тарифы', route: '/pricing', color: 'border-l-accent-500', permission: null }
             ]
             .filter(action => !action.permission || permissions[action.permission as keyof typeof permissions])
             .map((action, idx) => (
@@ -388,16 +383,13 @@ export default function DashboardPage() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.4 + idx * 0.1 }}
-                whileHover={{ y: -4, scale: 1.02 }}
+                whileHover={{ y: -2 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => router.push(action.route)}
-                className="relative group overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300"
+                className={`bg-white border-l-4 ${action.color} rounded-xl shadow-sm hover:shadow-md transition-all duration-300 p-5 text-left`}
               >
-                <div className={`absolute inset-0 bg-gradient-to-br ${action.gradient} opacity-90 group-hover:opacity-100 transition-opacity`} />
-                <div className="relative z-10 p-6 text-white text-center">
-                  <div className="text-4xl mb-3">{action.icon}</div>
-                  <div className="text-base font-semibold">{action.label}</div>
-                </div>
+                <div className="mb-3">{action.icon}</div>
+                <div className="text-base font-semibold text-slate-800">{action.label}</div>
               </motion.button>
             ))}
           </div>
@@ -410,7 +402,7 @@ export default function DashboardPage() {
           transition={{ delay: 0.5 }}
           className="card-modern"
         >
-          <h2 className="text-2xl font-bold gradient-text mb-6">Последние договоры</h2>
+          <h2 className="text-2xl font-bold text-slate-800 mb-6">Последние договоры</h2>
 
           {contractsLoading ? (
             <div className="flex justify-center py-12">
@@ -434,8 +426,8 @@ export default function DashboardPage() {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4 flex-1">
-                      <div className="w-12 h-12 bg-gradient-primary rounded-xl flex items-center justify-center shadow-lg">
-                        <span className="text-2xl">📄</span>
+                      <div className="w-12 h-12 bg-primary-600 rounded-xl flex items-center justify-center shadow-sm">
+                        <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                       </div>
                       <div className="flex-1">
                         <h3 className="font-semibold text-gray-900 mb-1">{contract.file_name}</h3>
@@ -457,10 +449,10 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="flex items-center space-x-3">
-                      <span className={`px-4 py-2 rounded-full text-sm font-semibold shadow-sm
+                      <span className={`px-4 py-2 rounded-full text-sm font-semibold
                         ${contract.status === 'completed' ? 'badge-success' : ''}
                         ${contract.status === 'analyzing' ? 'badge-warning' : ''}
-                        ${contract.status === 'uploaded' ? 'bg-gradient-to-r from-blue-400 to-blue-600 text-white' : ''}
+                        ${contract.status === 'uploaded' ? 'bg-primary-100 text-primary-800' : ''}
                         ${contract.status === 'error' ? 'badge-danger' : ''}
                       `}>
                         {contract.status}
@@ -484,8 +476,8 @@ export default function DashboardPage() {
                 transition={{ duration: 2, repeat: Infinity }}
                 className="inline-block mb-6"
               >
-                <div className="w-24 h-24 bg-gradient-primary rounded-3xl shadow-2xl flex items-center justify-center">
-                  <span className="text-5xl">📄</span>
+                <div className="w-24 h-24 bg-primary-600 rounded-3xl shadow-lg flex items-center justify-center">
+                  <svg className="h-12 w-12 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                 </div>
               </motion.div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">Нет договоров</h3>
@@ -494,7 +486,7 @@ export default function DashboardPage() {
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => router.push('/contracts/upload')}
-                className="inline-flex items-center px-6 py-3 bg-gradient-primary text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
+                className="inline-flex items-center px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl shadow-sm transition-all duration-300"
               >
                 <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

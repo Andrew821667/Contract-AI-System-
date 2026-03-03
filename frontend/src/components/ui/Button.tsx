@@ -27,11 +27,11 @@ export default function Button({
   const baseStyles = 'font-semibold rounded-xl transition-all duration-300 inline-flex items-center justify-center'
 
   const variants = {
-    primary: 'bg-gradient-primary text-white shadow-lg hover:shadow-glow',
-    secondary: 'bg-gradient-secondary text-white shadow-lg hover:shadow-glow-purple',
+    primary: 'bg-primary-600 hover:bg-primary-700 text-white shadow-sm',
+    secondary: 'bg-slate-700 hover:bg-slate-800 text-white shadow-sm',
     outline: 'border-2 border-primary-500 text-primary-500 hover:bg-primary-500 hover:text-white',
-    success: 'bg-gradient-to-r from-success-500 to-success-600 text-white shadow-lg',
-    danger: 'bg-gradient-to-r from-danger-500 to-danger-600 text-white shadow-lg'
+    success: 'bg-success-600 hover:bg-success-700 text-white shadow-sm',
+    danger: 'bg-danger-600 hover:bg-danger-700 text-white shadow-sm'
   }
 
   const sizes = {

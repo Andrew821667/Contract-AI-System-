@@ -9,8 +9,8 @@
   --background-end-rgb: 241, 245, 249;
 
   /* Gradient colors */
-  --gradient-from: #0ea5e9;
-  --gradient-to: #d946ef;
+  --gradient-from: #0284c7;
+  --gradient-to: #0ea5e9;
 
   /* Shadow colors */
   --shadow-color: rgba(0, 0, 0, 0.1);
@@ -57,13 +57,13 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(135deg, #0ea5e9, #d946ef);
+  background: #cbd5e1;
   border-radius: 10px;
   transition: background 0.3s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(135deg, #0284c7, #c026d3);
+  background: #94a3b8;
 }
 
 /* Custom utilities */
@@ -89,24 +89,10 @@ body {
 
   /* Gradient text */
   .gradient-text {
-    background: linear-gradient(135deg, #0ea5e9, #d946ef);
+    background: linear-gradient(135deg, #0284c7, #0ea5e9);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-  }
-
-  /* Animated gradient background */
-  .gradient-animate {
-    background: linear-gradient(
-      135deg,
-      #0ea5e9 0%,
-      #d946ef 25%,
-      #f97316 50%,
-      #d946ef 75%,
-      #0ea5e9 100%
-    );
-    background-size: 200% 200%;
-    animation: gradient 6s ease infinite;
   }
 
   /* Card with hover effect */
@@ -138,15 +124,15 @@ body {
 @layer components {
   /* Modern button styles */
   .btn-primary {
-    @apply px-6 py-3 bg-gradient-primary text-white font-semibold rounded-xl
-           shadow-lg hover:shadow-glow transition-all duration-300
-           hover:scale-105 active:scale-95;
+    @apply px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-xl
+           shadow-sm transition-all duration-300
+           active:scale-95;
   }
 
   .btn-secondary {
-    @apply px-6 py-3 bg-gradient-secondary text-white font-semibold rounded-xl
-           shadow-lg hover:shadow-glow-purple transition-all duration-300
-           hover:scale-105 active:scale-95;
+    @apply px-6 py-3 bg-slate-700 hover:bg-slate-800 text-white font-semibold rounded-xl
+           shadow-sm transition-all duration-300
+           active:scale-95;
   }
 
   .btn-outline {
@@ -169,17 +155,14 @@ body {
 
   /* Badge styles */
   .badge-success {
-    @apply px-3 py-1 bg-gradient-to-r from-success-400 to-success-600
-           text-white text-sm font-semibold rounded-full shadow-sm;
+    @apply px-3 py-1 bg-success-100 text-success-800 text-sm font-semibold rounded-full;
   }
 
   .badge-warning {
-    @apply px-3 py-1 bg-gradient-to-r from-warning-400 to-warning-600
-           text-white text-sm font-semibold rounded-full shadow-sm;
+    @apply px-3 py-1 bg-warning-100 text-warning-800 text-sm font-semibold rounded-full;
   }
 
   .badge-danger {
-    @apply px-3 py-1 bg-gradient-to-r from-danger-400 to-danger-600
-           text-white text-sm font-semibold rounded-full shadow-sm;
+    @apply px-3 py-1 bg-danger-100 text-danger-800 text-sm font-semibold rounded-full;
   }
 }

@@ -112,10 +112,10 @@ export default function PricingPage() {
               className="flex items-center space-x-3 cursor-pointer"
               onClick={() => router.push('/')}
             >
-              <div className="w-10 h-10 bg-gradient-primary rounded-xl shadow-lg flex items-center justify-center">
-                <span className="text-2xl">📄</span>
+              <div className="w-10 h-10 bg-primary-600 rounded-xl shadow-sm flex items-center justify-center">
+                <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               </div>
-              <span className="text-xl font-bold gradient-text">Contract AI</span>
+              <span className="text-xl font-bold text-slate-800">Contract AI</span>
             </motion.div>
 
             <motion.div
@@ -138,7 +138,7 @@ export default function PricingPage() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-12"
         >
-          <h1 className="text-5xl md:text-6xl font-bold gradient-text mb-4">
+          <h1 className="text-5xl md:text-6xl font-bold text-slate-900 mb-4">
             Тарифные планы
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-8">
@@ -151,7 +151,7 @@ export default function PricingPage() {
               onClick={() => setBillingCycle('monthly')}
               className={`px-6 py-3 rounded-xl font-semibold transition-all duration-300 ${
                 billingCycle === 'monthly'
-                  ? 'bg-gradient-primary text-white shadow-lg'
+                  ? 'bg-primary-600 text-white shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
@@ -161,7 +161,7 @@ export default function PricingPage() {
               onClick={() => setBillingCycle('annual')}
               className={`px-6 py-3 rounded-xl font-semibold transition-all duration-300 ${
                 billingCycle === 'annual'
-                  ? 'bg-gradient-primary text-white shadow-lg'
+                  ? 'bg-primary-600 text-white shadow-sm'
                   : 'text-gray-600 hover:text-gray-900'
               }`}
             >
@@ -204,7 +204,7 @@ export default function PricingPage() {
 
                   {/* Price */}
                   <div className="mb-6">
-                    <div className="text-4xl font-bold gradient-text mb-1">
+                    <div className="text-4xl font-bold text-primary-700 mb-1">
                       {getPrice(plan)}
                     </div>
                     {!plan.isCustom && plan.price.monthly > 0 && (
@@ -232,7 +232,7 @@ export default function PricingPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                           </svg>
                         )}
-                        <span className={feature.included ? 'text-gray-700' : 'text-gray-400'}>
+                        <span className={feature.included ? 'text-gray-700' : 'text-slate-500'}>
                           {feature.text}
                         </span>
                       </li>
@@ -244,7 +244,7 @@ export default function PricingPage() {
                     <Button
                       variant="outline"
                       className="w-full"
-                      onClick={() => router.push('/contacts')}
+                      onClick={() => window.open('https://t.me/legal_ai_helper_new_bot', '_blank')}
                     >
                       Связаться с нами
                     </Button>
@@ -278,7 +278,7 @@ export default function PricingPage() {
           viewport={{ once: true }}
           className="max-w-4xl mx-auto"
         >
-          <h2 className="text-3xl font-bold gradient-text text-center mb-12">
+          <h2 className="text-3xl font-bold text-slate-800 text-center mb-12">
             Часто задаваемые вопросы
           </h2>
 
@@ -324,16 +324,16 @@ export default function PricingPage() {
           viewport={{ once: true }}
           className="mt-16 text-center"
         >
-          <Card className="bg-gradient-to-br from-primary-50 to-secondary-50 border-2 border-primary-200">
+          <Card className="bg-gradient-to-br from-primary-50 to-slate-50 border-2 border-primary-200">
             <div className="py-8">
-              <h2 className="text-3xl font-bold gradient-text mb-4">
+              <h2 className="text-3xl font-bold text-slate-800 mb-4">
                 Остались вопросы?
               </h2>
               <p className="text-gray-600 mb-6 max-w-2xl mx-auto">
                 Свяжитесь с нами, и мы поможем выбрать оптимальный тарифный план для ваших задач
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button variant="primary" onClick={() => router.push('/contacts')}>
+                <Button variant="primary" onClick={() => window.open('https://t.me/legal_ai_helper_new_bot', '_blank')}>
                   Связаться с нами
                 </Button>
                 <Button variant="outline" onClick={() => router.push('/register')}>

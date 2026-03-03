@@ -14,11 +14,11 @@ export default function Badge({
   className = ''
 }: BadgeProps) {
   const variants = {
-    success: 'bg-gradient-to-r from-success-400 to-success-600 text-white',
-    warning: 'bg-gradient-to-r from-warning-400 to-warning-600 text-white',
-    danger: 'bg-gradient-to-r from-danger-400 to-danger-600 text-white',
-    info: 'bg-gradient-to-r from-primary-400 to-primary-600 text-white',
-    default: 'bg-gray-100 text-gray-700'
+    success: 'bg-success-100 text-success-800',
+    warning: 'bg-warning-100 text-warning-800',
+    danger: 'bg-danger-100 text-danger-800',
+    info: 'bg-primary-100 text-primary-800',
+    default: 'bg-slate-100 text-slate-700'
   }
 
   const sizes = {

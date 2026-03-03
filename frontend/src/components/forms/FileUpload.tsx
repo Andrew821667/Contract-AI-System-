@@ -15,7 +15,9 @@ export default function FileUpload({
   onFileSelect,
   accept = {
     'application/pdf': ['.pdf'],
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+    'application/xml': ['.xml'],
+    'text/xml': ['.xml']
   },
   maxSize = 10 * 1024 * 1024, // 10MB
   disabled = false
@@ -35,7 +37,7 @@ export default function FileUpload({
         if (rejection.errors[0]?.code === 'file-too-large') {
           setError('Файл слишком большой. Максимум 10 МБ')
         } else if (rejection.errors[0]?.code === 'file-invalid-type') {
-          setError('Неподдерживаемый формат файла. Используйте PDF или DOCX')
+          setError('Неподдерживаемый формат файла. Используйте PDF, DOCX или XML')
         } else {
           setError('Ошибка загрузки файла')
         }
@@ -73,7 +75,11 @@ export default function FileUpload({
         >
           {isDragActive ? (
             <>
-              <div className="text-6xl mb-4">📄</div>
+              <div className="flex justify-center mb-4">
+                <svg className="h-16 w-16 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
               <p className="text-xl font-semibold text-primary-600 mb-2">
                 Отпустите файл здесь
               </p>
@@ -81,7 +87,7 @@ export default function FileUpload({
           ) : (
             <>
               <div className="flex justify-center mb-4">
-                <div className="w-20 h-20 bg-gradient-primary rounded-2xl shadow-lg flex items-center justify-center">
+                <div className="w-20 h-20 bg-primary-600 rounded-2xl shadow-sm flex items-center justify-center">
                   <svg className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                   </svg>
@@ -92,7 +98,7 @@ export default function FileUpload({
                 Перетащите файл сюда или кликните для выбора
               </p>
               <p className="text-sm text-gray-500">
-                Поддерживаются форматы: PDF, DOCX • Максимум 10 МБ
+                Поддерживаются форматы: PDF, DOCX, XML • Максимум 10 МБ
               </p>
             </>
           )}

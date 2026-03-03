@@ -52,10 +52,10 @@ function DemoForm() {
       >
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gradient-primary rounded-2xl shadow-lg flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl">📄</span>
+          <div className="w-16 h-16 bg-primary-600 rounded-2xl shadow-sm flex items-center justify-center mx-auto mb-4">
+            <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
           </div>
-          <h1 className="text-3xl font-bold gradient-text mb-2">
+          <h1 className="text-3xl font-bold text-slate-800 mb-2">
             Contract AI — Демо
           </h1>
           <p className="text-gray-600">

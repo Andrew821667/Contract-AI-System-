@@ -88,7 +88,7 @@ export default function GenerateContractPage() {
           >
             ← Назад
           </Button>
-          <h1 className="text-4xl font-bold gradient-text mb-2">
+          <h1 className="text-4xl font-bold text-slate-900 mb-2">
             Генератор договоров
           </h1>
           <p className="text-slate-600">
@@ -103,7 +103,7 @@ export default function GenerateContractPage() {
               <div
                 className={`w-10 h-10 rounded-full flex items-center justify-center font-bold transition-all ${
                   step >= s
-                    ? 'bg-gradient-primary text-white'
+                    ? 'bg-primary-600 text-white'
                     : 'bg-slate-200 text-slate-400'
                 }`}
               >
@@ -112,7 +112,7 @@ export default function GenerateContractPage() {
               {s < 3 && (
                 <div
                   className={`flex-1 h-1 mx-2 transition-all ${
-                    step > s ? 'bg-gradient-primary' : 'bg-slate-200'
+                    step > s ? 'bg-primary-600' : 'bg-slate-200'
                   }`}
                 />
               )}
@@ -374,7 +374,7 @@ export default function GenerateContractPage() {
               </div>
             </Card>
 
-            <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-primary-200">
+            <Card className="bg-slate-50 border-2 border-primary-200">
               <div className="flex items-start gap-4">
                 <span className="text-3xl">✨</span>
                 <div className="flex-1">
@@ -410,9 +410,8 @@ export default function GenerateContractPage() {
               <Button
                 onClick={handleGenerate}
                 loading={generating}
-                className="bg-gradient-primary"
               >
-                {generating ? 'Генерация...' : '✨ Сгенерировать договор'}
+                {generating ? 'Генерация...' : 'Сгенерировать договор'}
               </Button>
             </div>
           </motion.div>
