@@ -51,7 +51,7 @@ export default function FileUpload({
   return (
     <div>
       <motion.div
-        {...getRootProps()}
+        {...(getRootProps() as any)}
         whileHover={{ scale: disabled ? 1 : 1.01 }}
         className={`
           border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer

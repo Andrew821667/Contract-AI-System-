@@ -20,6 +20,8 @@ export interface User {
   last_login?: string;
   contracts_today: number;
   llm_requests_today: number;
+  max_contracts_per_day?: number;
+  max_llm_requests_per_day?: number;
   demo_expires?: string;
 }
 
@@ -311,6 +313,15 @@ class APIClient {
     status?: string;
   }): Promise<any> {
     const response = await this.client.get('/api/v1/contracts', { params });
+    return response.data;
+  }
+
+  async generateContract(data: {
+    contract_type: string;
+    template_id?: string;
+    params: Record<string, any>;
+  }): Promise<any> {
+    const response = await this.client.post('/api/v1/contracts/generate', data);
     return response.data;
   }
 

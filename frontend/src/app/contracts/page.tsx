@@ -2,21 +2,20 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
+import api from '@/services/api'
 
 interface Contract {
   id: string
-  name: string
-  type: string
-  status: 'analyzing' | 'completed' | 'error' | 'pending'
-  partyA: string
-  partyB: string
-  uploadDate: string
-  riskLevel?: 'low' | 'medium' | 'high' | 'critical'
-  overallScore?: number
+  file_name: string
+  status: 'analyzing' | 'completed' | 'error' | 'pending' | 'uploaded'
+  contract_type: string
+  created_at: string
+  updated_at: string
 }
 
 export default function ContractsListPage() {
@@ -24,96 +23,45 @@ export default function ContractsListPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState<string>('all')
   const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [page, setPage] = useState(1)
+  const pageSize = 20
 
-  // Mock data - будет заменен на реальные данные из API
-  const [contracts] = useState<Contract[]>([
-    {
-      id: '1',
-      name: 'Договор подряда №123',
-      type: 'Договор подряда',
-      status: 'completed',
-      partyA: 'ООО Строймонтаж',
-      partyB: 'ИП Петров П.П.',
-      uploadDate: '2025-11-25',
-      riskLevel: 'medium',
-      overallScore: 7.5
-    },
-    {
-      id: '2',
-      name: 'Договор поставки №456',
-      type: 'Договор поставки',
-      status: 'completed',
-      partyA: 'ООО ТоргСнаб',
-      partyB: 'ООО МегаОпт',
-      uploadDate: '2025-11-24',
-      riskLevel: 'low',
-      overallScore: 8.8
-    },
-    {
-      id: '3',
-      name: 'Трудовой договор',
-      type: 'Трудовой договор',
-      status: 'analyzing',
-      partyA: 'ООО Компания',
-      partyB: 'Иванов И.И.',
-      uploadDate: '2025-11-26'
-    },
-    {
-      id: '4',
-      name: 'Договор аренды помещения',
-      type: 'Договор аренды',
-      status: 'completed',
-      partyA: 'ООО Недвижимость Плюс',
-      partyB: 'ИП Сидоров С.С.',
-      uploadDate: '2025-11-23',
-      riskLevel: 'high',
-      overallScore: 5.2
-    },
-    {
-      id: '5',
-      name: 'Агентский договор №789',
-      type: 'Агентский договор',
-      status: 'error',
-      partyA: 'ООО Агентство',
-      partyB: 'ИП Васильев В.В.',
-      uploadDate: '2025-11-22'
-    }
-  ])
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['contracts', page, pageSize],
+    queryFn: () => api.listContracts({ page, limit: pageSize }),
+  })
 
-  const contractTypes = ['all', 'Договор подряда', 'Договор поставки', 'Договор аренды', 'Трудовой договор', 'Агентский договор', 'Другое']
-  const statuses = ['all', 'completed', 'analyzing', 'error', 'pending']
+  const contracts: Contract[] = data?.contracts ?? []
+  const total: number = data?.total ?? 0
+  const totalPages = Math.ceil(total / pageSize)
+
+  const contractTypes = ['all', 'supply', 'service', 'lease', 'purchase', 'employment', 'unknown']
+  const statuses = ['all', 'completed', 'analyzing', 'error', 'uploaded', 'pending']
+
+  const typeLabels: Record<string, string> = {
+    all: 'Все типы',
+    supply: 'Договор поставки',
+    service: 'Договор услуг',
+    lease: 'Договор аренды',
+    purchase: 'Договор купли-продажи',
+    employment: 'Трудовой договор',
+    unknown: 'Не определён',
+  }
 
   const getStatusBadge = (status: string) => {
     const badges = {
       completed: { variant: 'success' as const, text: 'Завершён' },
       analyzing: { variant: 'info' as const, text: 'Анализируется...' },
       error: { variant: 'danger' as const, text: 'Ошибка' },
-      pending: { variant: 'warning' as const, text: 'Ожидание' }
+      pending: { variant: 'warning' as const, text: 'Ожидание' },
+      uploaded: { variant: 'default' as const, text: 'Загружен' },
     }
     return badges[status as keyof typeof badges] || badges.pending
   }
 
-  const getRiskBadge = (level: string) => {
-    const badges = {
-      low: { variant: 'success' as const, text: 'Низкий риск', icon: '🟢' },
-      medium: { variant: 'warning' as const, text: 'Средний риск', icon: '🟡' },
-      high: { variant: 'danger' as const, text: 'Высокий риск', icon: '🔴' },
-      critical: { variant: 'danger' as const, text: 'Критический', icon: '⚠️' }
-    }
-    return badges[level as keyof typeof badges]
-  }
-
-  const getScoreColor = (score: number) => {
-    if (score >= 8) return 'text-success-600'
-    if (score >= 6) return 'text-warning-600'
-    return 'text-danger-600'
-  }
-
   const filteredContracts = contracts.filter(contract => {
-    const matchesSearch = contract.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         contract.partyA.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         contract.partyB.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesType = filterType === 'all' || contract.type === filterType
+    const matchesSearch = contract.file_name.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesType = filterType === 'all' || contract.contract_type === filterType
     const matchesStatus = filterStatus === 'all' || contract.status === filterStatus
     return matchesSearch && matchesType && matchesStatus
   })
@@ -168,7 +116,7 @@ export default function ContractsListPage() {
           </h1>
           <div className="flex items-center space-x-6">
             <div className="flex items-center">
-              <span className="text-3xl font-bold text-primary-600 mr-2">{contracts.length}</span>
+              <span className="text-3xl font-bold text-primary-600 mr-2">{total}</span>
               <span className="text-gray-600">всего договоров</span>
             </div>
             <div className="flex items-center">
@@ -194,7 +142,7 @@ export default function ContractsListPage() {
                 <div className="relative">
                   <input
                     type="text"
-                    placeholder="Поиск по названию или сторонам..."
+                    placeholder="Поиск по названию..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-primary-400 focus:outline-none transition-colors"
@@ -214,7 +162,7 @@ export default function ContractsListPage() {
                 >
                   {contractTypes.map(type => (
                     <option key={type} value={type}>
-                      {type === 'all' ? 'Все типы' : type}
+                      {typeLabels[type] || type}
                     </option>
                   ))}
                 </select>
@@ -238,8 +186,52 @@ export default function ContractsListPage() {
           </Card>
         </motion.div>
 
+        {/* Loading State */}
+        {isLoading && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <Card className="text-center py-12">
+              <div className="flex flex-col items-center">
+                <svg className="animate-spin h-10 w-10 text-primary-500 mb-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                <p className="text-gray-600">Загрузка договоров...</p>
+              </div>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Error State */}
+        {isError && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <Card className="text-center py-12">
+              <div className="text-6xl mb-4">⚠️</div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                Ошибка загрузки
+              </h3>
+              <p className="text-gray-600 mb-6">
+                {(error as any)?.response?.data?.detail || 'Не удалось загрузить список договоров. Проверьте авторизацию.'}
+              </p>
+              <div className="flex justify-center space-x-3">
+                <Button variant="primary" onClick={() => window.location.reload()}>
+                  Попробовать снова
+                </Button>
+                <Button variant="outline" onClick={() => router.push('/login')}>
+                  Войти
+                </Button>
+              </div>
+            </Card>
+          </motion.div>
+        )}
+
         {/* Contracts Grid */}
-        {filteredContracts.length === 0 ? (
+        {!isLoading && !isError && filteredContracts.length === 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -260,89 +252,86 @@ export default function ContractsListPage() {
               </Button>
             </Card>
           </motion.div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredContracts.map((contract, idx) => (
-              <motion.div
-                key={contract.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.05 }}
-              >
-                <Card
-                  hover
-                  onClick={() => contract.status === 'completed' && router.push(`/contracts/${contract.id}`)}
-                  className={contract.status !== 'completed' ? 'cursor-not-allowed opacity-75' : ''}
+        )}
+
+        {!isLoading && !isError && filteredContracts.length > 0 && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredContracts.map((contract, idx) => (
+                <motion.div
+                  key={contract.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.05 }}
                 >
-                  {/* Header */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-bold text-gray-900 mb-1 line-clamp-1">
-                        {contract.name}
-                      </h3>
-                      <p className="text-sm text-gray-500">{contract.type}</p>
-                    </div>
-                    <Badge {...getStatusBadge(contract.status)} size="sm" />
-                  </div>
-
-                  {/* Parties */}
-                  <div className="space-y-2 mb-4 pb-4 border-b border-gray-100">
-                    <div className="flex items-start">
-                      <span className="text-xs font-semibold text-gray-500 w-16 flex-shrink-0">
-                        Сторона А:
-                      </span>
-                      <span className="text-sm text-gray-900 line-clamp-1">{contract.partyA}</span>
-                    </div>
-                    <div className="flex items-start">
-                      <span className="text-xs font-semibold text-gray-500 w-16 flex-shrink-0">
-                        Сторона Б:
-                      </span>
-                      <span className="text-sm text-gray-900 line-clamp-1">{contract.partyB}</span>
-                    </div>
-                  </div>
-
-                  {/* Risk & Score */}
-                  {contract.status === 'completed' && contract.riskLevel && (
-                    <div className="space-y-3 mb-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-semibold text-gray-700">Уровень риска:</span>
-                        <Badge {...getRiskBadge(contract.riskLevel)!} size="sm">
-                          {getRiskBadge(contract.riskLevel)!.icon} {getRiskBadge(contract.riskLevel)!.text}
-                        </Badge>
+                  <Card
+                    hover
+                    onClick={() => router.push(`/contracts/${contract.id}`)}
+                  >
+                    {/* Header */}
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-bold text-gray-900 mb-1 line-clamp-1">
+                          {contract.file_name}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          {typeLabels[contract.contract_type] || contract.contract_type}
+                        </p>
                       </div>
-                      {contract.overallScore && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-semibold text-gray-700">Общая оценка:</span>
-                          <span className={`text-2xl font-bold ${getScoreColor(contract.overallScore)}`}>
-                            {contract.overallScore}/10
-                          </span>
-                        </div>
-                      )}
+                      <Badge {...getStatusBadge(contract.status)} size="sm">
+                        {getStatusBadge(contract.status).text}
+                      </Badge>
                     </div>
-                  )}
 
-                  {/* Footer */}
-                  <div className="flex items-center justify-between text-xs text-gray-500 mt-4 pt-4 border-t border-gray-100">
-                    <div className="flex items-center">
-                      <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      {new Date(contract.uploadDate).toLocaleDateString('ru-RU', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric'
-                      })}
-                    </div>
-                    {contract.status === 'completed' && (
+                    {/* Footer */}
+                    <div className="flex items-center justify-between text-xs text-gray-500 mt-4 pt-4 border-t border-gray-100">
+                      <div className="flex items-center">
+                        <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        {contract.created_at
+                          ? new Date(contract.created_at).toLocaleDateString('ru-RU', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric'
+                            })
+                          : '—'
+                        }
+                      </div>
                       <span className="text-primary-600 font-semibold hover:text-primary-700">
                         Открыть →
                       </span>
-                    )}
-                  </div>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
+                    </div>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center space-x-4 mt-8">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                >
+                  ← Назад
+                </Button>
+                <span className="text-gray-600">
+                  Страница {page} из {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage(p => p + 1)}
+                >
+                  Далее →
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -4,22 +4,10 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import api from '@/services/api'
+import api, { User } from '@/services/api'
 import toast from 'react-hot-toast'
 import { getUserRole, getRolePermissions, getRoleColor, getRoleLabel } from '@/utils/roles'
 import ChangePasswordModal from '@/components/ChangePasswordModal'
-
-interface User {
-  id: string
-  name: string
-  email: string
-  role: string
-  subscription_tier: string
-  contracts_today: number
-  llm_requests_today: number
-  max_contracts_per_day: number
-  max_llm_requests_per_day: number
-}
 
 interface Contract {
   id: string
@@ -96,9 +84,9 @@ export default function DashboardPage() {
   const { data: userData, isLoading: userLoading } = useQuery({
     queryKey: ['currentUser'],
     queryFn: async () => {
-      const response = await api.getCurrentUser()
-      setUser(response.data)
-      return response.data
+      const user = await api.getCurrentUser()
+      setUser(user)
+      return user
     }
   })
 
@@ -106,8 +94,8 @@ export default function DashboardPage() {
   const { data: contractsData, isLoading: contractsLoading } = useQuery({
     queryKey: ['contracts', 'recent'],
     queryFn: async () => {
-      const response = await api.listContracts({ page: 1, page_size: 5 })
-      return response.data
+      const data = await api.listContracts({ page: 1, limit: 5 })
+      return data
     }
   })
 

@@ -3,8 +3,10 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
+import { toast } from 'react-hot-toast'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
+import api from '@/services/api'
 
 const contractTypes = [
   { value: 'supply', label: 'Договор поставки', icon: '📦', description: 'Поставка товаров и продукции' },
@@ -43,11 +45,28 @@ export default function GenerateContractPage() {
   const handleGenerate = async () => {
     setGenerating(true)
 
-    // TODO: Replace with actual API call
-    await new Promise(resolve => setTimeout(resolve, 3000))
+    try {
+      const result = await api.generateContract({
+        contract_type: formData.contractType,
+        template_id: formData.templateId || undefined,
+        params: {
+          party_a: formData.partyA,
+          party_b: formData.partyB,
+          amount: formData.amount,
+          start_date: formData.startDate,
+          end_date: formData.endDate,
+          additional_terms: formData.additionalTerms,
+        },
+      })
 
-    setGenerating(false)
-    router.push('/contracts?generated=true')
+      toast.success('Договор успешно сгенерирован!')
+      router.push(`/contracts/${result.contract_id}`)
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || 'Ошибка генерации договора'
+      toast.error(message)
+    } finally {
+      setGenerating(false)
+    }
   }
 
   const isStep1Valid = formData.contractType && formData.templateId
