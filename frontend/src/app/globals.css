@@ -5,12 +5,12 @@
 /* Modern CSS Variables */
 :root {
   --foreground-rgb: 15, 23, 42;
-  --background-start-rgb: 248, 250, 252;
-  --background-end-rgb: 241, 245, 249;
+  --background-start-rgb: 250, 248, 244;
+  --background-end-rgb: 245, 240, 232;
 
   /* Gradient colors */
-  --gradient-from: #0284c7;
-  --gradient-to: #0ea5e9;
+  --gradient-from: #967b52;
+  --gradient-to: #b09368;
 
   /* Shadow colors */
   --shadow-color: rgba(0, 0, 0, 0.1);
@@ -57,13 +57,13 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #d6d3d1;
   border-radius: 10px;
   transition: background 0.3s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #a8a29e;
 }
 
 /* Custom utilities */
@@ -89,7 +89,7 @@ body {
 
   /* Gradient text */
   .gradient-text {
-    background: linear-gradient(135deg, #0284c7, #0ea5e9);
+    background: linear-gradient(135deg, #7d6744, #b09368);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -130,7 +130,7 @@ body {
   }
 
   .btn-secondary {
-    @apply px-6 py-3 bg-slate-700 hover:bg-slate-800 text-white font-semibold rounded-xl
+    @apply px-6 py-3 bg-stone-700 hover:bg-stone-800 text-white font-semibold rounded-xl
            shadow-sm transition-all duration-300
            active:scale-95;
   }

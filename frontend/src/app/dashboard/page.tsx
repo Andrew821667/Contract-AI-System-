@@ -107,7 +107,7 @@ export default function DashboardPage() {
 
   if (userLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 to-stone-100">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
@@ -121,7 +121,7 @@ export default function DashboardPage() {
   const llmUsagePercent = ((user?.llm_requests_today || 0) / (user?.max_llm_requests_per_day || 1)) * 100
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50/30 to-orange-50/20">
       {/* Modern Header */}
       <header className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-white/20 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
@@ -135,7 +135,7 @@ export default function DashboardPage() {
                 <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-slate-800">Contract AI System</h1>
+                <h1 className="text-2xl font-bold text-stone-800">Contract AI System</h1>
                 <p className="text-sm text-gray-600">Привет, {user?.name}!</p>
               </div>
             </motion.div>
@@ -181,7 +181,7 @@ export default function DashboardPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
               </div>
-              <h2 className="text-3xl font-bold text-slate-800 mb-2">
+              <h2 className="text-3xl font-bold text-stone-800 mb-2">
                 Добро пожаловать, {user?.name || 'Пользователь'}!
               </h2>
               <p className={`text-lg font-semibold ${roleColor.text}`}>
@@ -190,7 +190,7 @@ export default function DashboardPage() {
             </div>
 
             <div className={`p-6 rounded-2xl ${roleColor.bg} mb-6`}>
-              <h3 className="text-xl font-bold text-slate-800 mb-4">
+              <h3 className="text-xl font-bold text-stone-800 mb-4">
                 Ваши возможности:
               </h3>
               <ul className="space-y-3">
@@ -203,23 +203,23 @@ export default function DashboardPage() {
                     className="flex items-center gap-3"
                   >
                     <span className="text-green-500 text-xl">✓</span>
-                    <span className="text-slate-700">{feature}</span>
+                    <span className="text-stone-700">{feature}</span>
                   </motion.li>
                 ))}
               </ul>
             </div>
 
             <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className="p-4 bg-slate-50 rounded-xl text-center">
-                <p className="text-sm text-slate-600 mb-1">Лимит договоров</p>
-                <p className="text-2xl font-bold text-slate-800">
+              <div className="p-4 bg-stone-50 rounded-xl text-center">
+                <p className="text-sm text-stone-600 mb-1">Лимит договоров</p>
+                <p className="text-2xl font-bold text-stone-800">
                   {permissions.maxContractsPerDay === -1 ? '∞' : permissions.maxContractsPerDay}
                 </p>
-                <p className="text-xs text-slate-500">в день</p>
+                <p className="text-xs text-stone-500">в день</p>
               </div>
-              <div className="p-4 bg-slate-50 rounded-xl text-center">
-                <p className="text-sm text-slate-600 mb-1">Форматы экспорта</p>
-                <p className="text-lg font-bold text-slate-800">
+              <div className="p-4 bg-stone-50 rounded-xl text-center">
+                <p className="text-sm text-stone-600 mb-1">Форматы экспорта</p>
+                <p className="text-lg font-bold text-stone-800">
                   {permissions.exportFormats.join(', ').toUpperCase() || 'Нет'}
                 </p>
               </div>
@@ -297,7 +297,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <p className="text-sm font-semibold text-gray-600 mb-1">LLM запросы</p>
-                    <p className="text-4xl font-bold text-slate-800">
+                    <p className="text-4xl font-bold text-stone-800">
                       {user?.llm_requests_today || 0}
                       <span className="text-lg text-gray-400 font-normal"> / {user?.max_llm_requests_per_day}</span>
                     </p>
@@ -305,7 +305,7 @@ export default function DashboardPage() {
                   <motion.div
                     whileHover={{ scale: 1.05 }}
                     transition={{ type: "spring", stiffness: 300 }}
-                    className="p-4 bg-slate-700 rounded-2xl shadow-sm"
+                    className="p-4 bg-stone-700 rounded-2xl shadow-sm"
                   >
                     <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -319,7 +319,7 @@ export default function DashboardPage() {
                     initial={{ width: 0 }}
                     animate={{ width: `${llmUsagePercent}%` }}
                     transition={{ duration: 1, delay: 0.7 }}
-                    className="absolute inset-y-0 left-0 bg-slate-600 rounded-full"
+                    className="absolute inset-y-0 left-0 bg-stone-600 rounded-full"
                   />
                 </div>
                 <p className="text-xs text-gray-500 mt-2">Использовано {llmUsagePercent.toFixed(0)}%</p>
@@ -334,7 +334,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <p className="text-sm font-semibold text-gray-600 mb-1">Тарифный план</p>
-                    <p className="text-3xl font-bold text-slate-800 capitalize">
+                    <p className="text-3xl font-bold text-stone-800 capitalize">
                       {user?.subscription_tier}
                     </p>
                   </div>
@@ -368,7 +368,7 @@ export default function DashboardPage() {
           transition={{ delay: 0.3 }}
           className="card-modern mb-8"
         >
-          <h2 className="text-2xl font-bold text-slate-800 mb-6">Быстрые действия</h2>
+          <h2 className="text-2xl font-bold text-stone-800 mb-6">Быстрые действия</h2>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {[
               { icon: <svg className="h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>, label: 'Загрузить договор', route: '/contracts/upload', color: 'border-l-primary-500', permission: 'canAnalyze' },
@@ -389,7 +389,7 @@ export default function DashboardPage() {
                 className={`bg-white border-l-4 ${action.color} rounded-xl shadow-sm hover:shadow-md transition-all duration-300 p-5 text-left`}
               >
                 <div className="mb-3">{action.icon}</div>
-                <div className="text-base font-semibold text-slate-800">{action.label}</div>
+                <div className="text-base font-semibold text-stone-800">{action.label}</div>
               </motion.button>
             ))}
           </div>
@@ -402,7 +402,7 @@ export default function DashboardPage() {
           transition={{ delay: 0.5 }}
           className="card-modern"
         >
-          <h2 className="text-2xl font-bold text-slate-800 mb-6">Последние договоры</h2>
+          <h2 className="text-2xl font-bold text-stone-800 mb-6">Последние договоры</h2>
 
           {contractsLoading ? (
             <div className="flex justify-center py-12">

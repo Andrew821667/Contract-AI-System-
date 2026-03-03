@@ -28,7 +28,7 @@ export default function Button({
 
   const variants = {
     primary: 'bg-primary-600 hover:bg-primary-700 text-white shadow-sm',
-    secondary: 'bg-slate-700 hover:bg-slate-800 text-white shadow-sm',
+    secondary: 'bg-stone-700 hover:bg-stone-800 text-white shadow-sm',
     outline: 'border-2 border-primary-500 text-primary-500 hover:bg-primary-500 hover:text-white',
     success: 'bg-success-600 hover:bg-success-700 text-white shadow-sm',
     danger: 'bg-danger-600 hover:bg-danger-700 text-white shadow-sm'

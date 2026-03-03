@@ -73,7 +73,7 @@ export default function GenerateContractPage() {
   const isStep2Valid = formData.partyA && formData.partyB && formData.amount
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50/30 to-orange-50/20 py-8">
       <div className="max-w-4xl mx-auto px-4">
         {/* Header */}
         <motion.div
@@ -88,10 +88,10 @@ export default function GenerateContractPage() {
           >
             ← Назад
           </Button>
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">
+          <h1 className="text-4xl font-bold text-stone-900 mb-2">
             Генератор договоров
           </h1>
-          <p className="text-slate-600">
+          <p className="text-stone-600">
             Создайте профессиональный договор за несколько минут с помощью AI
           </p>
         </motion.div>
@@ -104,7 +104,7 @@ export default function GenerateContractPage() {
                 className={`w-10 h-10 rounded-full flex items-center justify-center font-bold transition-all ${
                   step >= s
                     ? 'bg-primary-600 text-white'
-                    : 'bg-slate-200 text-slate-400'
+                    : 'bg-stone-200 text-stone-400'
                 }`}
               >
                 {s}
@@ -112,7 +112,7 @@ export default function GenerateContractPage() {
               {s < 3 && (
                 <div
                   className={`flex-1 h-1 mx-2 transition-all ${
-                    step > s ? 'bg-primary-600' : 'bg-slate-200'
+                    step > s ? 'bg-primary-600' : 'bg-stone-200'
                   }`}
                 />
               )}
@@ -139,16 +139,16 @@ export default function GenerateContractPage() {
                     className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${
                       formData.contractType === type.value
                         ? 'border-primary-500 bg-primary-50'
-                        : 'border-slate-200 hover:border-primary-300'
+                        : 'border-stone-200 hover:border-primary-300'
                     }`}
                   >
                     <div className="flex items-start gap-3">
                       <span className="text-3xl">{type.icon}</span>
                       <div className="flex-1">
-                        <h3 className="font-semibold text-slate-800 mb-1">
+                        <h3 className="font-semibold text-stone-800 mb-1">
                           {type.label}
                         </h3>
-                        <p className="text-sm text-slate-600">{type.description}</p>
+                        <p className="text-sm text-stone-600">{type.description}</p>
                       </div>
                     </div>
                   </motion.div>
@@ -170,15 +170,15 @@ export default function GenerateContractPage() {
                         className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
                           formData.templateId === template.id
                             ? 'border-primary-500 bg-primary-50'
-                            : 'border-slate-200 hover:border-primary-300'
+                            : 'border-stone-200 hover:border-primary-300'
                         }`}
                       >
                         <div className="flex items-center justify-between">
                           <div>
-                            <h4 className="font-semibold text-slate-800">
+                            <h4 className="font-semibold text-stone-800">
                               {template.name}
                             </h4>
-                            <p className="text-sm text-slate-500">{template.id}</p>
+                            <p className="text-sm text-stone-500">{template.id}</p>
                           </div>
                           {formData.templateId === template.id && (
                             <span className="text-primary-500 text-xl">✓</span>
@@ -215,7 +215,7 @@ export default function GenerateContractPage() {
                 {/* Parties */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                    <label className="block text-sm font-medium text-stone-700 mb-2">
                       Сторона А (Заказчик/Покупатель)
                     </label>
                     <input
@@ -223,11 +223,11 @@ export default function GenerateContractPage() {
                       value={formData.partyA}
                       onChange={(e) => handleInputChange('partyA', e.target.value)}
                       placeholder="ООО 'Компания'"
-                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                    <label className="block text-sm font-medium text-stone-700 mb-2">
                       Сторона Б (Исполнитель/Продавец)
                     </label>
                     <input
@@ -235,14 +235,14 @@ export default function GenerateContractPage() {
                       value={formData.partyB}
                       onChange={(e) => handleInputChange('partyB', e.target.value)}
                       placeholder="ООО 'Контрагент'"
-                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
                 </div>
 
                 {/* Amount */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-sm font-medium text-stone-700 mb-2">
                     Сумма договора (₽)
                   </label>
                   <input
@@ -251,39 +251,39 @@ export default function GenerateContractPage() {
                     onChange={(e) => handleInputChange('amount', e.target.value)}
                     placeholder="100000"
                     min="0"
-                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
 
                 {/* Dates */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                    <label className="block text-sm font-medium text-stone-700 mb-2">
                       Дата начала
                     </label>
                     <input
                       type="date"
                       value={formData.startDate}
                       onChange={(e) => handleInputChange('startDate', e.target.value)}
-                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                    <label className="block text-sm font-medium text-stone-700 mb-2">
                       Дата окончания (опционально)
                     </label>
                     <input
                       type="date"
                       value={formData.endDate}
                       onChange={(e) => handleInputChange('endDate', e.target.value)}
-                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
                 </div>
 
                 {/* Additional Terms */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                  <label className="block text-sm font-medium text-stone-700 mb-2">
                     Дополнительные условия (опционально)
                   </label>
                   <textarea
@@ -291,7 +291,7 @@ export default function GenerateContractPage() {
                     onChange={(e) => handleInputChange('additionalTerms', e.target.value)}
                     placeholder="Укажите особые условия договора..."
                     rows={4}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="w-full px-4 py-3 border border-stone-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
               </div>
@@ -319,42 +319,42 @@ export default function GenerateContractPage() {
               <h2 className="text-2xl font-bold mb-6">Шаг 3: Проверьте и сгенерируйте</h2>
 
               <div className="space-y-4">
-                <div className="p-4 bg-slate-50 rounded-lg">
-                  <h3 className="font-semibold text-slate-700 mb-2">Тип договора</h3>
-                  <p className="text-slate-900">
+                <div className="p-4 bg-stone-50 rounded-lg">
+                  <h3 className="font-semibold text-stone-700 mb-2">Тип договора</h3>
+                  <p className="text-stone-900">
                     {contractTypes.find((t) => t.value === formData.contractType)?.label}
                   </p>
                 </div>
 
-                <div className="p-4 bg-slate-50 rounded-lg">
-                  <h3 className="font-semibold text-slate-700 mb-2">Шаблон</h3>
-                  <p className="text-slate-900">
+                <div className="p-4 bg-stone-50 rounded-lg">
+                  <h3 className="font-semibold text-stone-700 mb-2">Шаблон</h3>
+                  <p className="text-stone-900">
                     {templates.find((t) => t.id === formData.templateId)?.name}
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <h3 className="font-semibold text-slate-700 mb-2">Сторона А</h3>
-                    <p className="text-slate-900">{formData.partyA}</p>
+                  <div className="p-4 bg-stone-50 rounded-lg">
+                    <h3 className="font-semibold text-stone-700 mb-2">Сторона А</h3>
+                    <p className="text-stone-900">{formData.partyA}</p>
                   </div>
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <h3 className="font-semibold text-slate-700 mb-2">Сторона Б</h3>
-                    <p className="text-slate-900">{formData.partyB}</p>
+                  <div className="p-4 bg-stone-50 rounded-lg">
+                    <h3 className="font-semibold text-stone-700 mb-2">Сторона Б</h3>
+                    <p className="text-stone-900">{formData.partyB}</p>
                   </div>
                 </div>
 
-                <div className="p-4 bg-slate-50 rounded-lg">
-                  <h3 className="font-semibold text-slate-700 mb-2">Сумма</h3>
-                  <p className="text-slate-900">
+                <div className="p-4 bg-stone-50 rounded-lg">
+                  <h3 className="font-semibold text-stone-700 mb-2">Сумма</h3>
+                  <p className="text-stone-900">
                     {Number(formData.amount).toLocaleString('ru-RU')} ₽
                   </p>
                 </div>
 
                 {formData.startDate && (
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <h3 className="font-semibold text-slate-700 mb-2">Срок действия</h3>
-                    <p className="text-slate-900">
+                  <div className="p-4 bg-stone-50 rounded-lg">
+                    <h3 className="font-semibold text-stone-700 mb-2">Срок действия</h3>
+                    <p className="text-stone-900">
                       С {formData.startDate}
                       {formData.endDate && ` по ${formData.endDate}`}
                     </p>
@@ -362,11 +362,11 @@ export default function GenerateContractPage() {
                 )}
 
                 {formData.additionalTerms && (
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <h3 className="font-semibold text-slate-700 mb-2">
+                  <div className="p-4 bg-stone-50 rounded-lg">
+                    <h3 className="font-semibold text-stone-700 mb-2">
                       Дополнительные условия
                     </h3>
-                    <p className="text-slate-900 whitespace-pre-wrap">
+                    <p className="text-stone-900 whitespace-pre-wrap">
                       {formData.additionalTerms}
                     </p>
                   </div>
@@ -374,18 +374,18 @@ export default function GenerateContractPage() {
               </div>
             </Card>
 
-            <Card className="bg-slate-50 border-2 border-primary-200">
+            <Card className="bg-stone-50 border-2 border-primary-200">
               <div className="flex items-start gap-4">
                 <span className="text-3xl">✨</span>
                 <div className="flex-1">
-                  <h3 className="font-bold text-slate-800 mb-2">
+                  <h3 className="font-bold text-stone-800 mb-2">
                     Готовы к генерации?
                   </h3>
-                  <p className="text-slate-600 mb-4">
+                  <p className="text-stone-600 mb-4">
                     AI создаст профессиональный договор на основе указанных данных.
                     Процесс займёт около 30 секунд.
                   </p>
-                  <ul className="space-y-2 text-sm text-slate-600 mb-4">
+                  <ul className="space-y-2 text-sm text-stone-600 mb-4">
                     <li className="flex items-center gap-2">
                       <span className="text-green-500">✓</span>
                       Соответствие ГК РФ

@@ -40,7 +40,7 @@ export default function LoginPage() {
         toast.success(`Добро пожаловать, ${demoUser.name}!`, {
           style: {
             borderRadius: '12px',
-            background: '#0284c7',
+            background: '#967b52',
             color: '#fff',
           },
         })
@@ -60,7 +60,7 @@ export default function LoginPage() {
       toast.success(`Добро пожаловать, ${response.user.name}!`, {
         style: {
           borderRadius: '12px',
-          background: '#0284c7',
+          background: '#967b52',
           color: '#fff',
         },
       })
@@ -77,7 +77,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100">
+    <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-stone-50 via-amber-50/30 to-stone-100">
       {/* Subtle background blur */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/3 w-96 h-96 bg-primary-200/20 rounded-full blur-3xl" />
@@ -108,10 +108,10 @@ export default function LoginPage() {
               </div>
             </motion.div>
 
-            <h1 className="text-5xl font-bold text-slate-800 mb-3">
+            <h1 className="text-5xl font-bold text-stone-800 mb-3">
               Contract AI
             </h1>
-            <p className="text-xl text-slate-600 font-medium">
+            <p className="text-xl text-stone-600 font-medium">
               Умная работа с договорами
             </p>
           </motion.div>
@@ -121,21 +121,21 @@ export default function LoginPage() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.3, duration: 0.5 }}
-            className="bg-white rounded-3xl shadow-card p-8 border border-slate-100"
+            className="bg-white rounded-3xl shadow-card p-8 border border-stone-100"
           >
-            <h2 className="text-2xl font-bold text-slate-800 mb-6 text-center">
+            <h2 className="text-2xl font-bold text-stone-800 mb-6 text-center">
               Вход в систему
             </h2>
 
             <form onSubmit={handleLogin} className="space-y-5">
               {/* Email Field */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                <label className="block text-sm font-semibold text-stone-700 mb-2">
                   Email
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="h-5 w-5 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
                     </svg>
                   </div>
@@ -143,7 +143,7 @@ export default function LoginPage() {
                     type="text"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3.5 bg-white border-2 border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all duration-300 outline-none"
+                    className="w-full pl-12 pr-4 py-3.5 bg-white border-2 border-stone-200 rounded-xl text-stone-900 placeholder-slate-400 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all duration-300 outline-none"
                     placeholder="user@example.com"
                     required
                   />
@@ -152,12 +152,12 @@ export default function LoginPage() {
 
               {/* Password Field */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-2">
+                <label className="block text-sm font-semibold text-stone-700 mb-2">
                   Пароль
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="h-5 w-5 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                     </svg>
                   </div>
@@ -165,7 +165,7 @@ export default function LoginPage() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3.5 bg-white border-2 border-slate-200 rounded-xl text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all duration-300 outline-none"
+                    className="w-full pl-12 pr-4 py-3.5 bg-white border-2 border-stone-200 rounded-xl text-stone-900 placeholder-slate-400 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all duration-300 outline-none"
                     placeholder="••••••••"
                     required
                   />
@@ -210,22 +210,22 @@ export default function LoginPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.6 }}
-              className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200"
+              className="mt-6 p-4 bg-stone-50 rounded-xl border border-stone-200"
             >
-              <p className="text-sm font-semibold text-slate-700 mb-2 flex items-center">
-                <svg className="h-4 w-4 mr-2 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <p className="text-sm font-semibold text-stone-700 mb-2 flex items-center">
+                <svg className="h-4 w-4 mr-2 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 Демо-аккаунты:
               </p>
-              <div className="space-y-1.5 text-xs text-slate-600">
+              <div className="space-y-1.5 text-xs text-stone-600">
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
                   <span className="font-semibold">Demo:</span>
-                  <code className="bg-slate-200 text-slate-700 px-2 py-0.5 rounded">demo@example.com / demo123</code>
+                  <code className="bg-stone-200 text-stone-700 px-2 py-0.5 rounded">demo@example.com / demo123</code>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
                   <span className="font-semibold">Admin:</span>
-                  <code className="bg-slate-200 text-slate-700 px-2 py-0.5 rounded">admin@example.com / admin123</code>
+                  <code className="bg-stone-200 text-stone-700 px-2 py-0.5 rounded">admin@example.com / admin123</code>
                 </div>
               </div>
             </motion.div>
@@ -238,7 +238,7 @@ export default function LoginPage() {
             transition={{ delay: 0.8 }}
             className="mt-6 text-center space-y-2"
           >
-            <p className="text-slate-600 text-sm">
+            <p className="text-stone-600 text-sm">
               Нет аккаунта?{' '}
               <button
                 onClick={() => router.push('/register')}
@@ -247,7 +247,7 @@ export default function LoginPage() {
                 Зарегистрироваться
               </button>
             </p>
-            <p className="text-slate-400 text-xs">
+            <p className="text-stone-400 text-xs">
               © 2025 Contract AI System. Все права защищены.
             </p>
           </motion.div>

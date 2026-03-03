@@ -18,7 +18,7 @@ export default function Badge({
     warning: 'bg-warning-100 text-warning-800',
     danger: 'bg-danger-100 text-danger-800',
     info: 'bg-primary-100 text-primary-800',
-    default: 'bg-slate-100 text-slate-700'
+    default: 'bg-stone-100 text-stone-700'
   }
 
   const sizes = {
