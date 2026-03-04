@@ -251,6 +251,37 @@ export interface ModelStatus {
   accuracy: number | null;
 }
 
+// Contract Version Comparison types
+export interface ContractVersionInfo {
+  id: number;
+  contract_id: string;
+  version_number: number;
+  file_hash: string | null;
+  source: string;
+  description: string | null;
+  is_current: boolean;
+  uploaded_at: string | null;
+}
+
+export interface CompareChange {
+  change_type: string;
+  change_category: string;
+  section_name: string | null;
+  clause_number: string | null;
+  old_content: string | null;
+  new_content: string | null;
+  xpath_location: string | null;
+}
+
+export interface CompareResult {
+  total_changes: number;
+  by_type: Record<string, number>;
+  by_category: Record<string, number>;
+  overall_assessment: string | null;
+  changes: CompareChange[];
+  executive_summary: string | null;
+}
+
 // API Client
 class APIClient {
   private client: AxiosInstance;
@@ -631,6 +662,47 @@ class APIClient {
   async getModelStatus(): Promise<ModelStatus> {
     const response = await this.client.get<ModelStatus>(
       '/api/v1/ml/model/status'
+    );
+    return response.data;
+  }
+
+  // ==================== Contract Version Comparison ====================
+
+  async uploadVersion(
+    contractId: string,
+    file: File,
+    source?: string,
+    description?: string
+  ): Promise<ContractVersionInfo> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (source) formData.append('source', source);
+    if (description) formData.append('description', description);
+
+    const response = await this.client.post<ContractVersionInfo>(
+      `/api/v1/contracts/${contractId}/versions`,
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000,
+      }
+    );
+    return response.data;
+  }
+
+  async getVersions(contractId: string): Promise<{ versions: ContractVersionInfo[]; total: number }> {
+    const response = await this.client.get(`/api/v1/contracts/${contractId}/versions`);
+    return response.data;
+  }
+
+  async compareVersions(
+    contractId: string,
+    fromVersionId: number,
+    toVersionId: number
+  ): Promise<CompareResult> {
+    const response = await this.client.post<CompareResult>(
+      `/api/v1/contracts/${contractId}/compare`,
+      { from_version_id: fromVersionId, to_version_id: toVersionId }
     );
     return response.data;
   }

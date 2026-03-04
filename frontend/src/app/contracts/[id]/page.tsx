@@ -8,7 +8,7 @@ import { toast } from 'react-hot-toast'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
-import api, { DigitalContract, VerificationResult, RiskPredictionResponse } from '@/services/api'
+import api, { DigitalContract, VerificationResult, RiskPredictionResponse, ContractVersionInfo, CompareChange, CompareResult } from '@/services/api'
 
 interface Risk {
   risk_type: string
@@ -386,6 +386,9 @@ export default function ContractDetailPage() {
         {/* ML Quick Risk Assessment */}
         <MLRiskSection contractId={contractId} contract={contract} onAnalyze={() => analyzeMutation.mutate()} />
 
+        {/* Version Comparison Section */}
+        <VersionComparisonSection contractId={contractId} />
+
         {/* Digital Verification Section */}
         <DigitalVerificationSection contractId={contractId} />
 
@@ -616,6 +619,392 @@ function MLRiskSection({ contractId, contract, onAnalyze }: { contractId: string
                 Спасибо! Ваш отзыв поможет улучшить модель.
               </div>
             )}
+          </div>
+        )}
+      </Card>
+    </motion.div>
+  )
+}
+
+
+// ==================== Version Comparison Section ====================
+
+function VersionComparisonSection({ contractId }: { contractId: string }) {
+  const queryClient = useQueryClient()
+  const [showUpload, setShowUpload] = useState(false)
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadSource, setUploadSource] = useState('unknown')
+  const [uploadDescription, setUploadDescription] = useState('')
+  const [uploading, setUploading] = useState(false)
+
+  const [fromVersionId, setFromVersionId] = useState<number | null>(null)
+  const [toVersionId, setToVersionId] = useState<number | null>(null)
+  const [comparing, setComparing] = useState(false)
+  const [compareResult, setCompareResult] = useState<CompareResult | null>(null)
+
+  const [filterType, setFilterType] = useState<string>('all')
+  const [filterCategory, setFilterCategory] = useState<string>('all')
+
+  const { data: versionsData, isLoading: loadingVersions, refetch } = useQuery({
+    queryKey: ['contract-versions', contractId],
+    queryFn: () => api.getVersions(contractId),
+  })
+
+  const versions: ContractVersionInfo[] = versionsData?.versions || []
+
+  const handleUpload = async () => {
+    if (!uploadFile) return
+    setUploading(true)
+    try {
+      await api.uploadVersion(contractId, uploadFile, uploadSource, uploadDescription)
+      toast.success('Версия загружена')
+      setShowUpload(false)
+      setUploadFile(null)
+      setUploadDescription('')
+      setUploadSource('unknown')
+      refetch()
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Ошибка загрузки версии')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleCompare = async () => {
+    if (fromVersionId === null || toVersionId === null) return
+    setComparing(true)
+    setCompareResult(null)
+    try {
+      const result = await api.compareVersions(contractId, fromVersionId, toVersionId)
+      setCompareResult(result)
+      toast.success(`Найдено ${result.total_changes} изменений`)
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Ошибка сравнения')
+    } finally {
+      setComparing(false)
+    }
+  }
+
+  const sourceLabels: Record<string, string> = {
+    initial: 'Исходный',
+    counterparty_response: 'Ответ контрагента',
+    internal_revision: 'Внутренняя правка',
+    final: 'Финальный',
+    unknown: 'Не указано',
+  }
+
+  const changeTypeLabels: Record<string, { label: string; color: string }> = {
+    addition: { label: 'Добавление', color: 'text-green-700 bg-green-100' },
+    deletion: { label: 'Удаление', color: 'text-red-700 bg-red-100' },
+    modification: { label: 'Изменение', color: 'text-blue-700 bg-blue-100' },
+    relocation: { label: 'Перемещение', color: 'text-purple-700 bg-purple-100' },
+  }
+
+  const categoryLabels: Record<string, string> = {
+    textual: 'Текстовое',
+    structural: 'Структурное',
+    semantic: 'Семантическое',
+    legal: 'Юридическое',
+  }
+
+  const assessmentBadge: Record<string, { label: string; variant: 'success' | 'warning' | 'danger' | 'info' }> = {
+    favorable: { label: 'Благоприятно', variant: 'success' },
+    unfavorable: { label: 'Неблагоприятно', variant: 'danger' },
+    mixed: { label: 'Смешанно', variant: 'warning' },
+    neutral: { label: 'Нейтрально', variant: 'info' },
+  }
+
+  const filteredChanges = compareResult?.changes.filter((ch) => {
+    if (filterType !== 'all' && ch.change_type !== filterType) return false
+    if (filterCategory !== 'all' && ch.change_category !== filterCategory) return false
+    return true
+  }) || []
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.3 }}
+      className="mb-8"
+    >
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-gray-900">Сравнение версий</h2>
+          <Button variant="outline" size="sm" onClick={() => setShowUpload(!showUpload)}>
+            {showUpload ? 'Отмена' : '+ Загрузить версию'}
+          </Button>
+        </div>
+
+        {/* Upload modal */}
+        {showUpload && (
+          <div className="bg-gray-50 rounded-lg p-4 mb-4 border border-gray-200">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Загрузить новую версию</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Файл</label>
+                <input
+                  type="file"
+                  accept=".docx,.pdf,.txt,.xml"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Источник</label>
+                <select
+                  value={uploadSource}
+                  onChange={(e) => setUploadSource(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {Object.entries(sourceLabels).map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Описание (опционально)</label>
+                <input
+                  type="text"
+                  value={uploadDescription}
+                  onChange={(e) => setUploadDescription(e.target.value)}
+                  placeholder="Краткое описание изменений"
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={uploading}
+                onClick={handleUpload}
+                disabled={!uploadFile}
+              >
+                Загрузить
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Version timeline */}
+        {loadingVersions && (
+          <div className="text-center py-4 text-gray-400 text-sm">Загрузка...</div>
+        )}
+
+        {!loadingVersions && versions.length === 0 && (
+          <div className="text-center py-6 text-gray-500">
+            <div className="text-3xl mb-2">{'\uD83D\uDCC4'}</div>
+            <p className="text-sm">Нет загруженных версий. Загрузите первую версию для начала.</p>
+          </div>
+        )}
+
+        {versions.length > 0 && (
+          <div className="space-y-3 mb-4">
+            {versions.map((v, idx) => (
+              <div key={v.id} className="flex items-start gap-3">
+                <div className="flex flex-col items-center">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold border-2 ${
+                    v.is_current
+                      ? 'bg-green-100 border-green-400 text-green-700'
+                      : 'bg-gray-100 border-gray-300 text-gray-500'
+                  }`}>
+                    {v.version_number}
+                  </div>
+                  {idx < versions.length - 1 && (
+                    <div className="w-0.5 h-6 bg-gray-300 mt-1" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-gray-900">Версия {v.version_number}</span>
+                    {v.is_current && <Badge variant="success" size="sm">Текущая</Badge>}
+                    <span className="text-xs text-gray-500">{sourceLabels[v.source] || v.source}</span>
+                  </div>
+                  {v.description && (
+                    <p className="text-xs text-gray-500 mt-0.5">{v.description}</p>
+                  )}
+                  {v.uploaded_at && (
+                    <div className="text-xs text-gray-400 mt-0.5">
+                      {new Date(v.uploaded_at).toLocaleString('ru-RU')}
+                    </div>
+                  )}
+                  {v.file_hash && (
+                    <div className="text-xs text-gray-400 mt-0.5 font-mono truncate">
+                      SHA-256: {v.file_hash.substring(0, 16)}...
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Compare controls */}
+        {versions.length >= 2 && (
+          <div className="border-t border-gray-200 pt-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Сравнить версии</h3>
+            <div className="flex flex-wrap items-end gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Старая версия</label>
+                <select
+                  value={fromVersionId ?? ''}
+                  onChange={(e) => setFromVersionId(e.target.value ? Number(e.target.value) : null)}
+                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">Выберите...</option>
+                  {versions.map((v) => (
+                    <option key={v.id} value={v.id}>v{v.version_number} — {sourceLabels[v.source] || v.source}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Новая версия</label>
+                <select
+                  value={toVersionId ?? ''}
+                  onChange={(e) => setToVersionId(e.target.value ? Number(e.target.value) : null)}
+                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">Выберите...</option>
+                  {versions.map((v) => (
+                    <option key={v.id} value={v.id}>v{v.version_number} — {sourceLabels[v.source] || v.source}</option>
+                  ))}
+                </select>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={comparing}
+                onClick={handleCompare}
+                disabled={fromVersionId === null || toVersionId === null || fromVersionId === toVersionId}
+              >
+                Сравнить
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Compare results */}
+        {compareResult && (
+          <div className="border-t border-gray-200 pt-4 mt-4">
+            {/* Summary stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-xl p-3 bg-gray-50 text-center">
+                <p className="text-xs text-gray-500 mb-1">Всего изменений</p>
+                <p className="text-2xl font-bold text-gray-900">{compareResult.total_changes}</p>
+              </div>
+              <div className="rounded-xl p-3 bg-green-50 text-center">
+                <p className="text-xs text-gray-500 mb-1">Добавлений</p>
+                <p className="text-2xl font-bold text-green-700">{compareResult.by_type.addition || 0}</p>
+              </div>
+              <div className="rounded-xl p-3 bg-red-50 text-center">
+                <p className="text-xs text-gray-500 mb-1">Удалений</p>
+                <p className="text-2xl font-bold text-red-700">{compareResult.by_type.deletion || 0}</p>
+              </div>
+              <div className="rounded-xl p-3 bg-blue-50 text-center">
+                <p className="text-xs text-gray-500 mb-1">Изменений</p>
+                <p className="text-2xl font-bold text-blue-700">{compareResult.by_type.modification || 0}</p>
+              </div>
+            </div>
+
+            {/* Assessment badge */}
+            {compareResult.overall_assessment && (
+              <div className="mb-4 flex items-center gap-2">
+                <span className="text-sm text-gray-600">Оценка:</span>
+                <Badge
+                  variant={assessmentBadge[compareResult.overall_assessment]?.variant || 'info'}
+                  size="sm"
+                >
+                  {assessmentBadge[compareResult.overall_assessment]?.label || compareResult.overall_assessment}
+                </Badge>
+              </div>
+            )}
+
+            {/* Executive summary */}
+            {compareResult.executive_summary && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+                <p className="text-sm text-amber-800">{compareResult.executive_summary}</p>
+              </div>
+            )}
+
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-3 mb-4">
+              <div>
+                <label className="text-xs text-gray-500 mr-1">Тип:</label>
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  className="px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="all">Все</option>
+                  {Object.entries(changeTypeLabels).map(([val, info]) => (
+                    <option key={val} value={val}>{info.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mr-1">Категория:</label>
+                <select
+                  value={filterCategory}
+                  onChange={(e) => setFilterCategory(e.target.value)}
+                  className="px-2 py-1 border border-gray-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="all">Все</option>
+                  {Object.entries(categoryLabels).map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
+                </select>
+              </div>
+              <span className="text-xs text-gray-400">
+                Показано: {filteredChanges.length} из {compareResult.total_changes}
+              </span>
+            </div>
+
+            {/* Changes list */}
+            <div className="space-y-3 max-h-[600px] overflow-y-auto">
+              {filteredChanges.map((ch, idx) => {
+                const typeInfo = changeTypeLabels[ch.change_type] || { label: ch.change_type, color: 'text-gray-700 bg-gray-100' }
+                return (
+                  <div key={idx} className="border border-gray-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${typeInfo.color}`}>
+                        {typeInfo.label}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {categoryLabels[ch.change_category] || ch.change_category}
+                      </span>
+                      {ch.section_name && (
+                        <span className="text-xs text-gray-400">{ch.section_name}</span>
+                      )}
+                      {ch.clause_number && (
+                        <span className="text-xs text-gray-400 font-mono">п. {ch.clause_number}</span>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      {ch.old_content && (
+                        <div className="bg-red-50 border border-red-100 rounded p-2">
+                          <span className="text-xs font-semibold text-red-600 mr-1">-</span>
+                          <span className="text-sm text-red-800 break-words">{ch.old_content}</span>
+                        </div>
+                      )}
+                      {ch.new_content && (
+                        <div className="bg-green-50 border border-green-100 rounded p-2">
+                          <span className="text-xs font-semibold text-green-600 mr-1">+</span>
+                          <span className="text-sm text-green-800 break-words">{ch.new_content}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+              {filteredChanges.length === 0 && compareResult.total_changes > 0 && (
+                <div className="text-center py-4 text-gray-400 text-sm">
+                  Нет изменений, соответствующих фильтру
+                </div>
+              )}
+              {compareResult.total_changes === 0 && (
+                <div className="text-center py-4 text-gray-500 text-sm">
+                  Версии идентичны — изменений не найдено
+                </div>
+              )}
+            </div>
           </div>
         )}
       </Card>
