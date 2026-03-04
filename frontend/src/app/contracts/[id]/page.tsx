@@ -8,7 +8,7 @@ import { toast } from 'react-hot-toast'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
-import api, { DigitalContract, VerificationResult } from '@/services/api'
+import api, { DigitalContract, VerificationResult, RiskPredictionResponse } from '@/services/api'
 
 interface Risk {
   risk_type: string
@@ -383,6 +383,9 @@ export default function ContractDetailPage() {
           </>
         )}
 
+        {/* ML Quick Risk Assessment */}
+        <MLRiskSection contractId={contractId} contract={contract} onAnalyze={() => analyzeMutation.mutate()} />
+
         {/* Digital Verification Section */}
         <DigitalVerificationSection contractId={contractId} />
 
@@ -412,6 +415,211 @@ export default function ContractDetailPage() {
         </motion.div>
       </div>
     </div>
+  )
+}
+
+
+// ==================== ML Quick Risk Assessment Section ====================
+
+function MLRiskSection({ contractId, contract, onAnalyze }: { contractId: string; contract: any; onAnalyze: () => void }) {
+  const [prediction, setPrediction] = useState<RiskPredictionResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [feedbackSent, setFeedbackSent] = useState(false)
+  const [selectedActual, setSelectedActual] = useState('')
+  const [feedbackReason, setFeedbackReason] = useState('')
+  const [submittingFeedback, setSubmittingFeedback] = useState(false)
+
+  const riskLevelLabels: Record<string, { label: string; color: string; bg: string }> = {
+    critical: { label: 'Критический', color: 'text-red-700', bg: 'bg-red-100' },
+    high: { label: 'Высокий', color: 'text-orange-700', bg: 'bg-orange-100' },
+    medium: { label: 'Средний', color: 'text-yellow-700', bg: 'bg-yellow-100' },
+    low: { label: 'Низкий', color: 'text-green-700', bg: 'bg-green-100' },
+    minimal: { label: 'Минимальный', color: 'text-emerald-700', bg: 'bg-emerald-100' },
+  }
+
+  const handlePredict = async () => {
+    setLoading(true)
+    setPrediction(null)
+    setFeedbackSent(false)
+    try {
+      const result = await api.predictRisk({
+        contract_type: contract?.contract_type || 'unknown',
+        amount: contract?.amount || 100000,
+        duration_days: contract?.duration_days || 365,
+        clause_count: contract?.clause_count || 0,
+        doc_length: contract?.doc_length || 0,
+      })
+      setPrediction(result)
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Ошибка ML-предсказания')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleFeedback = async () => {
+    if (!prediction || !selectedActual) return
+    setSubmittingFeedback(true)
+    try {
+      await api.submitRiskFeedback({
+        contract_id: parseInt(contractId) || undefined,
+        contract_features: prediction.features_used,
+        predicted_risk_level: prediction.risk_level,
+        predicted_confidence: prediction.confidence,
+        actual_risk_level: selectedActual,
+        feedback_reason: feedbackReason || undefined,
+        model_version: prediction.model_version,
+      })
+      toast.success('Спасибо за обратную связь!')
+      setFeedbackSent(true)
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Ошибка отправки')
+    } finally {
+      setSubmittingFeedback(false)
+    }
+  }
+
+  const riskInfo = prediction ? riskLevelLabels[prediction.risk_level] || riskLevelLabels.medium : null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.25 }}
+      className="mb-8"
+    >
+      <Card>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-gray-900">ML Быстрая оценка</h2>
+          <Button
+            variant="primary"
+            size="sm"
+            loading={loading}
+            onClick={handlePredict}
+          >
+            Быстрая оценка (ML)
+          </Button>
+        </div>
+
+        {!prediction && !loading && (
+          <p className="text-gray-500 text-sm">
+            Мгновенная оценка рисков на основе машинного обучения. Работает в 100 раз быстрее и в 60 раз дешевле полного LLM-анализа.
+          </p>
+        )}
+
+        {prediction && riskInfo && (
+          <div className="space-y-4">
+            {/* Risk Result Card */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Risk Level */}
+              <div className={`rounded-xl p-4 ${riskInfo.bg} text-center`}>
+                <p className="text-xs text-gray-500 mb-1">Уровень риска</p>
+                <p className={`text-2xl font-bold ${riskInfo.color}`}>{riskInfo.label}</p>
+              </div>
+
+              {/* Risk Score */}
+              <div className="rounded-xl p-4 bg-gray-50 text-center">
+                <p className="text-xs text-gray-500 mb-1">Оценка риска</p>
+                <p className="text-2xl font-bold text-gray-900">{prediction.risk_score.toFixed(0)}<span className="text-sm text-gray-400">/100</span></p>
+              </div>
+
+              {/* Confidence */}
+              <div className="rounded-xl p-4 bg-blue-50 text-center">
+                <p className="text-xs text-gray-500 mb-1">Уверенность</p>
+                <p className="text-2xl font-bold text-blue-700">{(prediction.confidence * 100).toFixed(0)}%</p>
+              </div>
+            </div>
+
+            {/* Confidence Bar */}
+            <div>
+              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                <span>Уверенность модели</span>
+                <span>{(prediction.confidence * 100).toFixed(1)}%</span>
+              </div>
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${prediction.confidence * 100}%` }}
+                  transition={{ duration: 0.8 }}
+                  className={`h-full rounded-full ${
+                    prediction.confidence >= 0.8 ? 'bg-green-500' :
+                    prediction.confidence >= 0.6 ? 'bg-yellow-500' : 'bg-red-500'
+                  }`}
+                />
+              </div>
+            </div>
+
+            {/* Recommendation */}
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <p className="text-sm text-amber-800">{prediction.recommendation}</p>
+            </div>
+
+            {/* Should use LLM suggestion */}
+            {prediction.should_use_llm && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center justify-between">
+                <p className="text-sm text-blue-800">
+                  Рекомендуется запустить полный LLM-анализ для детальных результатов.
+                </p>
+                <Button variant="primary" size="sm" onClick={onAnalyze}>
+                  Запустить LLM
+                </Button>
+              </div>
+            )}
+
+            {/* Prediction time */}
+            <div className="flex items-center gap-4 text-xs text-gray-400">
+              <span>Время: {prediction.prediction_time_ms.toFixed(0)} мс</span>
+              <span>Модель: {prediction.model_version}</span>
+            </div>
+
+            {/* Feedback section */}
+            {!feedbackSent ? (
+              <div className="border-t border-gray-200 pt-4 mt-4">
+                <p className="text-sm font-semibold text-gray-700 mb-2">Согласны с оценкой?</p>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {Object.entries(riskLevelLabels).map(([level, info]) => (
+                    <button
+                      key={level}
+                      onClick={() => setSelectedActual(level)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
+                        selectedActual === level
+                          ? `${info.bg} ${info.color} border-current`
+                          : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                      }`}
+                    >
+                      {info.label}
+                    </button>
+                  ))}
+                </div>
+                {selectedActual && selectedActual !== prediction.risk_level && (
+                  <input
+                    type="text"
+                    placeholder="Причина несогласия (опционально)"
+                    value={feedbackReason}
+                    onChange={(e) => setFeedbackReason(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                )}
+                {selectedActual && (
+                  <Button
+                    variant={selectedActual === prediction.risk_level ? 'outline' : 'primary'}
+                    size="sm"
+                    loading={submittingFeedback}
+                    onClick={handleFeedback}
+                  >
+                    {selectedActual === prediction.risk_level ? 'Подтвердить оценку' : 'Отправить коррекцию'}
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="border-t border-gray-200 pt-4 mt-4 text-center text-sm text-green-600 font-medium">
+                Спасибо! Ваш отзыв поможет улучшить модель.
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+    </motion.div>
   )
 }
 

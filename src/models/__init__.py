@@ -15,6 +15,7 @@ from .changes_models import ContractVersion, ContractChange, ChangeAnalysisResul
 from .analytics_models import AnalyticsMetricLog, AggregatedMetric
 from .ml_feedback_models import RiskPredictionFeedback, ModelTrainingBatch
 from .digital_models import DigitalContract
+from .clause_models import ExtractedClause
 
 # !>740=85 engine
 engine = create_engine(
@@ -100,5 +101,7 @@ __all__ = [
     "RiskPredictionFeedback",
     "ModelTrainingBatch",
     # Digital contract models
-    "DigitalContract"
+    "DigitalContract",
+    # Clause library models
+    "ExtractedClause"
 ]

@@ -30,6 +30,8 @@ from src.services.llm_gateway import LLMGateway
 from src.utils.file_validator import save_uploaded_file_securely, FileValidationError
 from config.settings import settings
 from src.services.digital_service import DigitalContractService
+from src.services.clause_library_service import ClauseLibraryService
+from src.services.clause_extractor import ClauseExtractor
 
 
 router = APIRouter()
@@ -256,6 +258,24 @@ async def analyze_contract_background(
         if result.success:
             contract.status = 'completed'
             logger.info(f"Contract {contract_id} analyzed successfully")
+
+            # Auto-save extracted clauses to library
+            try:
+                xml_content = parsed_xml if isinstance(parsed_xml, str) else str(parsed_xml)
+                extractor = ClauseExtractor()
+                clauses = extractor.extract_clauses(xml_content)
+
+                # Get analysis data from the result if available
+                analyses = []
+                if result.data and isinstance(result.data, dict):
+                    analyses = result.data.get('clause_analyses', [])
+
+                if clauses:
+                    clause_service = ClauseLibraryService(db)
+                    clause_service.save_clauses(contract_id, clauses, analyses)
+                    logger.info(f"Contract {contract_id}: {len(clauses)} clauses saved to library")
+            except Exception as clause_err:
+                logger.warning(f"Auto clause extraction failed for {contract_id}: {clause_err}")
 
             # Auto-digitalize after successful analysis
             try:

@@ -104,6 +104,153 @@ export interface DAGResponse {
   }>;
 }
 
+// Dashboard / Analytics types
+export interface DashboardData {
+  period: { start: string; end: string; days: number };
+  headline_metrics: Record<string, {
+    name: string;
+    value: number;
+    unit: string;
+    metric_type: string;
+    timestamp: string;
+    trend: string | null;
+    trend_percentage: number | null;
+    benchmark: number | null;
+  }>;
+  risk_trends: Array<{
+    date: string;
+    critical_count: number;
+    high_count: number;
+    medium_count: number;
+    low_count: number;
+    total_contracts: number;
+    average_risk_score: number;
+  }>;
+  cost_analysis: {
+    period_start: string;
+    period_end: string;
+    total_cost_usd: number;
+    llm_calls: number;
+    tokens_used: number;
+    cost_per_contract: number;
+    ml_prediction_savings: number;
+    estimated_monthly_cost: number;
+  };
+  productivity: {
+    contracts_analyzed: number;
+    total_time_saved_hours: number;
+    average_analysis_time_seconds: number;
+    automated_tasks: number;
+    manual_tasks_prevented: number;
+    roi_multiplier: number;
+  };
+  top_risks: Array<{
+    risk_type: string;
+    count: number;
+    severity: string;
+    avg_impact_score: number;
+    trend: string;
+  }>;
+  risk_distribution: Array<{
+    category: string;
+    count: number;
+    percentage: number;
+    average_severity: number;
+    trend: string;
+  }>;
+  recommendations: Array<{
+    type: string;
+    title: string;
+    message: string;
+    priority: string;
+  }>;
+  generated_at: string;
+}
+
+// Clause Library types
+export interface ExtractedClause {
+  id: string;
+  contract_id: string;
+  clause_number: number;
+  clause_type: string;
+  title: string;
+  text: string;
+  xpath_location: string | null;
+  risk_level: string | null;
+  severity_score: number | null;
+  tags: string[];
+  created_at: string;
+  analysis?: Record<string, any> | null;
+}
+
+export interface ClauseLibraryResponse {
+  clauses: ExtractedClause[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface ClauseStats {
+  total_clauses: number;
+  contracts_with_clauses: number;
+  average_severity: number;
+  by_type: Record<string, number>;
+  by_risk_level: Record<string, number>;
+}
+
+// ML Risk Prediction types
+export interface RiskPredictionRequest {
+  contract_type: string;
+  amount: number;
+  duration_days: number;
+  counterparty_risk_score?: number;
+  clause_count?: number;
+  doc_length?: number;
+  payment_terms_days?: number;
+  penalty_rate?: number;
+  has_force_majeure?: boolean;
+  has_liability_limit?: boolean;
+  has_confidentiality?: boolean;
+  has_dispute_resolution?: boolean;
+  has_termination_clause?: boolean;
+  num_parties?: number;
+  counterparty_age_years?: number;
+  historical_disputes?: number;
+  historical_contracts?: number;
+}
+
+export interface RiskPredictionResponse {
+  risk_level: string;
+  confidence: number;
+  risk_score: number;
+  should_use_llm: boolean;
+  prediction_time_ms: number;
+  model_version: string;
+  features_used: Record<string, number>;
+  recommendation: string;
+}
+
+export interface RiskFeedbackRequest {
+  contract_id?: number;
+  contract_features: Record<string, any>;
+  predicted_risk_level: string;
+  predicted_confidence?: number;
+  actual_risk_level: string;
+  feedback_reason?: string;
+  model_version?: string;
+}
+
+export interface ModelStatus {
+  model_type: string;
+  model_version: string;
+  is_trained: boolean;
+  feedback_count: number;
+  unused_feedback_count: number;
+  last_training: string | null;
+  accuracy: number | null;
+}
+
 // API Client
 class APIClient {
   private client: AxiosInstance;
@@ -413,6 +560,77 @@ class APIClient {
   async getDAG(contractId: string): Promise<DAGResponse> {
     const response = await this.client.get<DAGResponse>(
       `/api/v1/contracts/${contractId}/digital/dag`
+    );
+    return response.data;
+  }
+
+  // ==================== Analytics Dashboard ====================
+
+  async getDashboard(period: number = 30): Promise<DashboardData> {
+    const response = await this.client.get<DashboardData>(
+      '/api/v1/analytics/dashboard',
+      { params: { period_days: period } }
+    );
+    return response.data;
+  }
+
+  // ==================== Clause Library ====================
+
+  async getClauseLibrary(params?: {
+    page?: number;
+    page_size?: number;
+    clause_type?: string;
+    risk_level?: string;
+    contract_id?: string;
+  }): Promise<ClauseLibraryResponse> {
+    const response = await this.client.get<ClauseLibraryResponse>(
+      '/api/v1/clauses',
+      { params }
+    );
+    return response.data;
+  }
+
+  async getClauseStats(): Promise<ClauseStats> {
+    const response = await this.client.get<ClauseStats>('/api/v1/clauses/stats');
+    return response.data;
+  }
+
+  async getClause(clauseId: string): Promise<ExtractedClause> {
+    const response = await this.client.get<ExtractedClause>(
+      `/api/v1/clauses/${clauseId}`
+    );
+    return response.data;
+  }
+
+  async searchClauses(query: string, clauseType?: string): Promise<ClauseLibraryResponse> {
+    const response = await this.client.get<ClauseLibraryResponse>(
+      '/api/v1/clauses/search',
+      { params: { q: query, clause_type: clauseType } }
+    );
+    return response.data;
+  }
+
+  // ==================== ML Risk Prediction ====================
+
+  async predictRisk(data: RiskPredictionRequest): Promise<RiskPredictionResponse> {
+    const response = await this.client.post<RiskPredictionResponse>(
+      '/api/v1/ml/predict-risk',
+      data
+    );
+    return response.data;
+  }
+
+  async submitRiskFeedback(data: RiskFeedbackRequest): Promise<{ success: boolean; feedback_id: number; message: string }> {
+    const response = await this.client.post(
+      '/api/v1/ml/feedback',
+      data
+    );
+    return response.data;
+  }
+
+  async getModelStatus(): Promise<ModelStatus> {
+    const response = await this.client.get<ModelStatus>(
+      '/api/v1/ml/model/status'
     );
     return response.data;
   }

@@ -6,22 +6,28 @@ Provides access to:
 - Smart Contract Composer
 - Enhanced RAG Search
 - Knowledge Base Management
+- Prediction Feedback
+- Model Status
 
 Author: AI Contract System
 """
 
 from typing import Optional, List, Dict
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 import json
 import asyncio
+import os
 
 from src.ml.risk_predictor import MLRiskPredictor, RiskLevel, quick_predict_risk
 from src.services.smart_composer import SmartContractComposer, create_smart_composer
 from src.services.enhanced_rag import get_enhanced_rag
 from src.services.auth_service import AuthService
-from src.models.database import User, SessionLocal
+from src.models.database import get_db, Base
+from src.models.auth_models import User
+from src.models.ml_feedback_models import RiskPredictionFeedback, ModelTrainingBatch
 from loguru import logger
 
 
@@ -49,7 +55,50 @@ def get_smart_composer() -> SmartContractComposer:
     return _smart_composer
 
 
-# Request/Response Models
+# ========== AUTH DEPENDENCY (Bearer token) ==========
+
+async def get_current_user(
+    authorization: str = Depends(lambda request: request.headers.get("Authorization")),
+    db: Session = Depends(get_db)
+) -> User:
+    """Get current authenticated user via Bearer token"""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid authorization header",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token = authorization.replace("Bearer ", "")
+    auth_service = AuthService(db)
+
+    payload = auth_service.verify_token(token, token_type="access")
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user_id = payload.get("user_id")
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+
+    if not user.is_active():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is not active"
+        )
+
+    return user
+
+
+# ========== Request/Response Models ==========
 
 class RiskPredictionRequest(BaseModel):
     """ML risk prediction request"""
@@ -82,6 +131,28 @@ class RiskPredictionResponse(BaseModel):
     model_version: str
     features_used: Dict[str, float]
     recommendation: str
+
+
+class RiskFeedbackRequest(BaseModel):
+    """User feedback on risk prediction"""
+    contract_id: Optional[int] = None
+    contract_features: Dict = Field(..., description="Features used for prediction")
+    predicted_risk_level: str = Field(..., description="What the model predicted")
+    predicted_confidence: Optional[float] = None
+    actual_risk_level: str = Field(..., description="What the user thinks is correct")
+    feedback_reason: Optional[str] = None
+    model_version: Optional[str] = None
+
+
+class ModelStatusResponse(BaseModel):
+    """ML model status"""
+    model_type: str
+    model_version: str
+    is_trained: bool
+    feedback_count: int
+    unused_feedback_count: int
+    last_training: Optional[str] = None
+    accuracy: Optional[float] = None
 
 
 class ComposerStartRequest(BaseModel):
@@ -123,20 +194,6 @@ class AddKnowledgeRequest(BaseModel):
     tags: List[str] = Field(default=[])
 
 
-# Dependency: Get current user
-def get_current_user(token: str = Query(...)) -> User:
-    """Get current authenticated user"""
-    db = SessionLocal()
-    try:
-        auth_service = AuthService(db)
-        user, error = auth_service.verify_access_token(token, db)
-        if error:
-            raise HTTPException(status_code=401, detail=error)
-        return user
-    finally:
-        db.close()
-
-
 # ========== ML RISK PREDICTION ENDPOINTS ==========
 
 @router.post("/predict-risk", response_model=RiskPredictionResponse)
@@ -159,13 +216,9 @@ async def predict_risk(
     **Access:** Requires authentication
     """
     try:
-        # Convert request to dict
         contract_data = request.dict()
-
-        # Get prediction
         prediction = quick_predict_risk(contract_data)
 
-        # Generate recommendation
         if prediction.should_use_llm:
             recommendation = (
                 f"Risk score {prediction.risk_score:.0f} is above threshold. "
@@ -190,6 +243,104 @@ async def predict_risk(
 
     except Exception as e:
         logger.error(f"Risk prediction failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ========== FEEDBACK ENDPOINT ==========
+
+@router.post("/feedback")
+async def submit_risk_feedback(
+    request: RiskFeedbackRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Submit user correction for a risk prediction.
+
+    Stores predicted vs actual risk_level for model retraining.
+
+    **Access:** Requires authentication
+    """
+    try:
+        feedback = RiskPredictionFeedback(
+            contract_id=request.contract_id,
+            user_id=str(current_user.id),
+            contract_features=request.contract_features,
+            predicted_risk_level=request.predicted_risk_level,
+            predicted_confidence=request.predicted_confidence,
+            actual_risk_level=request.actual_risk_level,
+            feedback_reason=request.feedback_reason,
+            model_version=request.model_version,
+        )
+        db.add(feedback)
+        db.commit()
+        db.refresh(feedback)
+
+        logger.info(
+            f"Feedback saved: predicted={request.predicted_risk_level}, "
+            f"actual={request.actual_risk_level}, user={current_user.id}"
+        )
+
+        return {
+            "success": True,
+            "feedback_id": feedback.id,
+            "message": "Feedback saved successfully"
+        }
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Save feedback failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ========== MODEL STATUS ENDPOINT ==========
+
+@router.get("/model/status", response_model=ModelStatusResponse)
+async def get_model_status(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get ML model status: version, type, feedback count, is_trained.
+
+    **Access:** Requires authentication
+    """
+    try:
+        predictor = get_risk_predictor()
+
+        # Check if trained model file exists
+        model_path = os.path.join("models", "risk_predictor.pkl")
+        is_trained = os.path.exists(model_path)
+
+        # Count feedback
+        feedback_count = db.query(RiskPredictionFeedback).count()
+        unused_feedback_count = db.query(RiskPredictionFeedback).filter(
+            RiskPredictionFeedback.used_for_training == False
+        ).count()
+
+        # Last training batch
+        last_batch = db.query(ModelTrainingBatch).filter(
+            ModelTrainingBatch.status == "completed"
+        ).order_by(ModelTrainingBatch.completed_at.desc()).first()
+
+        last_training = None
+        accuracy = None
+        if last_batch:
+            last_training = last_batch.completed_at.isoformat() if last_batch.completed_at else None
+            accuracy = last_batch.test_accuracy
+
+        return ModelStatusResponse(
+            model_type="rules" if not is_trained else "ml",
+            model_version=predictor.model_version if hasattr(predictor, 'model_version') else "1.0-rules",
+            is_trained=is_trained,
+            feedback_count=feedback_count,
+            unused_feedback_count=unused_feedback_count,
+            last_training=last_training,
+            accuracy=accuracy,
+        )
+
+    except Exception as e:
+        logger.error(f"Get model status failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -224,7 +375,6 @@ async def start_composition(
         )
 
         # Generate session ID
-        import uuid
         session_id = str(uuid.uuid4())
 
         # Store context
@@ -274,9 +424,6 @@ async def get_suggestions(
         raise HTTPException(status_code=403, detail="Not your session")
 
     composer = get_smart_composer()
-
-    # For now, return non-streaming response
-    # In production, use StreamingResponse with SSE
 
     # Mock suggestions
     suggestions = [

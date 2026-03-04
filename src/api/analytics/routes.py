@@ -21,8 +21,10 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from src.services.analytics_service import get_analytics_service, MetricType
-from src.services.auth_service import AuthService
-from src.models.database import User, SessionLocal
+from src.models.database import get_db
+from src.models.auth_models import User
+from src.api.contracts.routes import get_current_user
+from sqlalchemy.orm import Session
 
 
 # Router
@@ -59,33 +61,9 @@ class TrackMetricRequest(BaseModel):
 
 class ExportRequest(BaseModel):
     """Export analytics report request"""
-    format: str = Field(default='json', regex='^(json|csv|pdf)$')
+    format: str = Field(default='json')
     period_days: int = Field(default=30, ge=1, le=365)
     user_id: Optional[str] = None
-
-
-# Dependency: Get current user
-def get_current_user(token: str = Query(...)) -> User:
-    """Get current authenticated user"""
-    db = SessionLocal()
-    try:
-        auth_service = AuthService(db)
-        user, error = auth_service.verify_access_token(token, db)
-        if error:
-            raise HTTPException(status_code=401, detail=error)
-        return user
-    finally:
-        db.close()
-
-
-# Dependency: Get DB session
-def get_db():
-    """Get database session"""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 # Endpoints
@@ -94,7 +72,7 @@ def get_db():
 async def get_dashboard(
     period_days: int = Query(default=30, ge=1, le=365),
     current_user: User = Depends(get_current_user),
-    db=Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """
     Get analytics dashboard summary
@@ -124,7 +102,7 @@ async def get_dashboard(
 async def get_risk_trends(
     period_days: int = Query(default=30, ge=1, le=365),
     current_user: User = Depends(get_current_user),
-    db=Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """
     Get risk trends over time
@@ -155,7 +133,7 @@ async def get_risk_trends(
 async def get_cost_analysis(
     period_days: int = Query(default=30, ge=1, le=365),
     current_user: User = Depends(get_current_user),
-    db=Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """
     Get cost analysis (LLM usage, ML savings)
@@ -183,7 +161,7 @@ async def get_cost_analysis(
 async def get_productivity_metrics(
     period_days: int = Query(default=30, ge=1, le=365),
     current_user: User = Depends(get_current_user),
-    db=Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """
     Get productivity metrics
@@ -214,7 +192,7 @@ async def export_analytics(
     request: ExportRequest,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
-    db=Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """
     Export analytics report
@@ -254,7 +232,7 @@ async def export_analytics(
 async def track_metric(
     request: TrackMetricRequest,
     current_user: User = Depends(get_current_user),
-    db=Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """
     Track custom metric
@@ -283,7 +261,7 @@ async def get_top_risks(
     limit: int = Query(default=10, ge=1, le=50),
     period_days: int = Query(default=30, ge=1, le=365),
     current_user: User = Depends(get_current_user),
-    db=Depends(get_db)
+    db: Session = Depends(get_db)
 ):
     """
     Get most common risks detected

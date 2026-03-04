@@ -4,10 +4,15 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import api, { User } from '@/services/api'
+import api, { User, DashboardData, ModelStatus } from '@/services/api'
 import toast from 'react-hot-toast'
 import { getUserRole, getRolePermissions, getRoleColor, getRoleLabel } from '@/utils/roles'
 import ChangePasswordModal from '@/components/ChangePasswordModal'
+import {
+  PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  BarChart, Bar
+} from 'recharts'
 
 interface Contract {
   id: string
@@ -31,6 +36,15 @@ const itemVariants = {
   hidden: { opacity: 0, y: 20 },
   show: { opacity: 1, y: 0 }
 }
+
+const RISK_COLORS: Record<string, string> = {
+  critical: '#DC2626',
+  high: '#F97316',
+  medium: '#EAB308',
+  low: '#22C55E',
+}
+
+const PIE_COLORS = ['#3B82F6', '#8B5CF6', '#EC4899', '#F97316', '#22C55E', '#06B6D4']
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -96,6 +110,22 @@ export default function DashboardPage() {
     }
   })
 
+  // Fetch dashboard analytics
+  const { data: dashboardData, isLoading: dashboardLoading } = useQuery<DashboardData>({
+    queryKey: ['dashboard', 'analytics'],
+    queryFn: () => api.getDashboard(30),
+    retry: 1,
+    staleTime: 60000,
+  })
+
+  // Fetch ML model status
+  const { data: mlStatus } = useQuery<ModelStatus>({
+    queryKey: ['ml', 'model-status'],
+    queryFn: () => api.getModelStatus(),
+    retry: 1,
+    staleTime: 120000,
+  })
+
   const handleLogout = () => {
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
@@ -119,6 +149,22 @@ export default function DashboardPage() {
 
   const contractsUsagePercent = ((user?.contracts_today || 0) / (user?.max_contracts_per_day || 1)) * 100
   const llmUsagePercent = ((user?.llm_requests_today || 0) / (user?.max_llm_requests_per_day || 1)) * 100
+
+  // Prepare chart data
+  const riskTrendData = (dashboardData?.risk_trends || []).map(t => ({
+    date: new Date(t.date).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }),
+    critical: t.critical_count,
+    high: t.high_count,
+    medium: t.medium_count,
+    low: t.low_count,
+  }))
+
+  const riskDistributionData = (dashboardData?.risk_distribution || []).map(d => ({
+    name: d.category,
+    value: d.count,
+  }))
+
+  const headlineMetrics = dashboardData?.headline_metrics || {}
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50/30 to-orange-50/20">
@@ -369,11 +415,12 @@ export default function DashboardPage() {
           className="card-modern mb-8"
         >
           <h2 className="text-2xl font-bold text-stone-800 mb-6">Быстрые действия</h2>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             {[
               { icon: <svg className="h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>, label: 'Загрузить договор', route: '/contracts/upload', color: 'border-l-primary-500', permission: 'canAnalyze' },
               { icon: <svg className="h-8 w-8 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>, label: 'Генерировать', route: '/contracts/generate', color: 'border-l-violet-500', permission: 'canGenerate' },
               { icon: <svg className="h-8 w-8 text-success-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>, label: 'Все договоры', route: '/contracts', color: 'border-l-success-500', permission: null },
+              { icon: <svg className="h-8 w-8 text-cyan-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>, label: 'Библиотека клаузул', route: '/clauses', color: 'border-l-cyan-500', permission: null },
               { icon: <svg className="h-8 w-8 text-accent-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>, label: 'Тарифы', route: '/pricing', color: 'border-l-accent-500', permission: null }
             ]
             .filter(action => !action.permission || permissions[action.permission as keyof typeof permissions])
@@ -394,6 +441,188 @@ export default function DashboardPage() {
             ))}
           </div>
         </motion.div>
+
+        {/* Analytics Section */}
+        {!dashboardLoading && dashboardData && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="mb-8"
+          >
+            <h2 className="text-2xl font-bold text-stone-800 mb-6">Аналитика</h2>
+
+            {/* Headline Metrics */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              {Object.entries(headlineMetrics).map(([key, metric], idx) => (
+                <motion.div
+                  key={key}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 + idx * 0.05 }}
+                  className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100"
+                >
+                  <p className="text-sm text-gray-500 mb-1">{metric.name}</p>
+                  <div className="flex items-end gap-2">
+                    <span className="text-3xl font-bold text-stone-800">
+                      {metric.unit === 'USD' ? `$${metric.value.toLocaleString()}` : metric.value.toLocaleString()}
+                    </span>
+                    <span className="text-sm text-gray-400 mb-1">{metric.unit !== 'USD' ? metric.unit : ''}</span>
+                  </div>
+                  {metric.trend && metric.trend_percentage != null && metric.trend_percentage > 0 && (
+                    <div className={`mt-2 text-sm font-medium ${
+                      metric.trend === 'up' ? 'text-green-600' :
+                      metric.trend === 'down' ? 'text-red-500' : 'text-gray-500'
+                    }`}>
+                      {metric.trend === 'up' ? '↑' : metric.trend === 'down' ? '↓' : '→'}{' '}
+                      {metric.trend_percentage.toFixed(1)}% vs прошлый период
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+
+            {/* Charts Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              {/* Risk Distribution PieChart */}
+              {riskDistributionData.length > 0 && (
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                  <h3 className="text-lg font-bold text-stone-800 mb-4">Распределение рисков</h3>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={riskDistributionData}
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      >
+                        {riskDistributionData.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+
+              {/* Risk Trends LineChart */}
+              {riskTrendData.length > 0 && (
+                <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                  <h3 className="text-lg font-bold text-stone-800 mb-4">Тренды рисков (30 дней)</h3>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={riskTrendData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="date" fontSize={12} />
+                      <YAxis fontSize={12} />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="critical" name="Критические" stroke={RISK_COLORS.critical} strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="high" name="Высокие" stroke={RISK_COLORS.high} strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="medium" name="Средние" stroke={RISK_COLORS.medium} strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="low" name="Низкие" stroke={RISK_COLORS.low} strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+
+            {/* Top Risks BarChart */}
+            {dashboardData.top_risks && dashboardData.top_risks.length > 0 && (
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mb-6">
+                <h3 className="text-lg font-bold text-stone-800 mb-4">Топ рисков</h3>
+                <ResponsiveContainer width="100%" height={Math.max(250, dashboardData.top_risks.length * 40)}>
+                  <BarChart
+                    data={dashboardData.top_risks.slice(0, 8).map(r => ({
+                      name: r.risk_type.length > 30 ? r.risk_type.substring(0, 30) + '...' : r.risk_type,
+                      count: r.count,
+                      severity: r.severity,
+                    }))}
+                    layout="vertical"
+                    margin={{ left: 200 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis type="number" fontSize={12} />
+                    <YAxis dataKey="name" type="category" fontSize={12} width={190} />
+                    <Tooltip />
+                    <Bar dataKey="count" name="Количество" fill="#3B82F6" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Recommendations */}
+            {dashboardData.recommendations && dashboardData.recommendations.length > 0 && (
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+                <h3 className="text-lg font-bold text-stone-800 mb-4">Рекомендации</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {dashboardData.recommendations.map((rec, idx) => (
+                    <div
+                      key={idx}
+                      className={`p-4 rounded-xl border-l-4 ${
+                        rec.type === 'success' ? 'border-l-green-500 bg-green-50' :
+                        rec.type === 'warning' ? 'border-l-yellow-500 bg-yellow-50' :
+                        'border-l-blue-500 bg-blue-50'
+                      }`}
+                    >
+                      <h4 className="font-semibold text-stone-800 mb-1">{rec.title}</h4>
+                      <p className="text-sm text-stone-600">{rec.message}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ML Model Status Card */}
+            {mlStatus && (
+              <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 mt-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-stone-800">ML Модель</h3>
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                    mlStatus.is_trained ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                  }`}>
+                    {mlStatus.is_trained ? 'Обучена' : 'Правила'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-3 bg-gray-50 rounded-xl text-center">
+                    <p className="text-xs text-gray-500 mb-1">Версия</p>
+                    <p className="text-lg font-bold text-stone-800">{mlStatus.model_version}</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-xl text-center">
+                    <p className="text-xs text-gray-500 mb-1">Тип</p>
+                    <p className="text-lg font-bold text-stone-800">
+                      {mlStatus.model_type === 'rules' ? 'Правила' : 'ML'}
+                    </p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-xl text-center">
+                    <p className="text-xs text-gray-500 mb-1">Отзывы</p>
+                    <p className="text-lg font-bold text-stone-800">{mlStatus.feedback_count}</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-xl text-center">
+                    <p className="text-xs text-gray-500 mb-1">Точность</p>
+                    <p className="text-lg font-bold text-stone-800">
+                      {mlStatus.accuracy != null ? `${(mlStatus.accuracy * 100).toFixed(1)}%` : '—'}
+                    </p>
+                  </div>
+                </div>
+                {mlStatus.unused_feedback_count > 0 && (
+                  <p className="text-xs text-amber-600 mt-3">
+                    {mlStatus.unused_feedback_count} отзыв(ов) ожидают переобучения модели
+                  </p>
+                )}
+                {mlStatus.last_training && (
+                  <p className="text-xs text-gray-400 mt-2">
+                    Последнее обучение: {new Date(mlStatus.last_training).toLocaleDateString('ru-RU')}
+                  </p>
+                )}
+              </div>
+            )}
+          </motion.div>
+        )}
 
         {/* Recent Contracts */}
         <motion.div
