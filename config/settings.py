@@ -1,6 +1,7 @@
 """
 Конфигурация приложения Contract AI System
 """
+import os
 from pathlib import Path
 from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -38,7 +39,7 @@ class Settings(BaseSettings):
     # Application
     app_env: str = "development"
     log_level: str = "INFO"
-    debug: bool = True
+    debug: bool = False  # Will be set automatically based on app_env in __init__
 
     # Streamlit
     streamlit_server_port: int = 8501
@@ -120,6 +121,10 @@ class Settings(BaseSettings):
                 UserWarning,
                 stacklevel=2
             )
+
+        # Auto-set debug based on environment (can be overridden by DEBUG env var)
+        if not os.environ.get("DEBUG"):
+            self.debug = self.app_env in ("development", "testing")
 
         # Создаём необходимые директории
         self._create_directories()

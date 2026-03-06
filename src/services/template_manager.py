@@ -17,6 +17,14 @@ from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
 from lxml import etree
 from jinja2 import Template as Jinja2Template, Environment, BaseLoader, TemplateNotFound
+
+# Safe XML parser: disable external entities and DTD to prevent XXE attacks
+_safe_parser = etree.XMLParser(
+    resolve_entities=False,
+    no_network=True,
+    dtd_validation=False,
+    load_dtd=False,
+)
 from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -189,7 +197,7 @@ class TemplateManager:
             True if valid
         """
         try:
-            root = etree.fromstring(xml_content.encode('utf-8'))
+            root = etree.fromstring(xml_content.encode('utf-8'), parser=_safe_parser)
 
             # Check root element
             if root.tag != 'contract':
@@ -220,7 +228,7 @@ class TemplateManager:
             True if valid
         """
         try:
-            etree.fromstring(xml_content.encode('utf-8'))
+            etree.fromstring(xml_content.encode('utf-8'), parser=_safe_parser)
             return True
         except etree.XMLSyntaxError as e:
             logger.error(f"XML validation failed: {e}")
@@ -290,7 +298,7 @@ class TemplateManager:
         logger.info(f"Exporting to DOCX: {output_path}")
 
         # Parse XML
-        root = etree.fromstring(filled_xml.encode('utf-8'))
+        root = etree.fromstring(filled_xml.encode('utf-8'), parser=_safe_parser)
 
         # Create new DOCX document
         doc = Document()
@@ -459,7 +467,7 @@ class TemplateManager:
         import json
 
         try:
-            root = etree.fromstring(xml_content.encode('utf-8'))
+            root = etree.fromstring(xml_content.encode('utf-8'), parser=_safe_parser)
 
             structure = {
                 'sections': [],
@@ -513,8 +521,8 @@ class TemplateManager:
             return child_xml
 
         # Parse both templates
-        base_root = etree.fromstring(base_template.xml_content.encode('utf-8'))
-        child_root = etree.fromstring(child_xml.encode('utf-8'))
+        base_root = etree.fromstring(base_template.xml_content.encode('utf-8'), parser=_safe_parser)
+        child_root = etree.fromstring(child_xml.encode('utf-8'), parser=_safe_parser)
 
         # Inheritance strategy:
         # 1. Take base template as foundation

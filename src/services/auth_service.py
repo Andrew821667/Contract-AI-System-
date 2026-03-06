@@ -263,10 +263,8 @@ class AuthService:
         # Find user
         user = self.db.query(User).filter(User.email == email).first()
 
-        # Log login attempt
-        self._record_login_attempt(email, False, ip_address, user_agent, "user_not_found")
-
         if not user:
+            self._record_login_attempt(email, False, ip_address, user_agent, "user_not_found")
             return None, "Invalid email or password"
 
         # Check if account is locked
