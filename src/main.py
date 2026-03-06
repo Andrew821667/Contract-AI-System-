@@ -10,7 +10,6 @@ from typing import Dict, Any
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
@@ -83,20 +82,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # React frontend
-        "http://localhost:8501",  # Streamlit admin
-        settings.frontend_url if hasattr(settings, 'frontend_url') else "http://localhost:3000"
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Security middleware setup
+# Security middleware setup (includes CORS, rate limiting, security headers)
 setup_security_middleware(app)
 
 
@@ -148,9 +134,8 @@ app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["Analytic
 app.include_router(ml_router, prefix="/api/v1/ml", tags=["ML & AI"])
 
 
-# Static files for uploaded documents (with authentication)
-if os.path.exists("data/contracts"):
-    app.mount("/static", StaticFiles(directory="data/contracts"), name="static")
+# NOTE: Static files for contracts are NOT mounted publicly.
+# Use the authenticated /api/v1/contracts/{id}/download endpoint instead.
 
 
 if __name__ == "__main__":

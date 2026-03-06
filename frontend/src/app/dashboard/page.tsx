@@ -8,6 +8,8 @@ import api, { User, DashboardData, ModelStatus } from '@/services/api'
 import toast from 'react-hot-toast'
 import { getUserRole, getRolePermissions, getRoleColor, getRoleLabel } from '@/utils/roles'
 import ChangePasswordModal from '@/components/ChangePasswordModal'
+import NotificationBell from '@/components/NotificationBell'
+import { useNotifications } from '@/hooks/useNotifications'
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
   LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -53,6 +55,7 @@ export default function DashboardPage() {
   const [showPasswordChange, setShowPasswordChange] = useState(false)
   const userRole = getUserRole()
   const permissions = getRolePermissions(userRole)
+  const notif = useNotifications()
   const roleColor = getRoleColor(userRole)
   const roleLabel = getRoleLabel(userRole)
 
@@ -193,6 +196,14 @@ export default function DashboardPage() {
               >
                 {user?.subscription_tier.toUpperCase()}
               </motion.div>
+              <NotificationBell
+                notifications={notif.notifications}
+                unreadCount={notif.unreadCount}
+                isConnected={notif.isConnected}
+                markAsRead={notif.markAsRead}
+                markAllAsRead={notif.markAllAsRead}
+                clearAll={notif.clearAll}
+              />
               <motion.button
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}

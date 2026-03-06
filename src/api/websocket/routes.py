@@ -12,6 +12,7 @@ from loguru import logger
 
 from src.models.database import get_db
 from src.models import Contract, AnalysisResult
+from src.models.auth_models import User
 from src.services.auth_service import AuthService
 
 
@@ -117,9 +118,13 @@ async def websocket_analysis_updates(
     """
     # Verify token
     auth_service = AuthService(db)
-    user, error = auth_service.verify_access_token(token, db)
-    if error or not user:
-        await websocket.close(code=1008, reason="Invalid authentication token")
+    payload = auth_service.verify_token(token, token_type="access")
+    if not payload:
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+    user = db.query(User).filter(User.id == payload.get("user_id")).first()
+    if not user:
+        await websocket.close(code=1008, reason="User not found")
         return
 
     # Check contract exists and user has access
@@ -146,8 +151,8 @@ async def websocket_analysis_updates(
 
         # Keep connection alive and send updates
         while True:
-            # Poll database for updates every 2 seconds
-            await asyncio.sleep(2)
+            # Poll database for updates every 5 seconds
+            await asyncio.sleep(5)
 
             # Refresh contract status
             db.refresh(contract)
@@ -175,8 +180,8 @@ async def websocket_analysis_updates(
                 "progress": progress,
                 "message": f"Status: {contract.status}",
                 "data": {
-                    "risks_count": len(analysis.risks) if analysis and hasattr(analysis, 'risks') else 0,
-                    "recommendations_count": len(analysis.recommendations) if analysis and hasattr(analysis, 'recommendations') else 0
+                    "risks_count": len(analysis.risks_by_category) if analysis and analysis.risks_by_category else 0,
+                    "recommendations_count": len(analysis.recommendations) if analysis and analysis.recommendations else 0
                 }
             }
 
@@ -235,9 +240,13 @@ async def websocket_notifications(
     """
     # Verify token
     auth_service = AuthService(db)
-    user, error = auth_service.verify_access_token(token, db)
-    if error or not user:
-        await websocket.close(code=1008, reason="Invalid authentication token")
+    payload = auth_service.verify_token(token, token_type="access")
+    if not payload:
+        await websocket.close(code=1008, reason="Invalid token")
+        return
+    user = db.query(User).filter(User.id == payload.get("user_id")).first()
+    if not user:
+        await websocket.close(code=1008, reason="User not found")
         return
 
     await websocket.accept()

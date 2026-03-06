@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
@@ -9,6 +9,7 @@ import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import api, { DigitalContract, VerificationResult, RiskPredictionResponse, ContractVersionInfo, CompareChange, CompareResult } from '@/services/api'
+import { useAnalysisWebSocket, WSMessage } from '@/hooks/useAnalysisWebSocket'
 
 interface Risk {
   risk_type: string
@@ -37,6 +38,27 @@ export default function ContractDetailPage() {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['contract', contractId],
     queryFn: () => api.getContract(contractId),
+  })
+
+  const handleWsComplete = useCallback((msg: WSMessage) => {
+    queryClient.invalidateQueries({ queryKey: ['contract', contractId] })
+  }, [queryClient, contractId])
+
+  const handleWsError = useCallback((msg: WSMessage) => {
+    toast.error(msg.message || 'Ошибка анализа')
+    queryClient.invalidateQueries({ queryKey: ['contract', contractId] })
+  }, [queryClient, contractId])
+
+  const wsEnabled = data?.contract?.status === 'analyzing'
+
+  const {
+    progress: wsProgress,
+    message: wsMessage,
+    isConnected: wsConnected,
+  } = useAnalysisWebSocket(contractId, {
+    onComplete: handleWsComplete,
+    onError: handleWsError,
+    enabled: wsEnabled,
   })
 
   const analyzeMutation = useMutation({
@@ -236,7 +258,7 @@ export default function ContractDetailPage() {
           </Card>
         </motion.div>
 
-        {/* Analyzing Spinner */}
+        {/* Analyzing Progress */}
         {contract?.status === 'analyzing' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -244,18 +266,32 @@ export default function ContractDetailPage() {
             transition={{ delay: 0.1 }}
             className="mb-8"
           >
-            <Card className="text-center py-12 bg-amber-50 border-2 border-primary-200">
-              <svg className="animate-spin h-12 w-12 text-primary-500 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Анализ выполняется...</h3>
-              <p className="text-gray-600">
-                AI анализирует ваш договор. Это может занять 30-60 секунд.
-              </p>
-              <p className="text-sm text-gray-400 mt-2">
-                Обновите страницу, чтобы проверить результат.
-              </p>
+            <Card className="py-10 bg-amber-50 border-2 border-primary-200">
+              <div className="max-w-md mx-auto text-center">
+                <svg className="animate-spin h-10 w-10 text-primary-500 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">Анализ выполняется...</h3>
+
+                {/* Progress bar */}
+                <div className="w-full bg-gray-200 rounded-full h-3 mb-3 overflow-hidden">
+                  <motion.div
+                    className="h-full rounded-full bg-primary-500"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${wsProgress}%` }}
+                    transition={{ duration: 0.5, ease: 'easeOut' }}
+                  />
+                </div>
+                <p className="text-sm font-medium text-gray-700 mb-1">{wsProgress}%</p>
+
+                <p className="text-sm text-gray-500 mb-2">{wsMessage}</p>
+
+                <div className="flex items-center justify-center gap-2 text-xs text-gray-400">
+                  <span className={`inline-block w-2 h-2 rounded-full ${wsConnected ? 'bg-green-400' : 'bg-yellow-400'}`} />
+                  {wsConnected ? 'Real-time обновления' : 'Polling обновления'}
+                </div>
+              </div>
             </Card>
           </motion.div>
         )}

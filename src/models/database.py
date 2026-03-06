@@ -58,7 +58,7 @@ class Template(Base):
     contract_type = Column(String(50), nullable=False, index=True)
     xml_content = Column(Text, nullable=False)
     structure = Column(Text)  # JSON
-    meta_info = Column(Text)  # JSON (renamed from metadata to avoid SQLAlchemy reserved word)
+    meta_info = Column(JSON, nullable=True)  # renamed from metadata to avoid SQLAlchemy reserved word
     version = Column(String(20), nullable=False)
     active = Column(Boolean, default=True, index=True)
     created_by = Column(String(36), ForeignKey('users.id'))
@@ -89,7 +89,7 @@ class Contract(Base):
     status = Column(String(50), default='pending', index=True)
     assigned_to = Column(String(36), ForeignKey('users.id'), index=True)
     risk_level = Column(String(20), index=True)
-    meta_info = Column(Text)  # JSON
+    meta_info = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -105,7 +105,7 @@ class Contract(Base):
             name='check_document_type'
         ),
         CheckConstraint(
-            status.in_(['pending', 'analyzing', 'reviewing', 'completed', 'error']),
+            status.in_(['pending', 'uploaded', 'parsing', 'analyzing', 'reviewing', 'completed', 'error']),
             name='check_contract_status'
         ),
         CheckConstraint(
@@ -124,11 +124,11 @@ class AnalysisResult(Base):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     contract_id = Column(String(36), ForeignKey('contracts.id', ondelete='CASCADE'), nullable=False, index=True)
-    entities = Column(Text)  # JSON
-    compliance_issues = Column(Text)  # JSON
-    legal_issues = Column(Text)  # JSON
-    risks_by_category = Column(Text)  # JSON
-    recommendations = Column(Text)  # JSON
+    entities = Column(JSON, nullable=True)
+    compliance_issues = Column(JSON, nullable=True)
+    legal_issues = Column(JSON, nullable=True)
+    risks_by_category = Column(JSON, nullable=True)
+    recommendations = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     version = Column(Integer, default=1)
 
@@ -202,7 +202,7 @@ class LegalDocument(Base):
     content = Column(Text, nullable=False)
     status = Column(String(20), default='active', index=True)
     is_vectorized = Column(Boolean, default=False, index=True)
-    meta_info = Column(Text)  # JSON
+    meta_info = Column(JSON, nullable=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -226,7 +226,7 @@ class ExportLog(Base):
     exported_by = Column(String(36), ForeignKey('users.id'))
     export_type = Column(String(50))  # "full_review", "quick_export"
     exported_at = Column(DateTime, default=datetime.utcnow, index=True)
-    meta_info = Column(Text)  # JSON
+    meta_info = Column(JSON, nullable=True)
 
     # Relationships
     contract = relationship("Contract", back_populates="export_logs")

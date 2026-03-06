@@ -17,41 +17,7 @@ export default function LoginPage() {
     setIsLoading(true)
 
     try {
-      // Demo credentials with roles
-      const demoCredentials = [
-        { email: 'demo@example.com', password: 'demo123', name: 'Demo User', role: 'demo' },
-        { email: 'admin@example.com', password: 'admin123', name: 'Admin User', role: 'admin' },
-        { email: 'lawyer@example.com', password: 'lawyer123', name: 'Lawyer User', role: 'lawyer' },
-        { email: 'junior@example.com', password: 'junior123', name: 'Junior Lawyer', role: 'junior_lawyer' },
-      ]
-
-      const demoUser = demoCredentials.find(
-        u => u.email === email && u.password === password
-      )
-
-      if (demoUser) {
-        localStorage.setItem('access_token', 'demo_token_' + Date.now())
-        localStorage.setItem('user', JSON.stringify({
-          name: demoUser.name,
-          email: demoUser.email,
-          role: demoUser.role
-        }))
-
-        toast.success(`Добро пожаловать, ${demoUser.name}!`, {
-          style: {
-            borderRadius: '12px',
-            background: '#967b52',
-            color: '#fff',
-          },
-        })
-
-        setTimeout(() => {
-          window.location.href = '/dashboard'
-        }, 100)
-        return
-      }
-
-      // Try real API
+      // Always authenticate via real API
       const response = await api.login({
         username: email,
         password: password,

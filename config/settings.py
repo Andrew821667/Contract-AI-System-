@@ -57,7 +57,7 @@ class Settings(BaseSettings):
 
     # Two-level analysis system
     llm_quick_model: str = "gpt-4o-mini"  # Быстрый анализ (Уровень 1)
-    llm_deep_model: str = "gpt-5.1"       # Глубокий анализ (Уровень 2) - лучшая модель OpenAI
+    llm_deep_model: str = "gpt-4o"         # Глубокий анализ (Уровень 2)
 
     # Batch analysis settings (оптимизировано для производительности)
     llm_batch_size: int = 15  # Сколько пунктов анализировать в одном запросе (оптимально для gpt-4o-mini)

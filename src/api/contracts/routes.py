@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any
 from io import BytesIO
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -43,10 +43,11 @@ router = APIRouter()
 
 # Dependency: Get current user from token
 async def get_current_user(
-    authorization: str = Depends(lambda request: request.headers.get("Authorization")),
+    request: Request,
     db: Session = Depends(get_db)
 ) -> User:
     """Get current authenticated user"""
+    authorization = request.headers.get("Authorization")
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -253,9 +254,10 @@ async def analyze_contract_background(
     user_id: str,
     check_counterparty: bool,
     counterparty_tin: Optional[str],
-    db: Session
 ):
-    """Background task for contract analysis"""
+    """Background task for contract analysis — creates its own DB session"""
+    from src.models.database import SessionLocal
+    db = SessionLocal()
     try:
         contract = db.query(Contract).filter(Contract.id == contract_id).first()
         if not contract:
@@ -334,10 +336,15 @@ async def analyze_contract_background(
 
     except Exception as e:
         logger.error(f"Background analysis error for contract {contract_id}: {e}", exc_info=True)
-        contract = db.query(Contract).filter(Contract.id == contract_id).first()
-        if contract:
-            contract.status = 'error'
-            db.commit()
+        try:
+            contract = db.query(Contract).filter(Contract.id == contract_id).first()
+            if contract:
+                contract.status = 'error'
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        db.close()
 
 
 @router.post("/analyze", response_model=AnalysisResultResponse)
@@ -387,7 +394,6 @@ async def analyze_contract(
             user_id=current_user.id,
             check_counterparty=request_data.check_counterparty,
             counterparty_tin=request_data.counterparty_tin,
-            db=db
         )
 
         logger.info(f"Analysis started for contract {request_data.contract_id} by user {current_user.id}")
@@ -587,6 +593,12 @@ async def list_contracts(
     **Returns:** Paginated list of contracts
     """
     try:
+        # Cap page_size
+        if page_size > 100:
+            page_size = 100
+        if page < 1:
+            page = 1
+
         query = db.query(Contract)
 
         # Filter by user (non-admins can only see their own contracts)
@@ -671,7 +683,7 @@ async def get_contract_details(
             },
             'analysis': {
                 'id': analysis.id if analysis else None,
-                'risks': analysis.risks if analysis else [],
+                'risks': analysis.risks_by_category if analysis else [],
                 'recommendations': analysis.recommendations if analysis else [],
                 'status': analysis.status if analysis else None
             } if analysis else None

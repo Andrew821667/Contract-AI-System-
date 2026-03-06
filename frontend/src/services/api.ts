@@ -328,7 +328,9 @@ class APIClient {
 
           // Refresh failed, redirect to login
           this.logout();
-          window.location.href = '/login';
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login';
+          }
         }
 
         // Handle rate limiting
@@ -522,7 +524,9 @@ class APIClient {
   }
 
   async analyzeContract(contractId: string): Promise<any> {
-    const response = await this.client.post(`/api/v1/contracts/${contractId}/analyze`);
+    const response = await this.client.post('/api/v1/contracts/analyze', {
+      contract_id: contractId,
+    });
     return response.data;
   }
 

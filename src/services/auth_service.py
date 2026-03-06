@@ -13,7 +13,7 @@ Handles all authentication operations:
 import secrets
 import bcrypt
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
@@ -28,8 +28,8 @@ from config.settings import settings
 class AuthService:
     """Authentication service with comprehensive security features"""
 
-    # JWT settings
-    JWT_SECRET = settings.secret_key if hasattr(settings, 'secret_key') else "your-secret-key-change-in-production"
+    # JWT settings — generate a random key if none provided (safe for dev, warns in logs)
+    JWT_SECRET = settings.secret_key if settings.secret_key else secrets.token_urlsafe(32)
     JWT_ALGORITHM = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES = 60  # 1 hour
     REFRESH_TOKEN_EXPIRE_DAYS = 30  # 30 days
@@ -117,8 +117,8 @@ class AuthService:
         payload = {
             "user_id": user_id,
             "type": "access",
-            "exp": datetime.utcnow() + timedelta(minutes=self.ACCESS_TOKEN_EXPIRE_MINUTES),
-            "iat": datetime.utcnow()
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=self.ACCESS_TOKEN_EXPIRE_MINUTES),
+            "iat": datetime.now(timezone.utc)
         }
 
         if additional_claims:
@@ -131,8 +131,8 @@ class AuthService:
         payload = {
             "user_id": user_id,
             "type": "refresh",
-            "exp": datetime.utcnow() + timedelta(days=self.REFRESH_TOKEN_EXPIRE_DAYS),
-            "iat": datetime.utcnow()
+            "exp": datetime.now(timezone.utc) + timedelta(days=self.REFRESH_TOKEN_EXPIRE_DAYS),
+            "iat": datetime.now(timezone.utc)
         }
 
         return jwt.encode(payload, self.JWT_SECRET, algorithm=self.JWT_ALGORITHM)
@@ -223,7 +223,7 @@ class AuthService:
                 user_id=user.id,
                 email=email,
                 token=verification_token,
-                expires_at=datetime.utcnow() + timedelta(days=7)
+                expires_at=datetime.now(timezone.utc) + timedelta(days=7)
             )
             self.db.add(verification)
 
@@ -270,8 +270,8 @@ class AuthService:
             return None, "Invalid email or password"
 
         # Check if account is locked
-        if user.locked_until and user.locked_until > datetime.utcnow():
-            time_left = int((user.locked_until - datetime.utcnow()).total_seconds() / 60)
+        if user.locked_until and user.locked_until > datetime.now(timezone.utc):
+            time_left = int((user.locked_until - datetime.now(timezone.utc)).total_seconds() / 60)
             return None, f"Account is locked. Try again in {time_left} minutes."
 
         # Verify password
@@ -280,7 +280,7 @@ class AuthService:
 
             # Lock account after max attempts
             if user.failed_login_attempts >= self.MAX_LOGIN_ATTEMPTS:
-                user.locked_until = datetime.utcnow() + timedelta(
+                user.locked_until = datetime.now(timezone.utc) + timedelta(
                     minutes=self.ACCOUNT_LOCK_DURATION_MINUTES
                 )
                 self.db.commit()
@@ -310,7 +310,7 @@ class AuthService:
         user.locked_until = None
 
         # Update last login
-        user.last_login = datetime.utcnow()
+        user.last_login = datetime.now(timezone.utc)
         user.last_ip = ip_address
         user.login_count += 1
 
@@ -328,7 +328,7 @@ class AuthService:
             refresh_token=refresh_token,
             ip_address=ip_address,
             user_agent=user_agent,
-            expires_at=datetime.utcnow() + timedelta(days=self.REFRESH_TOKEN_EXPIRE_DAYS)
+            expires_at=datetime.now(timezone.utc) + timedelta(days=self.REFRESH_TOKEN_EXPIRE_DAYS)
         )
 
         self.db.add(session)
@@ -410,7 +410,7 @@ class AuthService:
             max_contracts=max_contracts,
             max_llm_requests=max_llm_requests,
             expires_in_hours=expires_in_hours,
-            expires_at=datetime.utcnow() + timedelta(hours=expires_in_hours),
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=expires_in_hours),
             created_by=created_by_user_id,
             source=source,
             campaign=campaign
@@ -492,7 +492,7 @@ class AuthService:
         # Mark token as used
         demo_token.used = True
         demo_token.used_by_user_id = user.id
-        demo_token.used_at = datetime.utcnow()
+        demo_token.used_at = datetime.now(timezone.utc)
         demo_token.uses_count += 1
 
         # Create access token
@@ -573,7 +573,7 @@ class AuthService:
         # Update session
         session.access_token = new_access_token
         session.refresh_token = new_refresh_token
-        session.last_activity = datetime.utcnow()
+        session.last_activity = datetime.now(timezone.utc)
 
         self.db.commit()
 
@@ -600,7 +600,7 @@ class AuthService:
 
         if session:
             session.revoked = True
-            session.revoked_at = datetime.utcnow()
+            session.revoked_at = datetime.now(timezone.utc)
             session.revoke_reason = "user_logout"
 
             # Log logout
@@ -828,7 +828,7 @@ class AuthService:
         )
 
         # Active last week
-        week_ago = datetime.utcnow() - timedelta(days=7)
+        week_ago = datetime.now(timezone.utc) - timedelta(days=7)
         active_last_week = self.db.query(User).filter(
             User.last_login >= week_ago
         ).count()

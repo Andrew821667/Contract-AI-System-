@@ -204,8 +204,9 @@ async def register(
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
 
-    # Create initial access token
+    # Create tokens
     access_token = auth_service.create_access_token(user.id)
+    refresh_token = auth_service.create_refresh_token(user.id)
 
     # Log registration from IP
     ip_address = get_client_ip(request)
@@ -222,7 +223,15 @@ async def register(
         "email": user.email,
         "name": user.name,
         "access_token": access_token,
-        "message": "Registration successful. Please verify your email."
+        "refresh_token": refresh_token,
+        "token_type": "Bearer",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+        },
+        "message": "Registration successful."
     }
 
 
@@ -632,21 +641,27 @@ async def create_user_as_admin(
             msg['To'] = user.email
             msg['Subject'] = "Приглашение в Contract AI System"
 
-            # Email body (HTML)
+            # Email body (HTML) — escape user input to prevent HTML injection
+            from html import escape
+            safe_name = escape(user.name)
+            safe_email = escape(user.email)
+            safe_role = escape(user.role)
+            safe_password = escape(temp_password)
+
             html = f"""
             <html>
             <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
                 <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
                     <h2 style="color: #3B82F6;">Добро пожаловать в Contract AI System!</h2>
 
-                    <p>Здравствуйте, {user.name}!</p>
+                    <p>Здравствуйте, {safe_name}!</p>
 
                     <p>Для вас создан аккаунт в системе автоматизации работы с договорами.</p>
 
                     <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                        <p><strong>Email:</strong> {user.email}</p>
-                        <p><strong>Временный пароль:</strong> <code style="background: #e9ecef; padding: 2px 6px; border-radius: 3px;">{temp_password}</code></p>
-                        <p><strong>Роль:</strong> {user.role}</p>
+                        <p><strong>Email:</strong> {safe_email}</p>
+                        <p><strong>Временный пароль:</strong> <code style="background: #e9ecef; padding: 2px 6px; border-radius: 3px;">{safe_password}</code></p>
+                        <p><strong>Роль:</strong> {safe_role}</p>
                     </div>
 
                     <p>⚠️ <strong>Важно:</strong> Пожалуйста, измените временный пароль после первого входа в систему.</p>
@@ -683,13 +698,19 @@ async def create_user_as_admin(
         logger.warning(f"Failed to send invitation email: {e}")
         # Don't fail the request if email sending fails
 
-    return {
+    result = {
         "user_id": user.id,
         "email": user.email,
         "name": user.name,
-        "temp_password": temp_password,
-        "message": "User created successfully. Temporary password provided."
+        "email_sent": email_sent,
+        "message": "User created successfully.",
     }
+    # Only include temp_password in response if email was NOT sent
+    if not email_sent:
+        result["temp_password"] = temp_password
+        result["message"] = "User created. Email not sent — temporary password included in response."
+
+    return result
 
 
 @router.patch("/admin/users/{user_id}/role", dependencies=[Depends(require_admin)])

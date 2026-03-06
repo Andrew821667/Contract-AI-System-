@@ -71,10 +71,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return response
 
     def _get_client_ip(self, request: Request) -> str:
-        """Extract client IP from request"""
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
+        """Extract client IP from request (only trust X-Forwarded-For behind reverse proxy)"""
         return request.client.host if request.client else "unknown"
 
     def _allow_request(self, client_ip: str, limit: int) -> bool:
@@ -98,6 +95,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             bucket['tokens'] + time_passed * (limit / 60)
         )
         bucket['last_update'] = now
+
+        # Periodically clean up stale entries (every ~1000 requests)
+        if len(self.buckets) > 10000:
+            stale_threshold = now - 3600  # 1 hour
+            stale_keys = [k for k, v in self.buckets.items() if v['last_update'] < stale_threshold]
+            for k in stale_keys:
+                del self.buckets[k]
 
         # Check if we have tokens
         if bucket['tokens'] >= 1:
@@ -155,10 +159,7 @@ class IPFilterMiddleware(BaseHTTPMiddleware):
         return response
 
     def _get_client_ip(self, request: Request) -> str:
-        """Extract client IP from request"""
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
+        """Extract client IP from request (only trust X-Forwarded-For behind reverse proxy)"""
         return request.client.host if request.client else "unknown"
 
 
@@ -184,11 +185,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data: https:; "
-            "connect-src 'self' https://api.openai.com https://api.anthropic.com"
+            "connect-src 'self' ws: wss: https://api.openai.com https://api.anthropic.com"
         )
 
         # Remove server header (security through obscurity)
@@ -211,10 +212,9 @@ def setup_cors(app):
     from config.settings import settings
 
     allowed_origins = [
-        "http://localhost:3000",  # React development
+        "http://localhost:3000",  # React/Next.js development
         "http://localhost:8000",  # FastAPI development
-        "https://contract-ai.example.com",  # Production frontend
-        "https://legal-ai-website.example.com",  # Legal AI website
+        "http://localhost:8501",  # Streamlit admin
     ]
 
     # Add production origins from settings if available
