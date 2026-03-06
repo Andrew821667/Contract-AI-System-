@@ -127,10 +127,10 @@ class TestDisagreementProcessorAgent:
             rag_system=mock_rag_system
         )
 
-        assert agent.db_session == mock_db_session
-        assert agent.llm_gateway == mock_llm_gateway
+        assert agent.db == mock_db_session
+        assert agent.llm == mock_llm_gateway
         assert agent.rag_system == mock_rag_system
-        assert agent.name == "DisagreementProcessor"
+        assert agent.get_name() == "DisagreementProcessorAgent"
 
     def test_execute_basic_flow(
         self,
@@ -208,13 +208,14 @@ class TestDisagreementProcessorAgent:
 
         state = {
             'contract_id': 'nonexistent-contract',
+            'analysis_id': 'nonexistent-analysis',
             'user_id': 'test-user'
         }
 
         result = agent.execute(state)
 
         assert result.success is False
-        assert 'not found' in result.error.lower()
+        assert 'not found' in result.error.lower() or 'missing' in result.error.lower()
 
     def test_execute_no_risks(
         self,

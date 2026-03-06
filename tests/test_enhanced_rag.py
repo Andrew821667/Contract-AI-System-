@@ -13,7 +13,7 @@ Tests cover:
 import pytest
 import os
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from src.services.enhanced_rag import (
     EnhancedRAGSystem,
     SearchResult,

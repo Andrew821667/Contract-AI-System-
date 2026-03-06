@@ -27,7 +27,7 @@ def test_orchestrator_structure():
         return False
 
     print("\n2. Verify agent stub structure...")
-    from src.agents.agent_stubs import (
+    from src.agents import (
         OnboardingAgent, ContractGeneratorAgent,
         ContractAnalyzerAgent, DisagreementProcessorAgent,
         ChangesAnalyzerAgent, QuickExportAgent
