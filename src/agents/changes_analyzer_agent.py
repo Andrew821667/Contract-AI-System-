@@ -195,7 +195,8 @@ Return JSON:
                     'reasoning': analysis.get('reasoning', '')
                 }
             }
-        except:
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            logger.warning(f"Failed to parse LLM change analysis response: {e}")
             return {}
 
     def _link_to_disagreements(self, changes: List[Dict[str, Any]], contract_id: str):

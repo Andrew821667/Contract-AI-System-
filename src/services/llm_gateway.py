@@ -181,7 +181,8 @@ class LLMGateway:
                 if response_format == "json":
                     try:
                         return json.loads(cached_response)
-                    except:
+                    except (json.JSONDecodeError, ValueError):
+                        logger.warning("Failed to parse cached JSON response, fetching fresh")
                         pass
                 return cached_response
 
@@ -229,8 +230,8 @@ class LLMGateway:
                         try:
                             logger.info("Attempting to extract JSON from text response...")
                             return json.loads(json_match.group(1))
-                        except:
-                            pass
+                        except (json.JSONDecodeError, ValueError) as e2:
+                            logger.error(f"JSON extraction fallback also failed: {e2}")
 
                     raise ValueError(f"LLM returned invalid JSON. Response starts with: {response[:200]}")
 

@@ -57,7 +57,7 @@ class FileValidationError(Exception):
 
 def sanitize_filename(filename: str) -> str:
     """
-    Sanitize filename to prevent path traversal and other attacks
+    Sanitize filename by removing dangerous characters and path components.
 
     Args:
         filename: Original filename from upload
@@ -66,7 +66,7 @@ def sanitize_filename(filename: str) -> str:
         Sanitized filename safe for filesystem
 
     Raises:
-        FileValidationError: If filename is invalid
+        FileValidationError: If filename is empty or becomes empty after sanitization
     """
     if not filename:
         raise FileValidationError("Filename is empty")
@@ -74,13 +74,17 @@ def sanitize_filename(filename: str) -> str:
     # Get only the base name (remove any path components)
     filename = os.path.basename(filename)
 
-    # Check for dangerous patterns
-    for pattern in DANGEROUS_PATTERNS:
-        if re.search(pattern, filename):
-            raise FileValidationError(f"Filename contains dangerous pattern: {filename}")
+    # Remove null bytes
+    filename = filename.replace('\x00', '')
+
+    # Remove dangerous Windows characters
+    filename = re.sub(r'[<>:"|?*]', '', filename)
 
     # Remove any non-printable characters
     filename = ''.join(char for char in filename if char.isprintable())
+
+    # Remove leading dots (hidden files)
+    filename = filename.lstrip('.')
 
     # Limit length
     if len(filename) > 255:
@@ -121,41 +125,64 @@ def validate_file_extension(filename: str) -> str:
     return ext
 
 
-def validate_file_size(file_size: int) -> None:
+def validate_file_size(file_size: int, max_size: int = None) -> bool:
     """
     Validate file size is within acceptable range
 
     Args:
         file_size: Size in bytes
+        max_size: Custom max size (defaults to MAX_FILE_SIZE)
+
+    Returns:
+        True if valid
 
     Raises:
         FileValidationError: If size is invalid
     """
+    limit = max_size or MAX_FILE_SIZE
+
     if file_size < MIN_FILE_SIZE:
         raise FileValidationError(
             f"File too small ({file_size} bytes). Minimum: {MIN_FILE_SIZE} bytes"
         )
 
-    if file_size > MAX_FILE_SIZE:
-        max_mb = MAX_FILE_SIZE / (1024 * 1024)
+    if file_size > limit:
+        max_mb = limit / (1024 * 1024)
         actual_mb = file_size / (1024 * 1024)
         raise FileValidationError(
             f"File too large ({actual_mb:.2f} MB). Maximum: {max_mb:.0f} MB"
         )
 
+    return True
 
-def validate_mime_type(file_content: bytes, expected_extension: str) -> None:
+
+def validate_mime_type(mime_type_or_content, expected_extension: str = None) -> bool:
     """
-    Validate MIME type matches file extension using magic bytes
+    Validate MIME type. Supports two modes:
+
+    1. validate_mime_type("application/pdf") — check mime_type string against whitelist
+    2. validate_mime_type(file_bytes, ".pdf") — check magic bytes match extension
 
     Args:
-        file_content: First few bytes of file
-        expected_extension: Expected file extension
+        mime_type_or_content: MIME type string or file content bytes
+        expected_extension: Expected file extension (only for magic bytes mode)
+
+    Returns:
+        True if valid
 
     Raises:
-        FileValidationError: If MIME type doesn't match
+        FileValidationError: If MIME type is not allowed or doesn't match
     """
-    # Magic bytes for common file types
+    # Mode 1: MIME type string validation
+    if isinstance(mime_type_or_content, str):
+        if mime_type_or_content not in ALLOWED_MIME_TYPES:
+            raise FileValidationError(
+                f"MIME type '{mime_type_or_content}' not allowed"
+            )
+        return True
+
+    # Mode 2: Magic bytes validation
+    file_content = mime_type_or_content
     magic_bytes = {
         '.pdf': b'%PDF',
         '.docx': b'PK\x03\x04',  # ZIP format (DOCX is zipped XML)
@@ -172,7 +199,7 @@ def validate_mime_type(file_content: bytes, expected_extension: str) -> None:
 
     # If no magic bytes defined, skip check
     if expected_magic is None:
-        return
+        return True
 
     # Check if file starts with expected magic bytes
     if not file_content.startswith(expected_magic):
@@ -180,6 +207,8 @@ def validate_mime_type(file_content: bytes, expected_extension: str) -> None:
             f"File content doesn't match extension '{expected_extension}'. "
             f"Possible file type mismatch or corrupted file."
         )
+
+    return True
 
 
 def generate_safe_filepath(upload_dir: str, original_filename: str) -> Tuple[str, str]:
@@ -282,8 +311,22 @@ def save_uploaded_file_securely(
     # Validate file
     safe_filename, file_size = validate_uploaded_file(file_data, filename, max_size)
 
-    # Generate safe filepath
-    full_path, final_filename = generate_safe_filepath(upload_dir, safe_filename)
+    # Ensure upload directory exists
+    os.makedirs(upload_dir, exist_ok=True)
+
+    # Try saving with original sanitized name first
+    full_path = os.path.join(upload_dir, safe_filename)
+
+    # Double-check no path traversal occurred
+    if not os.path.abspath(full_path).startswith(os.path.abspath(upload_dir)):
+        raise FileValidationError("Path traversal detected in generated filepath")
+
+    # If file exists, add hash to avoid collision
+    if os.path.exists(full_path):
+        name, ext = os.path.splitext(safe_filename)
+        timestamp = hashlib.md5(str(os.urandom(16)).encode()).hexdigest()[:8]
+        safe_filename = f"{name}_{timestamp}{ext}"
+        full_path = os.path.join(upload_dir, safe_filename)
 
     # Save file
     try:
@@ -294,17 +337,75 @@ def save_uploaded_file_securely(
         logger.error(f"Failed to save file: {e}")
         raise FileValidationError(f"Failed to save file: {e}")
 
-    return full_path, final_filename, file_size
+    return full_path, safe_filename, file_size
+
+
+# Validation function (returns bool, raises on attack patterns)
+def validate_filename(filename: str) -> bool:
+    """
+    Validate filename for security issues.
+
+    Returns True if valid, raises FileValidationError for attack patterns.
+    """
+    if not filename:
+        raise FileValidationError("Filename is empty")
+
+    basename = os.path.basename(filename)
+
+    # Null byte attack
+    if '\x00' in filename:
+        raise FileValidationError("Filename contains null bytes")
+
+    # Path traversal
+    if '..' in filename or filename != basename:
+        raise FileValidationError("Filename contains path traversal patterns")
+
+    # Hidden files (starting with dot)
+    if basename.startswith('.'):
+        raise FileValidationError("Filename is a hidden file (starts with dot)")
+
+    # Path separators
+    if '/' in filename or '\\' in filename:
+        raise FileValidationError("Filename contains path separators")
+
+    # Dangerous Windows chars
+    dangerous_chars = '<>:"|?*'
+    for char in dangerous_chars:
+        if char in filename:
+            raise FileValidationError(f"Filename contains invalid characters: {char}")
+
+    # Check dangerous patterns
+    for pattern in DANGEROUS_PATTERNS:
+        if re.search(pattern, filename):
+            raise FileValidationError(f"Filename contains dangerous pattern: {filename}")
+
+    # Length
+    if len(filename) > 255:
+        raise FileValidationError("Filename too long (max 255 characters)")
+
+    # Non-printable characters
+    if any(not char.isprintable() for char in filename):
+        raise FileValidationError("Filename contains non-printable characters")
+
+    return True
+
+
+def is_allowed_extension(filename: str) -> bool:
+    """Check if filename has an allowed extension."""
+    ext = os.path.splitext(filename)[1].lower()
+    return ext in ALLOWED_EXTENSIONS
 
 
 __all__ = [
     'FileValidationError',
     'sanitize_filename',
+    'validate_filename',
     'validate_file_extension',
     'validate_file_size',
     'validate_mime_type',
     'validate_uploaded_file',
     'save_uploaded_file_securely',
+    'is_allowed_extension',
     'ALLOWED_EXTENSIONS',
     'MAX_FILE_SIZE',
 ]

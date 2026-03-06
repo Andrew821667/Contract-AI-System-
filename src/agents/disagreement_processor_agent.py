@@ -265,7 +265,11 @@ References: Use RAG sources when available (precedents, similar cases, legal nor
             )
 
             # Parse JSON response
-            objection_data = json.loads(response)
+            try:
+                objection_data = json.loads(response) if isinstance(response, str) else response
+            except (json.JSONDecodeError, ValueError) as e:
+                logger.warning(f"Failed to parse objection JSON, using fallback: {e}")
+                objection_data = {}
 
             # Determine auto priority based on risk severity
             auto_priority = self._calculate_auto_priority(risk)

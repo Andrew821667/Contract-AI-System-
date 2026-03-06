@@ -371,3 +371,8 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+# Re-export User from auth_models for backwards compatibility
+# (User was moved to auth_models.py but some code imports from here)
+from .auth_models import User  # noqa: E402,F401

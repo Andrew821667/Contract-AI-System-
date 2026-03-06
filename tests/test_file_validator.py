@@ -209,11 +209,16 @@ class TestExtensionValidation:
 class TestSecureFileSaving:
     """Test secure file saving functionality"""
 
+    # Valid test data with correct magic bytes
+    VALID_DOCX_DATA = b"PK\x03\x04" + b"\x00" * 50  # ZIP/DOCX magic bytes + padding
+    VALID_PDF_DATA = b"%PDF-1.4 test content padding"  # PDF magic bytes + padding
+    VALID_TXT_DATA = b"This is a plain text file content"  # No magic bytes needed
+
     def test_save_valid_file(self):
         """Test saving a valid file"""
         with tempfile.TemporaryDirectory() as tmpdir:
-            file_data = b"This is a test DOCX file content"
-            filename = "test_contract.docx"
+            file_data = self.VALID_TXT_DATA
+            filename = "test_contract.txt"
 
             result_path, saved_name, size = save_uploaded_file_securely(
                 file_data=file_data,
@@ -237,8 +242,8 @@ class TestSecureFileSaving:
     def test_save_file_with_malicious_name(self):
         """Test saving file with malicious filename"""
         with tempfile.TemporaryDirectory() as tmpdir:
-            file_data = b"Content"
-            malicious_name = "../../../etc/passwd"
+            file_data = self.VALID_TXT_DATA
+            malicious_name = "../../../etc/passwd.txt"
 
             result_path, saved_name, size = save_uploaded_file_securely(
                 file_data=file_data,
@@ -271,11 +276,11 @@ class TestSecureFileSaving:
         with tempfile.TemporaryDirectory() as tmpdir:
             upload_dir = os.path.join(tmpdir, "new", "nested", "dir")
 
-            file_data = b"Test content"
+            file_data = self.VALID_TXT_DATA
 
             result_path, _, _ = save_uploaded_file_securely(
                 file_data=file_data,
-                filename="test.pdf",
+                filename="test.txt",
                 upload_dir=upload_dir
             )
 
@@ -286,18 +291,18 @@ class TestSecureFileSaving:
     def test_save_file_name_collision(self):
         """Test handling of filename collisions"""
         with tempfile.TemporaryDirectory() as tmpdir:
-            filename = "contract.docx"
+            filename = "contract.txt"
 
             # Save first file
             save_uploaded_file_securely(
-                file_data=b"First",
+                file_data=self.VALID_TXT_DATA,
                 filename=filename,
                 upload_dir=tmpdir
             )
 
             # Save second file with same name
             path2, name2, _ = save_uploaded_file_securely(
-                file_data=b"Second",
+                file_data=self.VALID_TXT_DATA + b" v2",
                 filename=filename,
                 upload_dir=tmpdir
             )
@@ -305,7 +310,7 @@ class TestSecureFileSaving:
             # Check second file has different name (timestamp added)
             assert name2 != filename
             assert "contract" in name2
-            assert ".docx" in name2
+            assert ".txt" in name2
 
     def test_save_empty_file_rejected(self):
         """Test empty files are rejected"""

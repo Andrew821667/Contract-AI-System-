@@ -8,7 +8,8 @@ import sys
 from contextlib import asynccontextmanager
 from typing import Dict, Any
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, status, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
@@ -86,7 +87,42 @@ app = FastAPI(
 setup_security_middleware(app)
 
 
-# Exception handlers
+# Exception handlers — unified {error, message, details} format
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions with unified format"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": exc.detail if isinstance(exc.detail, str) else "Request error",
+            "message": exc.detail if isinstance(exc.detail, str) else str(exc.detail),
+            "details": None,
+        }
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle validation errors with unified format"""
+    errors = exc.errors()
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "error": "Validation error",
+            "message": f"{len(errors)} validation error(s)",
+            "details": [
+                {
+                    "field": " -> ".join(str(loc) for loc in e.get("loc", [])),
+                    "message": e.get("msg", ""),
+                    "type": e.get("type", ""),
+                }
+                for e in errors
+            ],
+        }
+    )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler"""
@@ -95,7 +131,8 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "error": "Internal server error",
-            "detail": str(exc) if settings.debug else "An unexpected error occurred"
+            "message": str(exc) if settings.debug else "An unexpected error occurred",
+            "details": None,
         }
     )
 

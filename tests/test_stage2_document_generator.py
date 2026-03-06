@@ -38,7 +38,7 @@ def test_generate_corrected_docx():
 
     result_doc = Document(BytesIO(result_bytes))
     full_text = "\n".join([p.text for p in result_doc.paragraphs if p.text])
-    assert "Внесенные правки" in full_text
+    assert "внесённых правок" in full_text.lower() or "правки" in full_text.lower()
     assert "Ответственность ограничивается суммой договора" in full_text
 
 

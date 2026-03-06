@@ -11,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = '001_idp_tables'
-down_revision = None  # Замените на ID последней миграции
+down_revision = None  # Root migration — requires 'contracts' and 'users' tables from Base.metadata
 branch_labels = None
 depends_on = None
 

@@ -254,7 +254,7 @@ class TestStatistics:
 
         assert stats['total_requests'] == 2
         assert stats['total_tokens'] == 800
-        assert stats['total_cost'] == 0.15
+        assert abs(stats['total_cost'] - 0.15) < 1e-10
         assert stats['current_rpm'] == 2
         assert stats['current_tpm'] == 800
 
