@@ -18,7 +18,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers
 revision = '007'
-down_revision = '006'
+down_revision = '006_llm_metrics'
 branch_labels = None
 depends_on = None
 

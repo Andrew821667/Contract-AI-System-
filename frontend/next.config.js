@@ -1,14 +1,20 @@
 /** @type {import('next').NextConfig} */
+
+const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000'
+
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+
+  // Enable standalone output for Docker
+  output: 'standalone',
 
   // API proxy
   async rewrites() {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:8000/api/:path*',
+        destination: `${backendUrl}/api/:path*`,
       },
     ]
   },

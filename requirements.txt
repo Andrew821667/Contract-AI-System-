@@ -14,7 +14,7 @@ yandex-cloud-ml-sdk==0.2.0
 dashscope==1.14.0
 
 # Data validation
-pydantic==2.5.3
+pydantic[email]==2.5.3
 pydantic-settings==2.1.0
 
 # Database

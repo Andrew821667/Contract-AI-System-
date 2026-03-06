@@ -57,6 +57,10 @@ RUN mkdir -p \
     /app/logs && \
     chown -R appuser:appuser /app/data /app/chroma_data /app/logs
 
+# Copy entrypoint script
+COPY --chown=appuser:appuser docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
 # Switch to non-root user
 USER appuser
 
@@ -66,6 +70,9 @@ EXPOSE 8000 8501
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/health', timeout=5)"
+
+# Entrypoint: wait for DB + run migrations
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Default command (FastAPI backend)
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
