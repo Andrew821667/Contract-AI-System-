@@ -8,6 +8,7 @@ import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import api from '@/services/api'
+import { useAuthGuard } from '@/hooks/useAuthGuard'
 
 interface Contract {
   id: string
@@ -19,6 +20,7 @@ interface Contract {
 }
 
 export default function ContractsListPage() {
+  const { isReady } = useAuthGuard()
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState('')
   const [filterType, setFilterType] = useState<string>('all')
@@ -58,6 +60,8 @@ export default function ContractsListPage() {
     }
     return badges[status as keyof typeof badges] || badges.pending
   }
+
+  if (!isReady) return null
 
   const filteredContracts = contracts.filter(contract => {
     const matchesSearch = contract.file_name.toLowerCase().includes(searchQuery.toLowerCase())

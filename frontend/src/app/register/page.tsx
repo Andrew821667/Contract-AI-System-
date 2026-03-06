@@ -4,7 +4,9 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { useForm } from 'react-hook-form'
+import toast from 'react-hot-toast'
 import Button from '@/components/ui/Button'
+import api from '@/services/api'
 
 interface RegisterFormData {
   name: string
@@ -20,18 +22,28 @@ export default function RegisterPage() {
 
   const password = watch('password')
 
+  const [error, setError] = useState<string | null>(null)
+
   const onSubmit = async (data: RegisterFormData) => {
     setIsLoading(true)
+    setError(null)
 
     try {
-      // TODO: Replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const response = await api.register({
+        email: data.email,
+        name: data.name,
+        password: data.password,
+      })
 
-      // Mock registration - redirect to login
-      router.push('/login?registered=true')
-    } catch (error) {
-      console.error('Registration error:', error)
-      alert('Ошибка регистрации. Попробуйте снова.')
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('user', JSON.stringify(response.user))
+      }
+
+      toast.success('Регистрация успешна!')
+      router.push('/dashboard')
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || 'Ошибка регистрации. Попробуйте снова.'
+      setError(message)
     } finally {
       setIsLoading(false)
     }
@@ -85,6 +97,13 @@ export default function RegisterPage() {
               Создайте аккаунт и начните работать с договорами
             </p>
           </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
+              {error}
+            </div>
+          )}
 
           {/* Registration Form */}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

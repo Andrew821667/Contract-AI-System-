@@ -194,6 +194,16 @@ async def upload_contract(
     **Returns:** Contract ID and status
     """
     try:
+        # Reset daily limits if new day
+        current_user.reset_daily_limits()
+
+        # Check usage limits
+        if current_user.contracts_today >= current_user.max_contracts_per_day:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Дневной лимит загрузки ({current_user.max_contracts_per_day}) исчерпан. Попробуйте завтра."
+            )
+
         # Read file data
         file_data = await file.read()
 
@@ -223,6 +233,10 @@ async def upload_contract(
         db.add(contract)
         db.commit()
         db.refresh(contract)
+
+        # Increment daily usage counter
+        current_user.contracts_today = (current_user.contracts_today or 0) + 1
+        db.commit()
 
         logger.info(f"Contract uploaded: {contract.id} by user {current_user.id}")
 
@@ -369,6 +383,16 @@ async def analyze_contract(
     **Note:** Analysis runs in background. Use WebSocket or polling to get results.
     """
     try:
+        # Reset daily limits if new day
+        current_user.reset_daily_limits()
+
+        # Check LLM usage limits
+        if current_user.llm_requests_today >= current_user.max_llm_requests_per_day:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Дневной лимит LLM-запросов ({current_user.max_llm_requests_per_day}) исчерпан."
+            )
+
         # Get contract
         contract = db.query(Contract).filter(Contract.id == request_data.contract_id).first()
         if not contract:
@@ -384,8 +408,12 @@ async def analyze_contract(
                 detail="You don't have permission to analyze this contract"
             )
 
-        # Create analysis record
-        analysis_id = str(uuid.uuid4())
+        # Prevent duplicate analysis (race condition guard)
+        if contract.status == 'analyzing':
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Анализ уже запущен для этого договора"
+            )
 
         # Start background task
         background_tasks.add_task(
@@ -396,10 +424,14 @@ async def analyze_contract(
             counterparty_tin=request_data.counterparty_tin,
         )
 
+        # Increment LLM usage counter
+        current_user.llm_requests_today = (current_user.llm_requests_today or 0) + 1
+        db.commit()
+
         logger.info(f"Analysis started for contract {request_data.contract_id} by user {current_user.id}")
 
         return AnalysisResultResponse(
-            analysis_id=analysis_id,
+            analysis_id=request_data.contract_id,  # analysis record is created inside background task
             contract_id=request_data.contract_id,
             status='analyzing',
             risks_count=0,

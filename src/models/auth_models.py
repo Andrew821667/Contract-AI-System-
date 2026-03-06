@@ -111,6 +111,22 @@ class User(Base):
             return False
         return True
 
+    # Tier limits lookup
+    TIER_LIMITS = {
+        'demo': {'max_contracts_per_day': 3, 'max_llm_requests_per_day': 10},
+        'basic': {'max_contracts_per_day': 10, 'max_llm_requests_per_day': 50},
+        'pro': {'max_contracts_per_day': 50, 'max_llm_requests_per_day': 200},
+        'enterprise': {'max_contracts_per_day': 999999, 'max_llm_requests_per_day': 999999},
+    }
+
+    @property
+    def max_contracts_per_day(self) -> int:
+        return self.TIER_LIMITS.get(self.subscription_tier, self.TIER_LIMITS['demo'])['max_contracts_per_day']
+
+    @property
+    def max_llm_requests_per_day(self) -> int:
+        return self.TIER_LIMITS.get(self.subscription_tier, self.TIER_LIMITS['demo'])['max_llm_requests_per_day']
+
     def reset_daily_limits(self):
         """Reset daily usage limits"""
         today = datetime.utcnow().date()

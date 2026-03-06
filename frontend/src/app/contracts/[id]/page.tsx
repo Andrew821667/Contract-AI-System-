@@ -10,6 +10,7 @@ import Card from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import api, { DigitalContract, VerificationResult, RiskPredictionResponse, ContractVersionInfo, CompareChange, CompareResult } from '@/services/api'
 import { useAnalysisWebSocket, WSMessage } from '@/hooks/useAnalysisWebSocket'
+import { useAuthGuard } from '@/hooks/useAuthGuard'
 
 interface Risk {
   risk_type: string
@@ -30,6 +31,7 @@ interface Recommendation {
 }
 
 export default function ContractDetailPage() {
+  const { isReady } = useAuthGuard()
   const params = useParams()
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -129,7 +131,7 @@ export default function ContractDetailPage() {
     generated: { variant: 'success', text: 'Сгенерирован' },
   }
 
-  if (isLoading) {
+  if (!isReady || isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50/30 to-orange-50/20 flex items-center justify-center">
         <div className="text-center">

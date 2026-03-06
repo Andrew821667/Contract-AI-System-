@@ -48,11 +48,11 @@ class ContractRisk(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "risk_type IN ('financial', 'legal', 'operational', 'reputational')",
+            "risk_type IN ('financial', 'legal', 'operational', 'reputational', 'general')",
             name='check_risk_type'
         ),
         CheckConstraint(
-            "severity IN ('critical', 'high', 'significant', 'medium', 'minor', 'low')",
+            "severity IN ('critical', 'high', 'medium', 'low', 'info')",
             name='check_severity'
         ),
         CheckConstraint(

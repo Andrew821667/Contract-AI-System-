@@ -444,6 +444,14 @@ class APIClient {
     }
   }
 
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
+    const response = await this.client.post('/api/v1/auth/change-password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    });
+    return response.data;
+  }
+
   async getCurrentUser(): Promise<User> {
     const response = await this.client.get<User>('/api/v1/auth/me');
     if (typeof window !== 'undefined') {

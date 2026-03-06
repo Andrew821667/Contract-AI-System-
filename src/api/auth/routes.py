@@ -59,6 +59,12 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
 
+class ChangePasswordRequest(BaseModel):
+    """Change password request"""
+    current_password: str
+    new_password: str = Field(..., min_length=8)
+
+
 class CreateUserRequest(BaseModel):
     """Admin: Create user request"""
     email: EmailStr
@@ -510,6 +516,37 @@ async def get_current_user_info(
         "llm_requests_today": current_user.llm_requests_today,
         "demo_expires": current_user.demo_expires.isoformat() if current_user.demo_expires else None
     }
+
+
+@router.post("/change-password")
+async def change_password(
+    request_data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Change current user's password.
+
+    Requires:
+    - current_password: Must match existing password
+    - new_password: At least 8 characters
+    """
+    auth_service = AuthService(db)
+
+    # Verify current password
+    if not auth_service.verify_password(request_data.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Неверный текущий пароль"
+        )
+
+    # Update password
+    current_user.password_hash = auth_service.hash_password(request_data.new_password)
+    db.commit()
+
+    logger.info(f"Password changed for user {current_user.email}")
+
+    return {"message": "Пароль успешно изменён"}
 
 
 # ==================== Admin Endpoints ====================

@@ -3,12 +3,16 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
+import toast from 'react-hot-toast'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import FileUpload from '@/components/forms/FileUpload'
 import Badge from '@/components/ui/Badge'
+import api from '@/services/api'
+import { useAuthGuard } from '@/hooks/useAuthGuard'
 
 export default function ContractUploadPage() {
+  const { isReady } = useAuthGuard()
   const router = useRouter()
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -39,57 +43,42 @@ export default function ContractUploadPage() {
 
   const handleUpload = async () => {
     if (!selectedFile || !formData.contractType) {
-      alert('Пожалуйста, загрузите файл и выберите тип договора')
+      toast.error('Пожалуйста, загрузите файл и выберите тип договора')
       return
     }
 
     setUploading(true)
-    setUploadProgress(0)
-
-    // Simulate upload progress
-    const interval = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev >= 90) {
-          clearInterval(interval)
-          return 90
-        }
-        return prev + 10
-      })
-    }, 200)
+    setUploadProgress(10)
 
     try {
-      const formDataToSend = new FormData()
-      formDataToSend.append('file', selectedFile)
-      formDataToSend.append('contractType', formData.contractType)
-      formDataToSend.append('partyA', formData.partyA)
-      formDataToSend.append('partyB', formData.partyB)
-      formDataToSend.append('description', formData.description)
+      setUploadProgress(30)
 
-      const response = await fetch('/api/contracts/upload', {
-        method: 'POST',
-        body: formDataToSend
+      const result = await api.uploadContract(selectedFile, {
+        document_type: formData.contractType,
+        party_a: formData.partyA,
+        party_b: formData.partyB,
+        description: formData.description,
       })
 
-      if (!response.ok) throw new Error('Upload failed')
-
-      const result = await response.json()
-
       setUploadProgress(100)
-      clearInterval(interval)
+
+      toast.success('Договор загружен!')
 
       // Redirect to contract details page
+      const contractId = result.contract_id || result.contractId
       setTimeout(() => {
-        router.push(`/contracts/${result.contractId}`)
+        router.push(`/contracts/${contractId}`)
       }, 500)
 
-    } catch (error) {
-      clearInterval(interval)
-      console.error('Upload error:', error)
-      alert('Ошибка загрузки файла. Пожалуйста, попробуйте снова.')
+    } catch (error: any) {
+      const message = error?.response?.data?.detail || 'Ошибка загрузки файла.'
+      toast.error(message)
       setUploading(false)
       setUploadProgress(0)
     }
   }
+
+  if (!isReady) return null
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50/30 to-orange-50/20">

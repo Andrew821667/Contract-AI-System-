@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
+import api from '@/services/api'
 
 interface ChangePasswordModalProps {
   isOpen: boolean
@@ -27,26 +28,20 @@ export default function ChangePasswordModal({ isOpen, onClose, userEmail }: Chan
     setIsLoading(true)
 
     try {
-      // TODO: Replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      await api.changePassword(data.currentPassword, data.newPassword)
 
       // Mark password as changed
       localStorage.setItem('passwordChanged', 'true')
 
       toast.success('Пароль успешно изменён!', {
-        icon: '✅',
-        style: {
-          borderRadius: '12px',
-          background: 'linear-gradient(135deg, #10b981, #059669)',
-          color: '#fff',
-        },
+        style: { borderRadius: '12px' },
       })
 
       reset()
       onClose()
-    } catch (error) {
-      toast.error('Ошибка при смене пароля', {
-        icon: '❌',
+    } catch (error: any) {
+      const message = error?.response?.data?.detail || 'Ошибка при смене пароля'
+      toast.error(message, {
         style: { borderRadius: '12px' },
       })
     } finally {

@@ -7,6 +7,7 @@ import { toast } from 'react-hot-toast'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import api from '@/services/api'
+import { useAuthGuard } from '@/hooks/useAuthGuard'
 
 const contractTypes = [
   { value: 'supply', label: 'Договор поставки', icon: '📦', description: 'Поставка товаров и продукции' },
@@ -24,6 +25,7 @@ const templates = [
 ]
 
 export default function GenerateContractPage() {
+  const { isReady } = useAuthGuard()
   const router = useRouter()
   const [step, setStep] = useState(1)
   const [generating, setGenerating] = useState(false)
@@ -71,6 +73,8 @@ export default function GenerateContractPage() {
 
   const isStep1Valid = formData.contractType && formData.templateId
   const isStep2Valid = formData.partyA && formData.partyB && formData.amount
+
+  if (!isReady) return null
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50/30 to-orange-50/20 py-8">

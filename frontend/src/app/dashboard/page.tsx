@@ -132,6 +132,8 @@ export default function DashboardPage() {
   const handleLogout = () => {
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
+    localStorage.removeItem('user')
+    localStorage.removeItem('passwordChanged')
     toast.success('Вы вышли из системы', {
       style: { borderRadius: '12px' }
     })

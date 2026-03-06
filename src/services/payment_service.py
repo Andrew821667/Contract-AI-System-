@@ -42,10 +42,10 @@ class PaymentService:
     ```
     """
 
-    # Subscription tiers
+    # Subscription tiers (must match DB CHECK constraint: demo, basic, pro, enterprise)
     TIERS = {
-        'free': {
-            'name': 'Бесплатный',
+        'demo': {
+            'name': 'Демо',
             'max_contracts_per_day': 1,
             'max_llm_requests_per_day': 5,
             'can_export_pdf': False,
@@ -64,7 +64,7 @@ class PaymentService:
             'price_monthly': 1990,  # RUB
             'stripe_price_id': os.getenv('STRIPE_PRICE_BASIC', 'price_basic')
         },
-        'professional': {
+        'pro': {
             'name': 'Профессиональный',
             'max_contracts_per_day': 20,
             'max_llm_requests_per_day': 200,
@@ -72,7 +72,7 @@ class PaymentService:
             'can_use_disagreements': True,
             'can_use_changes_analyzer': True,
             'price_monthly': 4990,  # RUB
-            'stripe_price_id': os.getenv('STRIPE_PRICE_PRO', 'price_professional')
+            'stripe_price_id': os.getenv('STRIPE_PRICE_PRO', 'price_pro')
         },
         'enterprise': {
             'name': 'Корпоративный',
@@ -154,7 +154,7 @@ class PaymentService:
         if not STRIPE_AVAILABLE or not self.api_key:
             return None, "Stripe not configured"
 
-        if tier not in self.TIERS or tier == 'free':
+        if tier not in self.TIERS or tier == 'demo':
             return None, "Invalid subscription tier"
 
         tier_info = self.TIERS[tier]
@@ -310,20 +310,14 @@ class PaymentService:
             return False, "Stripe not configured"
 
         if not self.webhook_secret:
-            logger.warning("Webhook secret not configured. Skipping signature verification.")
-            # In development, you might want to skip verification
-            # In production, this should always be set!
+            logger.error("STRIPE_WEBHOOK_SECRET not configured — rejecting webhook")
+            return False, "Webhook secret not configured"
 
         try:
-            # Verify webhook signature
-            if self.webhook_secret:
-                event = stripe.Webhook.construct_event(
-                    payload, sig_header, self.webhook_secret
-                )
-            else:
-                # Unsafe: Skip verification in development
-                import json
-                event = json.loads(payload)
+            # Verify webhook signature (always required)
+            event = stripe.Webhook.construct_event(
+                payload, sig_header, self.webhook_secret
+            )
 
             event_type = event['type']
             data = event['data']['object']
@@ -432,8 +426,8 @@ class PaymentService:
 
             # If subscription is cancelled or past_due, downgrade to free
             if status in ['canceled', 'unpaid', 'past_due']:
-                user.subscription_tier = 'free'
-                free_tier = self.TIERS['free']
+                user.subscription_tier = 'demo'
+                free_tier = self.TIERS['demo']
                 user.max_contracts_per_day = free_tier['max_contracts_per_day']
                 user.max_llm_requests_per_day = free_tier['max_llm_requests_per_day']
 
@@ -456,11 +450,11 @@ class PaymentService:
                 return True, None
 
             # Downgrade to free
-            user.subscription_tier = 'free'
+            user.subscription_tier = 'demo'
             user.subscription_status = 'cancelled'
             user.stripe_subscription_id = None
 
-            free_tier = self.TIERS['free']
+            free_tier = self.TIERS['demo']
             user.max_contracts_per_day = free_tier['max_contracts_per_day']
             user.max_llm_requests_per_day = free_tier['max_llm_requests_per_day']
 

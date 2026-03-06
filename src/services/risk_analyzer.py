@@ -123,17 +123,30 @@ class RiskAnalyzer:
 
             for risk_data in clause_risks:
                 try:
+                    # Map risk_type to allowed values
+                    raw_type = risk_data.get('risk_type', risk_data.get('type', 'legal'))
+                    allowed_types = ('financial', 'legal', 'operational', 'reputational')
+                    risk_type = raw_type if raw_type in allowed_types else 'legal'
+
+                    # Map severity to allowed values
+                    raw_severity = risk_data.get('severity', 'medium')
+                    allowed_severities = ('critical', 'high', 'significant', 'medium', 'minor', 'low')
+                    severity = raw_severity if raw_severity in allowed_severities else 'medium'
+
+                    # Map probability
+                    raw_prob = risk_data.get('probability', 'medium')
+                    allowed_prob = ('high', 'medium', 'low')
+                    probability = raw_prob if raw_prob in allowed_prob else 'medium'
+
                     risk = ContractRisk(
-                        type=risk_data.get('type', 'general'),
-                        severity=risk_data.get('severity', 'medium'),
+                        risk_type=risk_type,
+                        severity=severity,
+                        probability=probability,
+                        title=risk_data.get('title', risk_data.get('description', 'Риск')[:255]),
                         description=risk_data.get('description', ''),
-                        clause_reference=analysis.get('clause_id', ''),
+                        consequences=risk_data.get('consequences', risk_data.get('impact', '')),
                         xpath_location=analysis.get('clause_xpath', ''),
-                        probability=risk_data.get('probability', 'medium'),
-                        impact_description=risk_data.get('impact', ''),
-                        mitigation_strategy=risk_data.get('mitigation', ''),
-                        legal_basis=risk_data.get('legal_basis', ''),
-                        related_precedents=risk_data.get('precedents', [])
+                        section_name=analysis.get('clause_id', ''),
                     )
                     risks.append(risk)
 

@@ -243,7 +243,8 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
                     'dispute_prediction': dispute_prediction,
                     'template_comparison': template_comparison,
                     'counterparty_data': counterparty_data,
-                    'clause_analyses': clause_analyses  # Детальный анализ каждого пункта
+                    'clause_analyses': clause_analyses,  # Детальный анализ каждого пункта
+                    'disclaimer': 'Результаты AI-анализа носят рекомендательный характер и не являются юридической консультацией. Перед принятием решений проконсультируйтесь с квалифицированным юристом.'
                 },
                 next_action=next_action,
                 metadata={
@@ -699,12 +700,18 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
 ---
 """
 
+            # Определяем правовую базу по типу договора
+            legal_framework = self._get_legal_framework(contract_type)
+
             prompt = f"""Ты - опытный юрист-эксперт по договорному праву РФ.
 
 КОНТЕКСТ ДОГОВОРА:
 - Тип договора: {contract_type}
 - Стороны: {', '.join([p.get('name', '') for p in parties]) if parties else 'не указаны'}
 - Предмет: {subject}
+
+ПРАВОВАЯ БАЗА ДЛЯ ДАННОГО ТИПА:
+{legal_framework}
 
 ЗАДАЧА: Проанализируй {len(batch)} пунктов договора как профессиональный юрист.
 
@@ -783,20 +790,24 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
                 # Parse response
                 batch_analyses = response if isinstance(response, list) else []
 
-                # Валидация и исправление оценок 0/10
+                # Валидация оценок: нормализуем к диапазону 1-10
                 for analysis in batch_analyses:
-                    # Исправляем оценку чёткости если 0
-                    if analysis.get('clarity_score', 0) == 0:
-                        logger.warning(f"Clause {analysis.get('clause_number')} has clarity_score=0, setting to 3 (needs review)")
-                        analysis['clarity_score'] = 3
+                    clarity = analysis.get('clarity_score', 0)
+                    if not isinstance(clarity, (int, float)) or clarity < 1:
+                        logger.warning(f"Clause {analysis.get('clause_number')} has clarity_score={clarity}, clamping to 1")
+                        analysis['clarity_score'] = 1
+                    elif clarity > 10:
+                        analysis['clarity_score'] = 10
 
-                    # Исправляем оценку соответствия если 0
                     if isinstance(analysis.get('legal_compliance'), dict):
-                        if analysis['legal_compliance'].get('score', 0) == 0:
-                            logger.warning(f"Clause {analysis.get('clause_number')} has legal_compliance=0, setting to 3 (needs review)")
-                            analysis['legal_compliance']['score'] = 3
+                        score = analysis['legal_compliance'].get('score', 0)
+                        if not isinstance(score, (int, float)) or score < 1:
+                            logger.warning(f"Clause {analysis.get('clause_number')} has legal_compliance={score}, clamping to 1")
+                            analysis['legal_compliance']['score'] = 1
                             if not analysis['legal_compliance'].get('issues'):
                                 analysis['legal_compliance']['issues'] = ['Требуется дополнительная правовая экспертиза']
+                        elif score > 10:
+                            analysis['legal_compliance']['score'] = 10
 
                 if not batch_analyses:
                     logger.warning(f"Batch analysis returned empty/invalid response, falling back to individual analysis")
@@ -887,20 +898,18 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
    - Выявление юридических коллизий
    - Анализ исполнимости через суд
 
-2. РИСКИ С ПРЕЦЕДЕНТАМИ:
-   - Конкретные судебные дела (номера, даты, суды)
-   - Статистика споров по аналогичным пунктам
+2. РИСКИ:
+   - Типичные категории споров по аналогичным пунктам
    - Финансовые последствия (диапазоны сумм)
    - Вероятность возникновения спора (%)
+   ВАЖНО: НЕ выдумывай конкретные номера судебных дел и даты! Указывай только общие тенденции судебной практики.
 
 3. АЛЬТЕРНАТИВНЫЕ ФОРМУЛИРОВКИ:
    - 2-3 варианта улучшенных формулировок
    - Обоснование каждого варианта
-   - Ссылки на best practices
 
-4. РЕКОМЕНДАЦИИ ЭКСПЕРТОВ:
-   - Позиция ВС РФ по аналогичным вопросам
-   - Мнения ведущих юристов
+4. РЕКОМЕНДАЦИИ:
+   - Общие позиции ВС РФ по аналогичным вопросам
    - Отраслевые стандарты
 
 Верни JSON:
@@ -920,22 +929,14 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
     "enforceability_score": 0-10,
     "enforceability_notes": "анализ исполнимости"
   }},
-  "risks_with_precedents": [
+  "risks": [
     {{
       "risk_type": "тип",
       "severity": "critical|high|medium|low",
       "probability_percent": 0-100,
       "description": "детальное описание",
       "financial_impact_range": "от X до Y рублей",
-      "precedents": [
-        {{
-          "case_number": "номер дела",
-          "court": "суд",
-          "date": "дата",
-          "outcome": "исход",
-          "relevance": "почему релевантно"
-        }}
-      ],
+      "typical_court_practice": "общая тенденция судебной практики",
       "mitigation": "как минимизировать"
     }}
   ],
@@ -944,15 +945,13 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
       "variant_number": 1,
       "formulation": "текст формулировки",
       "advantages": ["преимущество 1", "преимущество 2"],
-      "legal_basis": "обоснование",
-      "best_practice_reference": "ссылка на практику"
+      "legal_basis": "обоснование"
     }}
   ],
-  "expert_recommendations": [
+  "recommendations": [
     {{
-      "source": "ВС РФ / эксперт",
-      "recommendation": "рекомендация",
-      "citation": "ссылка на источник"
+      "source": "ВС РФ / отраслевой стандарт",
+      "recommendation": "рекомендация"
     }}
   ],
   "overall_risk_score": 0-100,
@@ -1621,6 +1620,69 @@ Return ONLY valid JSON."""
             annotation.contract_id = contract_id
             self.db.add(annotation)
         self.db.commit()
+
+    @staticmethod
+    def _get_legal_framework(contract_type: str) -> str:
+        """Return applicable legal framework based on contract type"""
+        frameworks = {
+            'employment': (
+                "- Трудовой кодекс РФ (НЕ ГК РФ!) — главы 10-13 (заключение, изменение, прекращение ТД)\n"
+                "- ст. 56-84.1 ТК РФ — основные нормы трудового договора\n"
+                "- Закон о персональных данных (152-ФЗ)\n"
+                "- ВАЖНО: ГК РФ к трудовым отношениям НЕ применяется"
+            ),
+            'supply': (
+                "- ГК РФ, Глава 30 §3 (ст. 506-524) — Поставка товаров\n"
+                "- ст. 309-310 ГК РФ — надлежащее исполнение обязательств\n"
+                "- ст. 330-333 ГК РФ — неустойка\n"
+                "- Закон о защите прав потребителей (если применимо)"
+            ),
+            'service': (
+                "- ГК РФ, Глава 39 (ст. 779-783) — Возмездное оказание услуг\n"
+                "- ст. 309-310 ГК РФ — надлежащее исполнение\n"
+                "- ст. 421 ГК РФ — свобода договора"
+            ),
+            'lease': (
+                "- ГК РФ, Глава 34 (ст. 606-670) — Аренда\n"
+                "- ст. 609 ГК РФ — форма и госрегистрация\n"
+                "- ст. 614 ГК РФ — арендная плата\n"
+                "- ст. 619-620 ГК РФ — расторжение"
+            ),
+            'loan': (
+                "- ГК РФ, Глава 42 (ст. 807-818) — Заём\n"
+                "- Закон о потребительском кредите (353-ФЗ, если применимо)\n"
+                "- ст. 809 ГК РФ — проценты\n"
+                "- ст. 811 ГК РФ — последствия нарушения"
+            ),
+            'purchase': (
+                "- ГК РФ, Глава 30 §1 (ст. 454-491) — Купля-продажа\n"
+                "- ст. 469-477 ГК РФ — качество товара\n"
+                "- ст. 475 ГК РФ — последствия передачи некачественного товара"
+            ),
+            'nda': (
+                "- ст. 421 ГК РФ — свобода договора\n"
+                "- ГК РФ, Часть 4, Глава 75 — Секрет производства (ноу-хау)\n"
+                "- Закон о коммерческой тайне (98-ФЗ)\n"
+                "- Закон о персональных данных (152-ФЗ, если применимо)"
+            ),
+            'license': (
+                "- ГК РФ, Часть 4, Глава 69-70 (ст. 1225-1551) — Интеллектуальная собственность\n"
+                "- ст. 1235-1238 ГК РФ — лицензионный договор\n"
+                "- ст. 1286 ГК РФ — лицензионный договор об авторском праве"
+            ),
+            'construction': (
+                "- ГК РФ, Глава 37 §3 (ст. 740-757) — Строительный подряд\n"
+                "- Градостроительный кодекс РФ\n"
+                "- ст. 743 ГК РФ — техническая документация и смета"
+            ),
+        }
+        default_framework = (
+            "- ГК РФ, общие положения об обязательствах (ст. 307-419)\n"
+            "- ст. 421 ГК РФ — свобода договора\n"
+            "- ст. 431 ГК РФ — толкование договора\n"
+            "- ст. 432 ГК РФ — существенные условия"
+        )
+        return frameworks.get(contract_type, default_framework)
 
     def _risk_to_dict(self, risk: ContractRisk) -> Dict[str, Any]:
         """Convert ContractRisk to dict"""
