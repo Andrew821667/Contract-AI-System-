@@ -16,6 +16,9 @@ const contractTypes = [
   { value: 'purchase', label: 'Договор купли-продажи', icon: '💰', description: 'Купля-продажа имущества' },
   { value: 'confidentiality', label: 'Соглашение о конфиденциальности (NDA)', icon: '🔒', description: 'Защита конфиденциальной информации' },
   { value: 'employment', label: 'Трудовой договор', icon: '👔', description: 'Трудовые отношения' },
+  { value: 'loan', label: 'Договор займа', icon: '🏦', description: 'Займ денежных средств' },
+  { value: 'license', label: 'Лицензионный договор', icon: '📄', description: 'Передача прав на использование' },
+  { value: 'construction', label: 'Договор подряда', icon: '🏗️', description: 'Строительные и подрядные работы' },
 ]
 
 const templates = [

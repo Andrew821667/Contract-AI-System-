@@ -25,7 +25,19 @@ class DocumentParser:
     """Парсер документов в XML формат"""
 
     def __init__(self):
-        self.supported_formats = ['.docx', '.pdf']
+        self.supported_formats = ['.docx', '.pdf', '.txt']
+        self._ocr_service = None
+
+    def _get_ocr_service(self):
+        """Lazy-init OCR service (only when needed)"""
+        if self._ocr_service is None:
+            try:
+                from .ocr_service import OCRService
+                self._ocr_service = OCRService()
+            except Exception as e:
+                logger.warning(f"OCR service not available: {e}")
+                self._ocr_service = False  # Sentinel: tried but failed
+        return self._ocr_service if self._ocr_service is not False else None
 
     def parse(self, file_path: str) -> str:
         """
@@ -55,6 +67,8 @@ class DocumentParser:
             return self.parse_docx(file_path)
         elif ext == '.pdf':
             return self.parse_pdf(file_path)
+        elif ext == '.txt':
+            return self.parse_txt(file_path)
 
     def parse_docx(self, docx_path: str) -> str:
         """
@@ -189,6 +203,21 @@ class DocumentParser:
 
         full_text = "\n\n".join(text_content)
 
+        # If very little text extracted, try OCR (likely a scanned PDF)
+        if len(full_text.strip()) < 100:
+            ocr = self._get_ocr_service()
+            if ocr:
+                try:
+                    is_scanned, reason = ocr.detect_if_scanned(pdf_path)
+                    if is_scanned:
+                        logger.info(f"Scanned PDF detected ({reason}), running OCR...")
+                        ocr_text = ocr.extract_text_from_pdf(pdf_path)
+                        if len(ocr_text.strip()) > len(full_text.strip()):
+                            full_text = ocr_text
+                            logger.info(f"OCR extracted {len(ocr_text)} chars from scanned PDF")
+                except Exception as e:
+                    logger.warning(f"OCR fallback failed: {e}")
+
         # Создаём структуру из текста
         sections = self._extract_sections_from_text(full_text)
 
@@ -255,6 +284,83 @@ class DocumentParser:
         xml_str = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_str
 
         logger.info(f"PDF parsed successfully: {len(sections)} sections")
+        return xml_str
+
+    def parse_txt(self, txt_path: str) -> str:
+        """
+        Парсинг TXT в XML
+
+        Args:
+            txt_path: Путь к TXT файлу
+
+        Returns:
+            XML строка
+        """
+        logger.info(f"Parsing TXT: {txt_path}")
+
+        with open(txt_path, 'r', encoding='utf-8', errors='replace') as f:
+            full_text = f.read()
+
+        sections = self._extract_sections_from_text(full_text)
+
+        root = etree.Element("contract")
+
+        metadata = {
+            "contract_id": str(uuid.uuid4()),
+            "file_name": Path(txt_path).name,
+            "creation_date": datetime.now().isoformat(),
+            "version": "1.0",
+            "format": "txt",
+            "text_length": str(len(full_text))
+        }
+        metadata_elem = etree.SubElement(root, "metadata")
+        for key, value in metadata.items():
+            elem = etree.SubElement(metadata_elem, key)
+            elem.text = str(value)
+
+        parties = self._extract_parties_from_text(sections)
+        if parties:
+            parties_elem = etree.SubElement(root, "parties")
+            for party in parties:
+                party_elem = etree.SubElement(parties_elem, "party")
+                party_elem.set("role", party.get("role", "unknown"))
+                for key, value in party.items():
+                    if key != "role":
+                        elem = etree.SubElement(party_elem, key)
+                        elem.text = str(value)
+
+        terms = self._extract_terms_from_text(sections)
+        if terms:
+            terms_elem = etree.SubElement(root, "terms")
+            if terms.get("financial"):
+                financial_elem = etree.SubElement(terms_elem, "financial")
+                for key, value in terms["financial"].items():
+                    elem = etree.SubElement(financial_elem, key)
+                    elem.text = str(value)
+            if terms.get("dates"):
+                dates_elem = etree.SubElement(terms_elem, "dates")
+                for key, value in terms["dates"].items():
+                    elem = etree.SubElement(dates_elem, key)
+                    elem.text = str(value)
+
+        clauses_elem = etree.SubElement(root, "clauses")
+        for idx, section in enumerate(sections, 1):
+            clause_elem = etree.SubElement(clauses_elem, "clause")
+            clause_elem.set("id", str(idx))
+            clause_elem.set("type", section.get("type", "general"))
+
+            title_elem = etree.SubElement(clause_elem, "title")
+            title_elem.text = section.get("title", f"Раздел {idx}")
+
+            content_elem = etree.SubElement(clause_elem, "content")
+            for para in section.get("paragraphs", []):
+                para_elem = etree.SubElement(content_elem, "paragraph")
+                para_elem.text = para
+
+        xml_str = etree.tostring(root, encoding='unicode', pretty_print=True)
+        xml_str = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_str
+
+        logger.info(f"TXT parsed successfully: {len(sections)} sections")
         return xml_str
 
     def extract_tracked_changes(self, docx_path: str) -> List[Dict[str, Any]]:
@@ -440,8 +546,8 @@ class DocumentParser:
         for section in sections[:3]:  # Проверяем первые 3 раздела
             text_to_search += " ".join(section.get("paragraphs", []))
 
-        # Паттерн для организаций
-        org_pattern = r'(ООО|АО|ЗАО|ИП)\s+"([^"]+)"'
+        # Паттерн для организаций (ООО, АО, ПАО, ЗАО, ФГУП, МУП, НКО, ИП и др.)
+        org_pattern = r'(ООО|ОАО|ПАО|АО|ЗАО|ФГУП|МУП|ГУП|НКО|АНО|ИП)\s+"([^"]+)"'
         matches = re.findall(org_pattern, text_to_search)
 
         for idx, (org_type, org_name) in enumerate(matches[:2]):  # Максимум 2 стороны
@@ -504,14 +610,22 @@ class DocumentParser:
 
         if any(word in title_lower for word in ['предмет', 'subject']):
             return 'subject'
-        elif any(word in title_lower for word in ['цена', 'расчет', 'оплата', 'payment', 'price']):
+        elif any(word in title_lower for word in ['цена', 'расчет', 'оплата', 'payment', 'price', 'стоимость', 'вознаграждение']):
             return 'financial'
-        elif any(word in title_lower for word in ['срок', 'deadline', 'term']):
+        elif any(word in title_lower for word in ['срок', 'deadline', 'term', 'период', 'действи']):
             return 'terms'
-        elif any(word in title_lower for word in ['ответственность', 'liability', 'штраф']):
+        elif any(word in title_lower for word in ['ответственность', 'liability', 'штраф', 'неустойк', 'пени']):
             return 'liability'
-        elif any(word in title_lower for word in ['спор', 'dispute', 'арбитраж']):
+        elif any(word in title_lower for word in ['спор', 'dispute', 'арбитраж', 'претенз']):
             return 'dispute'
+        elif any(word in title_lower for word in ['конфиденциальн', 'confidential', 'тайн']):
+            return 'confidentiality'
+        elif any(word in title_lower for word in ['форс-мажор', 'force majeure', 'обстоятельств']):
+            return 'force_majeure'
+        elif any(word in title_lower for word in ['расторж', 'прекращ', 'termination']):
+            return 'termination'
+        elif any(word in title_lower for word in ['гарант', 'качеств', 'warranty']):
+            return 'warranty'
         else:
             return 'general'
 

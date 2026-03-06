@@ -278,7 +278,7 @@ async def analyze_contract_background(
             logger.error(f"Contract {contract_id} not found for background analysis")
             return
 
-        # Update status
+        # Update status to analyzing
         contract.status = 'analyzing'
         db.commit()
 
@@ -292,11 +292,9 @@ async def analyze_contract_background(
             logger.error(f"Failed to parse contract {contract_id}")
             return
 
-        # Store XML in contract
+        # Store XML and analyze — single transaction for all results
         contract.meta_info = {'xml': parsed_xml}
-        db.commit()
 
-        # Analyze with agent
         llm_gateway = LLMGateway(model=settings.llm_quick_model)
         agent = ContractAnalyzerAgent(llm_gateway=llm_gateway, db_session=db)
 
@@ -320,7 +318,6 @@ async def analyze_contract_background(
                 extractor = ClauseExtractor()
                 clauses = extractor.extract_clauses(xml_content)
 
-                # Get analysis data from the result if available
                 analyses = []
                 if result.data and isinstance(result.data, dict):
                     analyses = result.data.get('clause_analyses', [])
@@ -346,6 +343,7 @@ async def analyze_contract_background(
             contract.status = 'error'
             logger.error(f"Contract {contract_id} analysis failed: {result.error}")
 
+        # Single commit for all analysis results + status update
         db.commit()
 
     except Exception as e:
