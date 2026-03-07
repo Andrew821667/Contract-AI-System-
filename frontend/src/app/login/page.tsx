@@ -187,12 +187,13 @@ export default function LoginPage() {
               <div className="space-y-1.5 text-xs text-stone-600">
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
                   <span className="font-semibold">Demo:</span>
-                  <code className="bg-stone-200 text-stone-700 px-2 py-0.5 rounded">demo@example.com / demo123</code>
+                  <code className="bg-stone-200 text-stone-700 px-2 py-0.5 rounded">demo@contractai.ru</code>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
                   <span className="font-semibold">Admin:</span>
-                  <code className="bg-stone-200 text-stone-700 px-2 py-0.5 rounded">admin@example.com / admin123</code>
+                  <code className="bg-stone-200 text-stone-700 px-2 py-0.5 rounded">admin@contractai.ru</code>
                 </div>
+                <p className="text-stone-400 mt-1">Пароли выданы администратором</p>
               </div>
             </motion.div>
           </motion.div>
