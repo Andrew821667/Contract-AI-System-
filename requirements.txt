@@ -5,7 +5,7 @@ langchain-community==0.0.38
 
 # LLM APIs
 anthropic==0.18.1
-openai==1.12.0
+openai>=1.40.0
 # Для Perplexity (использует OpenAI-совместимый API)
 # Для YandexGPT
 yandex-cloud-ml-sdk==0.2.0
@@ -33,7 +33,7 @@ scipy==1.11.4
 
 # Document processing
 python-docx==1.1.0
-PyPDF2==3.0.1
+pypdf>=4.0.0
 pdfplumber==0.10.3
 reportlab==4.0.9  # PDF generation
 lxml==5.1.0
@@ -58,6 +58,7 @@ fastapi==0.109.2
 uvicorn[standard]==0.27.0
 python-multipart==0.0.6  # For FastAPI form data
 websockets==12.0  # WebSocket support
+sse-starlette==1.6.5  # Server-Sent Events for streaming
 
 # Authentication & Security
 bcrypt==4.1.2

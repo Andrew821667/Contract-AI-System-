@@ -36,35 +36,82 @@ class RiskAnalyzer:
         self,
         clauses: List[Dict[str, Any]],
         rag_context: Optional[Dict[str, Any]] = None,
-        batch_size: int = 15
+        batch_size: int = 15,
+        parallel: bool = True
     ) -> List[Dict[str, Any]]:
         """
-        Analyze multiple clauses in batches
+        Analyze multiple clauses in batches (optionally parallel).
 
         Args:
             clauses: List of clause dicts
             rag_context: Optional RAG context with precedents/norms
             batch_size: Clauses per batch (default: 15)
+            parallel: Run batches in parallel using threads (default: True)
 
         Returns:
             List of clause analyses with risks
         """
-        all_analyses: List[Dict[str, Any]] = []
-
-        # Process in batches
+        # Split into batches
+        batches = []
         for i in range(0, len(clauses), batch_size):
-            batch = clauses[i:i + batch_size]
-            logger.info(f"Analyzing batch {i//batch_size + 1}: clauses {i+1}-{i+len(batch)}")
+            batches.append((i, clauses[i:i + batch_size]))
 
+        if not batches:
+            return []
+
+        from config.settings import settings
+        max_concurrent = getattr(settings, 'max_concurrent_batches', 3)
+
+        if parallel and len(batches) > 1:
+            return self._analyze_batches_parallel(batches, rag_context, max_concurrent)
+
+        # Sequential fallback
+        all_analyses: List[Dict[str, Any]] = []
+        for i, batch in batches:
+            logger.info(f"Analyzing batch {i//batch_size + 1}: clauses {i+1}-{i+len(batch)}")
             try:
                 batch_analyses = self._analyze_batch(batch, rag_context)
                 all_analyses.extend(batch_analyses)
             except Exception as e:
                 logger.error(f"Batch analysis failed: {e}")
-                # Add fallback analyses
                 for clause in batch:
                     all_analyses.append(self._get_fallback_analysis(clause))
+        return all_analyses
 
+    def _analyze_batches_parallel(
+        self,
+        batches: List,
+        rag_context: Optional[Dict[str, Any]],
+        max_concurrent: int = 3
+    ) -> List[Dict[str, Any]]:
+        """Run batch analyses in parallel using ThreadPoolExecutor"""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        results_map: Dict[int, List[Dict[str, Any]]] = {}
+
+        def process_batch(batch_idx, batch_clauses):
+            logger.info(f"[Parallel] Analyzing batch {batch_idx + 1}: {len(batch_clauses)} clauses")
+            try:
+                return batch_idx, self._analyze_batch(batch_clauses, rag_context)
+            except Exception as e:
+                logger.error(f"[Parallel] Batch {batch_idx + 1} failed: {e}")
+                return batch_idx, [self._get_fallback_analysis(c) for c in batch_clauses]
+
+        with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
+            futures = {
+                executor.submit(process_batch, idx, batch): idx
+                for idx, (_, batch) in enumerate(batches)
+            }
+            for future in as_completed(futures):
+                batch_idx, analyses = future.result()
+                results_map[batch_idx] = analyses
+
+        # Reassemble in order
+        all_analyses = []
+        for idx in sorted(results_map.keys()):
+            all_analyses.extend(results_map[idx])
+
+        logger.info(f"[Parallel] All {len(batches)} batches completed: {len(all_analyses)} clause analyses")
         return all_analyses
 
     def analyze_clause_detailed(

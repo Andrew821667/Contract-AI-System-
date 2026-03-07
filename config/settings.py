@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     qwen_api_key: str = ""
 
     # Default LLM Provider
-    default_llm_provider: Literal["claude", "openai", "perplexity", "yandex", "deepseek", "qwen"] = "openai"
+    default_llm_provider: Literal["claude", "openai", "perplexity", "yandex", "deepseek", "qwen"] = "deepseek"
 
     # ChromaDB
     chroma_persist_directory: str = "./chroma_data"
@@ -62,6 +62,7 @@ class Settings(BaseSettings):
 
     # Batch analysis settings (оптимизировано для производительности)
     llm_batch_size: int = 15  # Сколько пунктов анализировать в одном запросе (оптимально для gpt-4o-mini)
+    max_concurrent_batches: int = 3  # Макс. параллельных батчей при анализе
 
     # Token limits for test mode
     llm_test_max_tokens: int = 800       # Для тестового режима

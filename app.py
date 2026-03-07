@@ -143,8 +143,9 @@ def sidebar_navigation():
         'settings': '⚙️ Настройки'
     }
 
-    # Add logs page for admins
+    # Add admin pages
     if check_feature_access('can_view_logs'):
+        pages['users'] = '👥 Пользователи'
         pages['logs'] = '📋 Логи системы'
 
     for key, label in pages.items():
@@ -1413,6 +1414,195 @@ def page_logs():
             st.error(f"Ошибка чтения логов: {e}")
 
 
+def page_users():
+    """User management page (admin only)"""
+    st.title("👥 Управление пользователями")
+
+    if not AGENTS_AVAILABLE:
+        st.error("База данных недоступна")
+        return
+
+    from src.models.auth_models import User
+    from src.services.auth_service import AuthService
+
+    db = SessionLocal()
+    try:
+        # ─── Список пользователей ───────────────────────────
+        st.header("Все пользователи")
+
+        col_f1, col_f2, col_f3 = st.columns(3)
+        with col_f1:
+            role_filter = st.selectbox(
+                "Роль",
+                ["Все", "admin", "senior_lawyer", "lawyer", "junior_lawyer", "demo"]
+            )
+        with col_f2:
+            tier_filter = st.selectbox(
+                "Тариф",
+                ["Все", "demo", "basic", "pro", "enterprise"]
+            )
+        with col_f3:
+            status_filter = st.selectbox(
+                "Статус",
+                ["Все", "Активные", "Неактивные"]
+            )
+
+        query = db.query(User)
+        if role_filter != "Все":
+            query = query.filter(User.role == role_filter)
+        if tier_filter != "Все":
+            query = query.filter(User.subscription_tier == tier_filter)
+        if status_filter == "Активные":
+            query = query.filter(User.active == True)
+        elif status_filter == "Неактивные":
+            query = query.filter(User.active == False)
+
+        users = query.order_by(User.created_at.desc()).all()
+        st.markdown(f"**Найдено:** {len(users)}")
+        st.markdown("---")
+
+        for user in users:
+            role_emoji = {"admin": "🔴", "senior_lawyer": "🟠", "lawyer": "🟢", "junior_lawyer": "🔵", "demo": "⚪"}.get(user.role, "⚪")
+            with st.expander(f"{role_emoji} {user.name} — {user.email} ({user.role} / {user.subscription_tier})"):
+                # Info
+                info1, info2 = st.columns(2)
+                with info1:
+                    st.write(f"**Email:** {user.email}")
+                    st.write(f"**Роль:** {user.role}")
+                    st.write(f"**Тариф:** {user.subscription_tier}")
+                    st.write(f"**Активен:** {'✅' if user.active else '❌'}")
+                with info2:
+                    st.write(f"**Создан:** {user.created_at.strftime('%d.%m.%Y %H:%M') if user.created_at else '—'}")
+                    st.write(f"**Последний вход:** {user.last_login.strftime('%d.%m.%Y %H:%M') if user.last_login else 'Никогда'}")
+                    st.write(f"**Входов:** {user.login_count}")
+                    st.write(f"**Сегодня:** {user.contracts_today} договоров, {user.llm_requests_today} LLM запросов")
+
+                # Actions row
+                act1, act2, act3 = st.columns(3)
+
+                with act1:
+                    if st.button(
+                        f"{'🔴 Деактивировать' if user.active else '🟢 Активировать'}",
+                        key=f"toggle_{user.id}"
+                    ):
+                        user.active = not user.active
+                        db.commit()
+                        st.rerun()
+
+                with act2:
+                    new_role = st.selectbox(
+                        "Сменить роль",
+                        ["admin", "senior_lawyer", "lawyer", "junior_lawyer", "demo"],
+                        index=["admin", "senior_lawyer", "lawyer", "junior_lawyer", "demo"].index(user.role),
+                        key=f"role_{user.id}"
+                    )
+                    if new_role != user.role:
+                        user.role = new_role
+                        db.commit()
+                        st.success(f"Роль изменена на {new_role}")
+                        st.rerun()
+
+                with act3:
+                    new_tier = st.selectbox(
+                        "Сменить тариф",
+                        ["demo", "basic", "pro", "enterprise"],
+                        index=["demo", "basic", "pro", "enterprise"].index(user.subscription_tier),
+                        key=f"tier_{user.id}"
+                    )
+                    if new_tier != user.subscription_tier:
+                        user.subscription_tier = new_tier
+                        user.is_demo = (new_tier == "demo")
+                        db.commit()
+                        st.success(f"Тариф изменён на {new_tier}")
+                        st.rerun()
+
+                # Password change
+                st.markdown("---")
+                if st.button("🔑 Сменить пароль", key=f"pwd_btn_{user.id}"):
+                    st.session_state[f"show_pwd_{user.id}"] = True
+
+                if st.session_state.get(f"show_pwd_{user.id}", False):
+                    with st.form(f"pwd_form_{user.id}"):
+                        st.markdown(f"**Новый пароль для {user.email}:**")
+                        new_pwd = st.text_input("Новый пароль", type="password", key=f"npwd_{user.id}")
+                        new_pwd2 = st.text_input("Подтверждение", type="password", key=f"npwd2_{user.id}")
+                        save_pwd = st.form_submit_button("💾 Сохранить пароль")
+
+                        if save_pwd:
+                            if not new_pwd or not new_pwd2:
+                                st.error("Заполните оба поля")
+                            elif new_pwd != new_pwd2:
+                                st.error("Пароли не совпадают")
+                            elif len(new_pwd) < 8:
+                                st.error("Минимум 8 символов")
+                            else:
+                                user.password_hash = AuthService.hash_password(new_pwd)
+                                db.commit()
+                                st.success(f"✅ Пароль для {user.email} изменён!")
+                                st.session_state[f"show_pwd_{user.id}"] = False
+                                st.rerun()
+
+                # Reset limits
+                if st.button("🔄 Сбросить дневные лимиты", key=f"reset_{user.id}"):
+                    user.contracts_today = 0
+                    user.llm_requests_today = 0
+                    db.commit()
+                    st.success("Лимиты сброшены")
+                    st.rerun()
+
+        # ─── Создание нового пользователя ────────────────────
+        st.markdown("---")
+        st.header("➕ Создать нового пользователя")
+
+        with st.form("create_user_form"):
+            c1, c2 = st.columns(2)
+            with c1:
+                new_email = st.text_input("Email")
+                new_name = st.text_input("Имя")
+                new_password = st.text_input("Пароль", type="password")
+            with c2:
+                cr_role = st.selectbox("Роль", ["lawyer", "senior_lawyer", "junior_lawyer", "admin", "demo"])
+                cr_tier = st.selectbox("Тариф", ["pro", "enterprise", "basic", "demo"])
+
+            create_btn = st.form_submit_button("✅ Создать пользователя", use_container_width=True)
+
+            if create_btn:
+                if not new_email or not new_name or not new_password:
+                    st.error("Заполните все поля")
+                elif len(new_password) < 8:
+                    st.error("Пароль минимум 8 символов")
+                elif db.query(User).filter(User.email == new_email).first():
+                    st.error(f"Пользователь {new_email} уже существует")
+                else:
+                    new_user = User(
+                        email=new_email,
+                        name=new_name,
+                        password_hash=AuthService.hash_password(new_password),
+                        role=cr_role,
+                        subscription_tier=cr_tier,
+                        email_verified=True,
+                        active=True,
+                        is_demo=(cr_tier == "demo"),
+                    )
+                    db.add(new_user)
+                    db.commit()
+                    st.success(f"✅ Пользователь {new_email} создан!")
+                    st.rerun()
+
+        # ─── Справка по паролям seed-пользователей ───────────
+        st.markdown("---")
+        with st.expander("📋 Пароли начальных пользователей"):
+            st.code("""
+admin@contractai.ru     ***REMOVED***      admin          enterprise
+lawyer@contractai.ru    ***REMOVED***     lawyer         pro
+vip@contractai.ru       ***REMOVED***    senior_lawyer  enterprise
+demo@contractai.ru      ***REMOVED***      junior_lawyer  demo
+            """, language="text")
+
+    finally:
+        db.close()
+
+
 def page_settings():
     """Settings page"""
     st.title("⚙️ Настройки")
@@ -1464,6 +1654,8 @@ def main():
         page_export()
     elif page == 'knowledge_base':
         page_knowledge_base()  # Add knowledge base page
+    elif page == 'users':
+        page_users()  # Admin user management
     elif page == 'logs':
         page_logs()  # Admin logs page
     elif page == 'settings':

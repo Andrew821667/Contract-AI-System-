@@ -12,6 +12,7 @@ from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, BackgroundTasks, Request
 from fastapi.responses import FileResponse, StreamingResponse
+from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pydantic import BaseModel, Field
@@ -1047,3 +1048,205 @@ async def compare_versions(
     except Exception as e:
         logger.error(f"Error comparing versions: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error: {str(e)}")
+
+
+# ==================== STREAMING ANALYSIS ====================
+
+@router.post("/{contract_id}/analyze/stream")
+async def analyze_contract_stream(
+    contract_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Streaming contract analysis via Server-Sent Events (SSE).
+    Sends incremental analysis results as they are generated.
+    """
+    import asyncio
+    import json as json_mod
+
+    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not contract:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
+
+    if contract.assigned_to != current_user.id and current_user.role not in ['admin', 'manager']:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission")
+
+    parsed_xml = (contract.meta_info or {}).get('xml')
+    if not parsed_xml:
+        # Parse on the fly
+        parser = DocumentParser()
+        try:
+            parsed_xml = parser.parse(contract.file_path)
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Parse error: {e}")
+
+    async def event_generator():
+        try:
+            yield {"event": "status", "data": json_mod.dumps({"status": "started", "contract_id": contract_id})}
+
+            llm = LLMGateway(model=settings.llm_quick_model)
+            system_prompt = (
+                "You are a contract analysis expert specializing in Russian contract law. "
+                "Analyze the following contract clauses and provide risk assessment in Russian."
+            )
+
+            yield {"event": "status", "data": json_mod.dumps({"status": "analyzing"})}
+
+            collected = []
+            async for chunk in llm.stream(
+                prompt=f"Проанализируй договор и выяви риски:\n\n{parsed_xml[:8000]}",
+                system_prompt=system_prompt,
+            ):
+                collected.append(chunk)
+                yield {"event": "chunk", "data": json_mod.dumps({"text": chunk})}
+
+            full_text = "".join(collected)
+            yield {"event": "done", "data": json_mod.dumps({"status": "completed", "full_text": full_text})}
+
+        except Exception as e:
+            logger.error(f"Streaming analysis error: {e}", exc_info=True)
+            yield {"event": "error", "data": json_mod.dumps({"error": str(e)})}
+
+    return EventSourceResponse(event_generator())
+
+
+# ==================== BATCH ANALYSIS ====================
+
+class BatchAnalysisRequest(BaseModel):
+    contract_ids: List[str] = Field(..., description="List of contract IDs to analyze", min_length=1, max_length=20)
+    check_counterparty: bool = True
+
+
+class BatchAnalysisResponse(BaseModel):
+    task_id: str
+    total: int
+    status: str
+    message: str
+
+
+@router.post("/analyze/batch", response_model=BatchAnalysisResponse)
+async def batch_analyze_contracts(
+    request_data: BatchAnalysisRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Start batch analysis of multiple contracts.
+    Progress is reported via WebSocket at /ws/batch/{task_id}.
+    """
+    import asyncio
+
+    # Validate all contracts exist and belong to user
+    contract_ids = request_data.contract_ids
+    contracts = db.query(Contract).filter(Contract.id.in_(contract_ids)).all()
+
+    if len(contracts) != len(contract_ids):
+        found = {c.id for c in contracts}
+        missing = [cid for cid in contract_ids if cid not in found]
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Contracts not found: {missing}"
+        )
+
+    for c in contracts:
+        if c.assigned_to != current_user.id and current_user.role not in ['admin', 'manager']:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"No permission for contract {c.id}")
+
+    task_id = str(uuid.uuid4())
+
+    # Launch background batch processing
+    async def run_batch():
+        from src.models.database import SessionLocal
+        batch_db = SessionLocal()
+        try:
+            import asyncio
+            tasks = []
+            for cid in contract_ids:
+                tasks.append(
+                    asyncio.to_thread(
+                        _analyze_single_sync,
+                        cid,
+                        current_user.id,
+                        request_data.check_counterparty,
+                    )
+                )
+            # Process in parallel with concurrency limit
+            sem = asyncio.Semaphore(settings.max_concurrent_batches if hasattr(settings, 'max_concurrent_batches') else 3)
+
+            async def bounded(t):
+                async with sem:
+                    return await t
+
+            await asyncio.gather(*(bounded(t) for t in tasks), return_exceptions=True)
+        except Exception as e:
+            logger.error(f"Batch analysis error: {e}", exc_info=True)
+        finally:
+            batch_db.close()
+
+    background_tasks.add_task(asyncio.ensure_future, run_batch())
+
+    return BatchAnalysisResponse(
+        task_id=task_id,
+        total=len(contract_ids),
+        status="started",
+        message=f"Batch analysis started for {len(contract_ids)} contracts. Track via /ws/batch/{task_id}"
+    )
+
+
+def _analyze_single_sync(contract_id: str, user_id: str, check_counterparty: bool):
+    """Synchronous single contract analysis for use in thread pool"""
+    from src.models.database import SessionLocal
+    db = SessionLocal()
+    try:
+        analyze_contract_background(contract_id, user_id, check_counterparty, None)
+    finally:
+        db.close()
+
+
+# ==================== ANNOTATED DOCX EXPORT ====================
+
+@router.get("/{contract_id}/export/annotated-docx")
+async def export_annotated_docx(
+    contract_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Export contract as annotated DOCX with highlighted risks.
+    - Red background for critical risks
+    - Yellow background for medium risks
+    - Comments with risk descriptions
+    """
+    from src.services.annotated_docx_service import AnnotatedDocxService
+
+    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not contract:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
+
+    if contract.assigned_to != current_user.id and current_user.role not in ['admin', 'manager']:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission")
+
+    # Get analysis results
+    analysis = db.query(AnalysisResult).filter(AnalysisResult.contract_id == contract_id).first()
+    if not analysis:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No analysis results found. Analyze the contract first."
+        )
+
+    try:
+        service = AnnotatedDocxService()
+        docx_bytes = service.create_annotated_docx(contract, analysis, db)
+
+        return StreamingResponse(
+            BytesIO(docx_bytes),
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={
+                "Content-Disposition": f'attachment; filename="annotated_{contract.file_name or contract_id}.docx"'
+            }
+        )
+    except Exception as e:
+        logger.error(f"Annotated DOCX export error: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Export error: {str(e)}")

@@ -189,7 +189,7 @@ def show_users_page():
                         st.write(f"**Demo Expires:** {expires_str} {'🔴 EXPIRED' if is_expired else '🟢 Active'}")
 
                 # Actions
-                col1, col2, col3 = st.columns(3)
+                col1, col2, col3, col4 = st.columns(4)
                 with col1:
                     if st.button(f"{'Deactivate' if user.active else 'Activate'}", key=f"toggle_{user.id}"):
                         user.active = not user.active
@@ -205,6 +205,93 @@ def show_users_page():
                         db.commit()
                         st.success("Daily limits reset")
                         st.rerun()
+
+                with col3:
+                    if st.button("🔑 Сменить пароль", key=f"pwd_{user.id}"):
+                        st.session_state[f"show_pwd_{user.id}"] = True
+
+                with col4:
+                    new_role = st.selectbox(
+                        "Роль",
+                        ["admin", "senior_lawyer", "lawyer", "junior_lawyer", "demo"],
+                        index=["admin", "senior_lawyer", "lawyer", "junior_lawyer", "demo"].index(user.role),
+                        key=f"role_sel_{user.id}",
+                        label_visibility="collapsed"
+                    )
+                    if new_role != user.role:
+                        user.role = new_role
+                        db.commit()
+                        st.success(f"Роль изменена на {new_role}")
+                        st.rerun()
+
+                # Password change form (shown when button clicked)
+                if st.session_state.get(f"show_pwd_{user.id}", False):
+                    with st.form(f"pwd_form_{user.id}"):
+                        st.markdown(f"**Смена пароля для {user.email}**")
+                        new_pwd = st.text_input("Новый пароль", type="password", key=f"new_pwd_{user.id}")
+                        new_pwd2 = st.text_input("Повторите пароль", type="password", key=f"new_pwd2_{user.id}")
+                        submitted = st.form_submit_button("Сохранить пароль")
+
+                        if submitted:
+                            if not new_pwd or not new_pwd2:
+                                st.error("Заполните оба поля")
+                            elif new_pwd != new_pwd2:
+                                st.error("Пароли не совпадают")
+                            elif len(new_pwd) < 8:
+                                st.error("Пароль должен быть минимум 8 символов")
+                            else:
+                                user.password_hash = AuthService.hash_password(new_pwd)
+                                db.commit()
+                                st.success(f"✅ Пароль для {user.email} успешно изменён!")
+                                st.session_state[f"show_pwd_{user.id}"] = False
+                                st.rerun()
+
+        # ─── Create new user ────────────────────────────────
+        st.markdown("---")
+        st.header("➕ Создать нового пользователя")
+
+        with st.form("create_user_form"):
+            c1, c2 = st.columns(2)
+            with c1:
+                new_email = st.text_input("Email")
+                new_name = st.text_input("Имя")
+                new_password = st.text_input("Пароль", type="password")
+            with c2:
+                new_role = st.selectbox(
+                    "Роль",
+                    ["lawyer", "senior_lawyer", "junior_lawyer", "admin", "demo"],
+                    key="create_role"
+                )
+                new_tier = st.selectbox(
+                    "Тариф",
+                    ["pro", "enterprise", "basic", "demo"],
+                    key="create_tier"
+                )
+
+            create_btn = st.form_submit_button("Создать пользователя", use_container_width=True)
+
+            if create_btn:
+                if not new_email or not new_name or not new_password:
+                    st.error("Заполните все поля")
+                elif len(new_password) < 8:
+                    st.error("Пароль должен быть минимум 8 символов")
+                elif db.query(User).filter(User.email == new_email).first():
+                    st.error(f"Пользователь с email {new_email} уже существует")
+                else:
+                    new_user = User(
+                        email=new_email,
+                        name=new_name,
+                        password_hash=AuthService.hash_password(new_password),
+                        role=new_role,
+                        subscription_tier=new_tier,
+                        email_verified=True,
+                        active=True,
+                        is_demo=(new_tier == "demo"),
+                    )
+                    db.add(new_user)
+                    db.commit()
+                    st.success(f"✅ Пользователь {new_email} создан!")
+                    st.rerun()
 
     finally:
         db.close()

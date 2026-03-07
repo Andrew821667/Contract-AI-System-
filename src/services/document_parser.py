@@ -5,6 +5,7 @@ Document Parser Service - конвертация документов в XML
 import os
 import re
 import uuid
+import hashlib
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
@@ -14,19 +15,32 @@ from docx.oxml.text.paragraph import CT_P
 from docx.oxml.table import CT_Tbl
 from docx.table import Table
 from docx.text.paragraph import Paragraph
-import PyPDF2
+import pypdf
 import pdfplumber
 from loguru import logger
 
 from ..utils.xml_security import parse_xml_safely, XMLSecurityError
 
 
+def _get_redis():
+    """Get Redis connection (lazy, returns None if unavailable)"""
+    try:
+        import redis as redis_lib
+        from config.settings import settings
+        return redis_lib.from_url(settings.redis_url, decode_responses=True)
+    except Exception:
+        return None
+
+
 class DocumentParser:
     """Парсер документов в XML формат"""
+
+    XML_CACHE_TTL = 3600  # 1 hour
 
     def __init__(self):
         self.supported_formats = ['.docx', '.pdf', '.txt']
         self._ocr_service = None
+        self._redis = _get_redis()
 
     def _get_ocr_service(self):
         """Lazy-init OCR service (only when needed)"""
@@ -38,6 +52,17 @@ class DocumentParser:
                 logger.warning(f"OCR service not available: {e}")
                 self._ocr_service = False  # Sentinel: tried but failed
         return self._ocr_service if self._ocr_service is not False else None
+
+    def _file_cache_key(self, file_path: str) -> Optional[str]:
+        """Compute SHA256 of file contents for cache key"""
+        try:
+            h = hashlib.sha256()
+            with open(file_path, 'rb') as f:
+                for chunk in iter(lambda: f.read(8192), b''):
+                    h.update(chunk)
+            return f"xml_cache:{h.hexdigest()}"
+        except Exception:
+            return None
 
     def parse(self, file_path: str) -> str:
         """
@@ -61,14 +86,37 @@ class DocumentParser:
         if ext not in self.supported_formats:
             raise ValueError(f"Unsupported format: {ext}. Supported: {self.supported_formats}")
 
+        # Check Redis cache
+        cache_key = self._file_cache_key(file_path)
+        if cache_key and self._redis:
+            try:
+                cached = self._redis.get(cache_key)
+                if cached:
+                    logger.info(f"XML cache HIT for {file_path}")
+                    return cached
+            except Exception as e:
+                logger.debug(f"Redis cache read failed: {e}")
+
         logger.info(f"Parsing document: {file_path} (format: {ext})")
 
         if ext == '.docx':
-            return self.parse_docx(file_path)
+            result = self.parse_docx(file_path)
         elif ext == '.pdf':
-            return self.parse_pdf(file_path)
+            result = self.parse_pdf(file_path)
         elif ext == '.txt':
-            return self.parse_txt(file_path)
+            result = self.parse_txt(file_path)
+        else:
+            result = None
+
+        # Store in Redis cache
+        if result and cache_key and self._redis:
+            try:
+                self._redis.setex(cache_key, self.XML_CACHE_TTL, result)
+                logger.info(f"XML cache SAVE for {file_path}")
+            except Exception as e:
+                logger.debug(f"Redis cache write failed: {e}")
+
+        return result
 
     def parse_docx(self, docx_path: str) -> str:
         """
@@ -191,10 +239,10 @@ class DocumentParser:
                     if page_text:
                         text_content.append(page_text)
         except Exception as e:
-            logger.warning(f"pdfplumber failed, trying PyPDF2: {e}")
-            # Fallback на PyPDF2
+            logger.warning(f"pdfplumber failed, trying pypdf: {e}")
+            # Fallback на pypdf
             with open(pdf_path, 'rb') as file:
-                pdf_reader = PyPDF2.PdfReader(file)
+                pdf_reader = pypdf.PdfReader(file)
                 for page_num in range(len(pdf_reader.pages)):
                     page = pdf_reader.pages[page_num]
                     page_text = page.extract_text()

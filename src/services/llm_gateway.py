@@ -355,6 +355,70 @@ class LLMGateway:
         else:
             raise Exception(f"Qwen API error: {response.message}")
 
+    async def stream(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+    ):
+        """
+        Streaming LLM call — yields text chunks as they arrive.
+        Supports OpenAI-compatible providers and Claude.
+        """
+        temperature = temperature if temperature is not None else settings.llm_temperature
+        max_tokens = max_tokens if max_tokens is not None else settings.llm_max_tokens
+
+        if self.provider == "claude":
+            from anthropic import Anthropic
+            messages = [{"role": "user", "content": prompt}]
+            params = {
+                "model": self.model or "claude-sonnet-4-20250514",
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": messages,
+                "stream": True,
+            }
+            if system_prompt:
+                params["system"] = system_prompt
+
+            with self._client.messages.stream(**{k: v for k, v in params.items() if k != "stream"}) as stream_resp:
+                for text in stream_resp.text_stream:
+                    yield text
+
+        elif self.provider in ["openai", "perplexity", "deepseek"]:
+            messages = []
+            if system_prompt:
+                messages.append({"role": "system", "content": system_prompt})
+            messages.append({"role": "user", "content": prompt})
+
+            model = self.model
+            if not model:
+                if self.provider == "openai":
+                    model = "gpt-4o-mini"
+                elif self.provider == "perplexity":
+                    model = "llama-3.1-sonar-large-128k-online"
+                elif self.provider == "deepseek":
+                    model = "deepseek-chat"
+                else:
+                    model = "gpt-4"
+
+            response = self._client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=True,
+            )
+
+            for chunk in response:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+        else:
+            # Fallback: non-streaming call, yield all at once
+            result = self.call(prompt, system_prompt=system_prompt, temperature=temperature, max_tokens=max_tokens)
+            yield result
+
     def count_tokens(self, text: str) -> int:
         """
         >4AGQB B>:5=>2 (?@81;878B5;L=K9)

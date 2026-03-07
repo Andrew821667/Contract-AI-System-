@@ -107,36 +107,49 @@ def init_session_state():
 
 
 def login_user(email: str, password: str = None) -> Optional[Dict[str, Any]]:
-    """
-    Вход пользователя (упрощённая версия без проверки пароля)
-    В продакшене нужно добавить хэширование паролей
-    """
+    """Вход пользователя с проверкой пароля"""
+    from src.services.auth_service import AuthService
+
     db = SessionLocal()
     try:
         user = db.query(User).filter(User.email == email, User.active == True).first()
 
-        if user:
-            # Определяем роль на основе поля role в БД
-            role_map = {
-                'admin': UserRole.ADMIN,
-                'senior_lawyer': UserRole.VIP,
-                'lawyer': UserRole.FULL,
-                'junior_lawyer': UserRole.DEMO,
-            }
-            role = role_map.get(user.role, UserRole.DEMO)
+        if not user:
+            return None
 
-            st.session_state.user = {
-                'id': user.id,
-                'email': user.email,
-                'name': user.name,
-                'role': user.role
-            }
-            st.session_state.role = role
-            st.session_state.authenticated = True
+        # Проверяем пароль если он задан и у пользователя есть хэш
+        if password and user.password_hash:
+            if not AuthService.verify_password(password, user.password_hash):
+                return None
+        elif user.password_hash and not password:
+            # У пользователя есть пароль, но он не введён — не пускаем
+            return None
 
-            return st.session_state.user
+        # Определяем роль на основе поля role в БД
+        role_map = {
+            'admin': UserRole.ADMIN,
+            'senior_lawyer': UserRole.VIP,
+            'lawyer': UserRole.FULL,
+            'junior_lawyer': UserRole.DEMO,
+        }
+        role = role_map.get(user.role, UserRole.DEMO)
 
-        return None
+        st.session_state.user = {
+            'id': user.id,
+            'email': user.email,
+            'name': user.name,
+            'role': user.role
+        }
+        st.session_state.role = role
+        st.session_state.authenticated = True
+
+        # Обновляем last_login
+        user.last_login = datetime.utcnow()
+        user.login_count = (user.login_count or 0) + 1
+        db.commit()
+
+        return st.session_state.user
+
     finally:
         db.close()
 
@@ -187,43 +200,13 @@ def show_login_form():
     """Показать форму входа"""
     st.markdown("### 🔐 Вход в систему")
 
-    # Быстрый выбор демо-аккаунта
-    st.markdown("#### Быстрый вход")
-    st.markdown("Выберите аккаунт для входа:")
-
-    demo_accounts = [
-        {"email": "demo@example.com", "name": "Demo User", "role": "🔵 DEMO", "desc": "Ограниченный функционал (3 договора/день)"},
-        {"email": "user@example.com", "name": "Full User", "role": "🟢 FULL", "desc": "Полный функционал (50 договоров/день)"},
-        {"email": "vip@example.com", "name": "VIP User", "role": "🟡 VIP", "desc": "VIP функционал (1000 договоров/день, приоритет)"},
-        {"email": "admin@example.com", "name": "Admin User", "role": "🔴 ADMIN", "desc": "Администратор (безлимит, управление)"},
-    ]
-
-    cols = st.columns(2)
-    for idx, account in enumerate(demo_accounts):
-        with cols[idx % 2]:
-            if st.button(
-                f"{account['role']}\n{account['name']}",
-                key=f"quick_login_{idx}",
-                use_container_width=True,
-                help=account['desc']
-            ):
-                user = login_user(account['email'])
-                if user:
-                    st.success(f"✅ Добро пожаловать, {user['name']}!")
-                    st.rerun()
-                else:
-                    st.error("❌ Ошибка входа")
-
-    st.markdown("---")
-    st.markdown("#### Вход по email")
-
     with st.form("login_form"):
-        email = st.text_input("Email", placeholder="user@example.com")
+        email = st.text_input("Email", placeholder="admin@contractai.ru")
         password = st.text_input("Пароль", type="password", placeholder="••••••••")
         submit = st.form_submit_button("Войти", use_container_width=True)
 
         if submit:
-            if email:
+            if email and password:
                 user = login_user(email, password)
                 if user:
                     st.success(f"✅ Добро пожаловать, {user['name']}!")
@@ -231,33 +214,19 @@ def show_login_form():
                 else:
                     st.error("❌ Неверный email или пароль")
             else:
-                st.error("❌ Введите email")
+                st.error("❌ Введите email и пароль")
 
     st.markdown("---")
 
-    # Таблица сравнения ролей
-    with st.expander("📊 Сравнение тарифов"):
+    with st.expander("📋 Учётные записи для входа"):
         st.markdown("""
-        | Функция | DEMO | FULL | VIP | ADMIN |
-        |---------|------|------|-----|-------|
-        | Договоров/день | 3 | 50 | 1000 | ♾️ |
-        | LLM запросов/день | 10 | 100 | 1000 | ♾️ |
-        | Генерация договоров | ✅ | ✅ | ✅ | ✅ |
-        | Анализ договоров | ✅ | ✅ | ✅ | ✅ |
-        | Обработка запросов | ❌ | ✅ | ✅ | ✅ |
-        | Возражения | ❌ | ✅ | ✅ | ✅ |
-        | Анализ изменений | ❌ | ✅ | ✅ | ✅ |
-        | Экспорт PDF | ❌ | ✅ | ✅ | ✅ |
-        | Экспорт XML | ❌ | ✅ | ✅ | ✅ |
-        | RAG поиск | ❌ | ✅ | ✅ | ✅ |
-        | Приоритет поддержки | ❌ | ❌ | ✅ | ✅ |
-        | Просмотр логов | ❌ | ❌ | ❌ | ✅ |
-        | Управление | ❌ | ❌ | ❌ | ✅ |
+        | Email | Пароль | Роль | Тариф |
+        |-------|--------|------|-------|
+        | `admin@contractai.ru` | `***REMOVED***` | Администратор | enterprise |
+        | `lawyer@contractai.ru` | `***REMOVED***` | Юрист | pro |
+        | `vip@contractai.ru` | `***REMOVED***` | VIP | enterprise |
+        | `demo@contractai.ru` | `***REMOVED***` | Демо | demo |
         """)
-
-    st.info("""
-    💡 **Совет:** Для тестирования всех функций используйте аккаунт **admin@example.com**
-    """)
 
 
 def show_user_info():
@@ -346,27 +315,38 @@ def show_upgrade_message(feature: str):
     """)
 
 
-# Создание демо-пользователей при первом запуске
+# Создание пользователей при первом запуске
 def create_demo_users():
-    """Создать демо-пользователей для тестирования"""
+    """Создать начальных пользователей если их нет"""
+    from src.services.auth_service import AuthService
+
     db = SessionLocal()
     try:
-        demo_users = [
-            {"email": "demo@example.com", "name": "Demo User", "role": "junior_lawyer"},
-            {"email": "user@example.com", "name": "Full User", "role": "lawyer"},
-            {"email": "vip@example.com", "name": "VIP User", "role": "senior_lawyer"},
-            {"email": "admin@example.com", "name": "Admin User", "role": "admin"},
+        seed_users = [
+            {"email": "admin@contractai.ru", "name": "Администратор", "password": "***REMOVED***", "role": "admin", "subscription_tier": "enterprise"},
+            {"email": "lawyer@contractai.ru", "name": "Юрист Иванов", "password": "***REMOVED***", "role": "lawyer", "subscription_tier": "pro"},
+            {"email": "vip@contractai.ru", "name": "VIP Клиент", "password": "***REMOVED***", "role": "senior_lawyer", "subscription_tier": "enterprise"},
+            {"email": "demo@contractai.ru", "name": "Демо Пользователь", "password": "***REMOVED***", "role": "junior_lawyer", "subscription_tier": "demo"},
         ]
 
-        for user_data in demo_users:
-            existing = db.query(User).filter(User.email == user_data["email"]).first()
+        for u in seed_users:
+            existing = db.query(User).filter(User.email == u["email"]).first()
             if not existing:
-                user = User(**user_data, active=True)
+                user = User(
+                    email=u["email"],
+                    name=u["name"],
+                    password_hash=AuthService.hash_password(u["password"]),
+                    role=u["role"],
+                    subscription_tier=u.get("subscription_tier", "basic"),
+                    active=True,
+                    email_verified=True,
+                    is_demo=(u.get("subscription_tier") == "demo"),
+                )
                 db.add(user)
 
         db.commit()
     except Exception as e:
-        print(f"Error creating demo users: {e}")
+        print(f"Error creating seed users: {e}")
         db.rollback()
     finally:
         db.close()

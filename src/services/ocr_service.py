@@ -211,10 +211,10 @@ class OCRService:
             (is_scanned, reason)
         """
         try:
-            import PyPDF2
+            import pypdf
 
             with open(pdf_path, 'rb') as f:
-                pdf_reader = PyPDF2.PdfReader(f)
+                pdf_reader = pypdf.PdfReader(f)
 
                 # Check first 3 pages
                 text_length = 0
