@@ -1591,13 +1591,17 @@ def page_users():
 
         # ─── Справка по паролям seed-пользователей ───────────
         st.markdown("---")
-        with st.expander("📋 Пароли начальных пользователей"):
-            st.code("""
-admin@contractai.ru     ***REMOVED***      admin          enterprise
-lawyer@contractai.ru    ***REMOVED***     lawyer         pro
-vip@contractai.ru       ***REMOVED***    senior_lawyer  enterprise
-demo@contractai.ru      ***REMOVED***      junior_lawyer  demo
-            """, language="text")
+        with st.expander("📋 Начальные пользователи"):
+            st.markdown("""
+            | Email | Роль | Тариф |
+            |-------|------|-------|
+            | `admin@contractai.ru` | admin | enterprise |
+            | `lawyer@contractai.ru` | lawyer | pro |
+            | `vip@contractai.ru` | senior_lawyer | enterprise |
+            | `demo@contractai.ru` | junior_lawyer | demo |
+
+            *Пароли задаются через переменные окружения (`SEED_*_PASSWORD`).*
+            """)
 
     finally:
         db.close()

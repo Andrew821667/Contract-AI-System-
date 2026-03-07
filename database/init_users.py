@@ -31,11 +31,21 @@ def create_initial_users(db: Session) -> dict:
     auth_service = AuthService(db)
     credentials = {}
 
+    # Passwords from environment variables
+    admin_pwd = os.environ.get("SEED_ADMIN_PASSWORD", "")
+    lawyer_pwd = os.environ.get("SEED_LAWYER_PASSWORD", "")
+    vip_pwd = os.environ.get("SEED_VIP_PASSWORD", "")
+    demo_pwd = os.environ.get("SEED_DEMO_PASSWORD", "")
+
+    if not admin_pwd:
+        logger.warning("SEED_ADMIN_PASSWORD not set — skipping user creation")
+        return credentials
+
     users_to_create = [
         {
             "email": "admin@contractai.local",
             "name": "System Administrator",
-            "password": "***REMOVED***",
+            "password": admin_pwd,
             "role": "admin",
             "subscription_tier": "enterprise",
             "is_demo": False,
@@ -44,7 +54,7 @@ def create_initial_users(db: Session) -> dict:
         {
             "email": "demo1@example.com",
             "name": "Demo User 1",
-            "password": "Demo123!",
+            "password": demo_pwd or admin_pwd,
             "role": "demo",
             "subscription_tier": "demo",
             "is_demo": True,
@@ -54,7 +64,7 @@ def create_initial_users(db: Session) -> dict:
         {
             "email": "demo2@example.com",
             "name": "Demo User 2",
-            "password": "Demo123!",
+            "password": demo_pwd or admin_pwd,
             "role": "demo",
             "subscription_tier": "demo",
             "is_demo": True,
@@ -64,7 +74,7 @@ def create_initial_users(db: Session) -> dict:
         {
             "email": "trial@example.com",
             "name": "Trial User",
-            "password": "Trial123!",
+            "password": demo_pwd or admin_pwd,
             "role": "junior_lawyer",
             "subscription_tier": "basic",
             "is_demo": False,
@@ -74,7 +84,7 @@ def create_initial_users(db: Session) -> dict:
         {
             "email": "junior@contractai.local",
             "name": "Junior Lawyer",
-            "password": "Junior123!",
+            "password": demo_pwd or admin_pwd,
             "role": "junior_lawyer",
             "subscription_tier": "basic",
             "is_demo": False,
@@ -83,7 +93,7 @@ def create_initial_users(db: Session) -> dict:
         {
             "email": "lawyer@contractai.local",
             "name": "Regular Lawyer",
-            "password": "***REMOVED***",
+            "password": lawyer_pwd or admin_pwd,
             "role": "lawyer",
             "subscription_tier": "pro",
             "is_demo": False,
@@ -92,7 +102,7 @@ def create_initial_users(db: Session) -> dict:
         {
             "email": "senior@contractai.local",
             "name": "Senior Lawyer",
-            "password": "Senior123!",
+            "password": vip_pwd or admin_pwd,
             "role": "senior_lawyer",
             "subscription_tier": "pro",
             "is_demo": False,
@@ -101,7 +111,7 @@ def create_initial_users(db: Session) -> dict:
         {
             "email": "vip@contractai.local",
             "name": "VIP Client",
-            "password": "Vip123!",
+            "password": vip_pwd or admin_pwd,
             "role": "senior_lawyer",
             "subscription_tier": "enterprise",
             "is_demo": False,

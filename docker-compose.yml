@@ -69,6 +69,10 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - QWEN_API_KEY=${QWEN_API_KEY:-}
       - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-deepseek}
+      - SEED_ADMIN_PASSWORD=${SEED_ADMIN_PASSWORD:-}
+      - SEED_LAWYER_PASSWORD=${SEED_LAWYER_PASSWORD:-}
+      - SEED_VIP_PASSWORD=${SEED_VIP_PASSWORD:-}
+      - SEED_DEMO_PASSWORD=${SEED_DEMO_PASSWORD:-}
     volumes:
       - ./data:/app/data
       - ./chroma_data:/app/chroma_data
@@ -108,6 +112,10 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-deepseek}
+      - SEED_ADMIN_PASSWORD=${SEED_ADMIN_PASSWORD:-}
+      - SEED_LAWYER_PASSWORD=${SEED_LAWYER_PASSWORD:-}
+      - SEED_VIP_PASSWORD=${SEED_VIP_PASSWORD:-}
+      - SEED_DEMO_PASSWORD=${SEED_DEMO_PASSWORD:-}
     volumes:
       - ./data:/app/data
       - ./chroma_data:/app/chroma_data

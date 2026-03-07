@@ -1,60 +1,68 @@
 #!/usr/bin/env python3
 """
-Create test users for Contract AI System
+Create test users for Contract AI System via API.
+Passwords are read from environment variables.
 """
+import os
 import requests
-import json
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.environ.get("BASE_URL", "http://localhost:8000")
 
-# Test users with different roles
 TEST_USERS = [
     {
         "email": "demo@example.com",
         "name": "Demo User",
-        "password": "DemoPass123!",
+        "password_env": "SEED_DEMO_PASSWORD",
         "role": "demo",
         "subscription_tier": "demo"
     },
     {
         "email": "user@example.com",
         "name": "Regular User",
-        "password": "UserPass123!",
+        "password_env": "SEED_DEMO_PASSWORD",
         "role": "junior_lawyer",
         "subscription_tier": "basic"
     },
     {
         "email": "lawyer@example.com",
         "name": "Lawyer Pro",
-        "password": "LawyerPass123!",
+        "password_env": "SEED_LAWYER_PASSWORD",
         "role": "lawyer",
         "subscription_tier": "pro"
     },
     {
         "email": "senior@example.com",
         "name": "Senior Lawyer",
-        "password": "SeniorPass123!",
+        "password_env": "SEED_VIP_PASSWORD",
         "role": "senior_lawyer",
         "subscription_tier": "pro"
     },
     {
         "email": "admin@example.com",
         "name": "System Admin",
-        "password": "AdminPass123!",
+        "password_env": "SEED_ADMIN_PASSWORD",
         "role": "admin",
         "subscription_tier": "enterprise"
     }
 ]
 
+
 def create_user(user_data):
-    """Create a single user"""
+    password = os.environ.get(user_data["password_env"], "")
+    if not password:
+        print(f"⚠️  {user_data['password_env']} not set, skipping {user_data['email']}")
+        return False
+
+    payload = {
+        "email": user_data["email"],
+        "name": user_data["name"],
+        "password": password,
+        "role": user_data["role"],
+        "subscription_tier": user_data["subscription_tier"],
+    }
+
     try:
-        response = requests.post(
-            f"{BASE_URL}/api/v1/auth/register",
-            json=user_data,
-            timeout=5
-        )
-        
+        response = requests.post(f"{BASE_URL}/api/v1/auth/register", json=payload, timeout=5)
         if response.status_code == 201:
             print(f"✅ Created: {user_data['email']} ({user_data['role']})")
             return True
@@ -65,51 +73,30 @@ def create_user(user_data):
             print(f"❌ Failed: {user_data['email']} - {response.text}")
             return False
     except requests.exceptions.ConnectionError:
-        print("❌ Error: Backend is not running. Start it first with: uvicorn src.main:app --host 0.0.0.0 --port 8000")
+        print("❌ Backend is not running.")
         return False
     except Exception as e:
-        print(f"❌ Error creating {user_data['email']}: {e}")
+        print(f"❌ Error: {e}")
         return False
+
 
 def main():
     print("=" * 60)
-    print("🔧 Creating Test Users for Contract AI System")
+    print("  Creating Test Users for Contract AI System")
     print("=" * 60)
-    print()
-    
-    # Check if backend is running
+
     try:
         response = requests.get(f"{BASE_URL}/health", timeout=2)
         if response.status_code != 200:
-            print("❌ Backend is not healthy. Please check the server.")
+            print("❌ Backend is not healthy.")
             return
-    except:
+    except Exception:
         print("❌ Backend is not running!")
-        print("   Start it with: cd /Users/andrew/Desktop/Contract-AI-System- && source venv/bin/activate && uvicorn src.main:app --host 0.0.0.0 --port 8000")
         return
-    
-    print("✅ Backend is running\n")
-    
-    # Create users
-    created = 0
-    for user in TEST_USERS:
-        if create_user(user):
-            created += 1
-    
-    print()
-    print("=" * 60)
-    print(f"✅ Created {created} new users")
-    print("=" * 60)
-    print()
-    print("📋 Test Credentials:")
-    print()
-    for user in TEST_USERS:
-        print(f"   {user['role'].upper():15} | {user['email']:25} | {user['password']}")
-    print()
-    print("🌐 URLs:")
-    print(f"   Backend API:  {BASE_URL}/api/docs")
-    print(f"   Frontend UI:  http://localhost:3000")
-    print()
+
+    created = sum(1 for u in TEST_USERS if create_user(u))
+    print(f"\n✅ Created {created} new users")
+
 
 if __name__ == "__main__":
     main()

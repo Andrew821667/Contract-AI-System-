@@ -2,6 +2,7 @@
 """
 Authentication and User Management System
 """
+import os
 import streamlit as st
 from enum import Enum
 from typing import Optional, Dict, Any
@@ -220,12 +221,14 @@ def show_login_form():
 
     with st.expander("📋 Учётные записи для входа"):
         st.markdown("""
-        | Email | Пароль | Роль | Тариф |
-        |-------|--------|------|-------|
-        | `admin@contractai.ru` | `***REMOVED***` | Администратор | enterprise |
-        | `lawyer@contractai.ru` | `***REMOVED***` | Юрист | pro |
-        | `vip@contractai.ru` | `***REMOVED***` | VIP | enterprise |
-        | `demo@contractai.ru` | `***REMOVED***` | Демо | demo |
+        | Email | Роль | Тариф |
+        |-------|------|-------|
+        | `admin@contractai.ru` | Администратор | enterprise |
+        | `lawyer@contractai.ru` | Юрист | pro |
+        | `vip@contractai.ru` | VIP | enterprise |
+        | `demo@contractai.ru` | Демо | demo |
+
+        *Пароли задаются администратором при развёртывании системы.*
         """)
 
 
@@ -323,19 +326,22 @@ def create_demo_users():
     db = SessionLocal()
     try:
         seed_users = [
-            {"email": "admin@contractai.ru", "name": "Администратор", "password": "***REMOVED***", "role": "admin", "subscription_tier": "enterprise"},
-            {"email": "lawyer@contractai.ru", "name": "Юрист Иванов", "password": "***REMOVED***", "role": "lawyer", "subscription_tier": "pro"},
-            {"email": "vip@contractai.ru", "name": "VIP Клиент", "password": "***REMOVED***", "role": "senior_lawyer", "subscription_tier": "enterprise"},
-            {"email": "demo@contractai.ru", "name": "Демо Пользователь", "password": "***REMOVED***", "role": "junior_lawyer", "subscription_tier": "demo"},
+            {"email": "admin@contractai.ru", "name": "Администратор", "password_env": "SEED_ADMIN_PASSWORD", "role": "admin", "subscription_tier": "enterprise"},
+            {"email": "lawyer@contractai.ru", "name": "Юрист Иванов", "password_env": "SEED_LAWYER_PASSWORD", "role": "lawyer", "subscription_tier": "pro"},
+            {"email": "vip@contractai.ru", "name": "VIP Клиент", "password_env": "SEED_VIP_PASSWORD", "role": "senior_lawyer", "subscription_tier": "enterprise"},
+            {"email": "demo@contractai.ru", "name": "Демо Пользователь", "password_env": "SEED_DEMO_PASSWORD", "role": "junior_lawyer", "subscription_tier": "demo"},
         ]
 
         for u in seed_users:
             existing = db.query(User).filter(User.email == u["email"]).first()
             if not existing:
+                password = os.environ.get(u["password_env"], "")
+                if not password:
+                    continue
                 user = User(
                     email=u["email"],
                     name=u["name"],
-                    password_hash=AuthService.hash_password(u["password"]),
+                    password_hash=AuthService.hash_password(password),
                     role=u["role"],
                     subscription_tier=u.get("subscription_tier", "basic"),
                     active=True,

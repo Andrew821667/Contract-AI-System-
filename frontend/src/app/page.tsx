@@ -33,35 +33,86 @@ export default function Home() {
 
   const features = [
     {
-      icon: <svg className="h-7 w-7 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>,
-      title: 'Умный анализ',
-      description: 'AI-анализ договоров с выявлением рисков и юридических проблем'
+      icon: <svg className="h-7 w-7 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>,
+      title: 'Цифровизация договоров',
+      description: 'Криптографическая подпись, hash-chain версий, проверка целостности документа'
     },
     {
       icon: <svg className="h-7 w-7 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>,
-      title: 'Быстрый анализ',
-      description: 'Полный разбор договора за 1-3 минуты вместо часов ручной работы'
+      title: 'Smart Composer',
+      description: 'AI-помощник при составлении: подсказки, валидация, 50+ шаблонов пунктов'
+    },
+    {
+      icon: <svg className="h-7 w-7 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>,
+      title: 'Двухуровневый анализ',
+      description: 'Быстрый скрининг + глубокий анализ критичных рисков со ссылками на ГК РФ'
     },
     {
       icon: <svg className="h-7 w-7 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>,
-      title: 'Детальные отчеты',
-      description: 'Подробные рекомендации с ссылками на ГК РФ'
+      title: 'ML-предсказание рисков',
+      description: 'Моментальная оценка за <100 мс — в 100 раз быстрее полного AI-анализа'
     },
     {
       icon: <svg className="h-7 w-7 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>,
-      title: 'Генерация',
-      description: 'Создание договоров по шаблонам с AI-заполнением'
+      title: 'Полный цикл',
+      description: 'Генерация, анализ, разногласия, сравнение версий, экспорт — всё в одной системе'
     },
     {
-      icon: <svg className="h-7 w-7 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>,
-      title: 'Сравнение версий',
-      description: 'Отслеживание изменений между редакциями договора'
-    },
-    {
-      icon: <svg className="h-7 w-7 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>,
-      title: 'Экспорт',
-      description: 'Выгрузка в DOCX, PDF, JSON с форматированием'
+      icon: <svg className="h-7 w-7 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>,
+      title: 'Безопасность',
+      description: 'On-premise для Enterprise, локальные AI-модели, данные не покидают периметр'
     }
+  ]
+
+  const advantages = [
+    {
+      icon: <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
+      title: 'Кратно дешевле аналогов',
+      description: 'От 20 ₽ за договор вместо 5 000–30 000 ₽ за ручной анализ. Прозрачные цены без «свяжитесь с отделом продаж».',
+      gradient: 'from-green-500 to-emerald-600',
+    },
+    {
+      icon: <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>,
+      title: '10–30 секунд вместо часов',
+      description: 'Двухуровневый AI: быстрый скрининг всех пунктов + глубокий анализ критичных рисков. Streaming — результат появляется в реальном времени.',
+      gradient: 'from-blue-500 to-cyan-600',
+    },
+    {
+      icon: <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>,
+      title: 'Цифровизация договоров',
+      description: 'Криптографическая подпись каждой версии, hash-chain целостности, DAG для слияния правок нескольких сторон.',
+      gradient: 'from-purple-500 to-pink-600',
+    },
+    {
+      icon: <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" /></svg>,
+      title: 'Российское право',
+      description: 'Ссылки на статьи ГК РФ и ФЗ. Типовые шаблоны российских договоров. Протоколы разногласий по российской практике.',
+      gradient: 'from-orange-500 to-red-600',
+    },
+    {
+      icon: <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>,
+      title: 'Smart Composer',
+      description: 'AI-помощник при наборе текста: подсказки пунктов, валидация на лету, 50+ шаблонов по типам договоров.',
+      gradient: 'from-indigo-500 to-violet-600',
+    },
+    {
+      icon: <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" /></svg>,
+      title: 'RAG — база знаний компании',
+      description: 'Система учится на ваших политиках, шаблонах и прецедентах. Гибридный поиск: вектор + ключевые слова + ре-ранкинг.',
+      gradient: 'from-teal-500 to-cyan-600',
+    },
+    {
+      icon: <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>,
+      title: 'Безопасность и On-premise',
+      description: 'HTTPS, 4 уровня доступа, аудит-лог. Enterprise: система на вашем сервере, локальные AI-модели, данные не уходят наружу.',
+      gradient: 'from-stone-600 to-stone-800',
+    },
+    {
+      icon: <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>,
+      title: 'Аналитика и ROI',
+      description: 'Дашборд: сколько договоров обработано, время и деньги сэкономлены. ROI-мультипликатор для руководства.',
+      gradient: 'from-amber-500 to-orange-600',
+    },
   ]
 
   const stats = [
@@ -257,6 +308,99 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Advantages Section */}
+      <section className="py-20 px-4 bg-gradient-to-br from-stone-900 via-stone-800 to-stone-900">
+        <div className="max-w-7xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
+              Почему Contract AI
+            </h2>
+            <p className="text-xl text-stone-300 max-w-3xl mx-auto">
+              10 причин выбрать нашу систему для работы с договорами
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {advantages.map((adv, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: idx * 0.08 }}
+                className="group"
+              >
+                <div className="h-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300">
+                  <div className={`w-14 h-14 bg-gradient-to-br ${adv.gradient} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
+                    {adv.icon}
+                  </div>
+                  <h3 className="text-lg font-bold text-white mb-2">{adv.title}</h3>
+                  <p className="text-sm text-stone-400 leading-relaxed">{adv.description}</p>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* AI Models note */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            viewport={{ once: true }}
+            className="mt-12 text-center"
+          >
+            <p className="text-stone-400 text-sm">
+              Поддерживаемые AI-модели: DeepSeek V3/R1, YandexGPT 5, Qwen3 и другие современные модели.
+              <br />Переключение между провайдерами одной настройкой. Нет привязки к одному поставщику.
+            </p>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Pricing Preview */}
+      <section className="py-20 px-4">
+        <div className="max-w-4xl mx-auto text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+          >
+            <h2 className="text-4xl md:text-5xl font-bold text-stone-800 mb-4">
+              Прозрачные цены
+            </h2>
+            <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
+              Подписка от 1 990 ₽/мес или пакеты от 20 ₽ за договор
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
+              <Card hover className="text-center">
+                <div className="text-sm text-gray-500 mb-1">Персональный</div>
+                <div className="text-3xl font-bold text-primary-700">1 990 ₽</div>
+                <div className="text-sm text-gray-500">в месяц</div>
+              </Card>
+              <Card hover className="text-center border-2 border-primary-300">
+                <div className="text-sm text-primary-600 font-semibold mb-1">Команда</div>
+                <div className="text-3xl font-bold text-primary-700">4 990 ₽</div>
+                <div className="text-sm text-gray-500">в месяц</div>
+              </Card>
+              <Card hover className="text-center">
+                <div className="text-sm text-gray-500 mb-1">Бизнес</div>
+                <div className="text-3xl font-bold text-primary-700">14 990 ₽</div>
+                <div className="text-sm text-gray-500">в месяц</div>
+              </Card>
+            </div>
+
+            <Button variant="primary" size="lg" onClick={() => router.push('/pricing')}>
+              Все тарифы и сравнение с конкурентами
+            </Button>
+          </motion.div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-20 px-4">
         <div className="max-w-4xl mx-auto">
@@ -271,20 +415,25 @@ export default function Home() {
                   Готовы попробовать?
                 </h2>
                 <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-                  Начните бесплатно. Без кредитной карты. Отмените в любой момент.
+                  5 бесплатных анализов. Без кредитной карты. Результат за 30 секунд.
                 </p>
-                <Button
-                  variant="primary"
-                  size="lg"
-                  onClick={() => router.push('/register')}
-                  icon={
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                    </svg>
-                  }
-                >
-                  Начать сейчас
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <Button
+                    variant="primary"
+                    size="lg"
+                    onClick={() => router.push('/register')}
+                    icon={
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
+                    }
+                  >
+                    Начать бесплатно
+                  </Button>
+                  <Button variant="outline" size="lg" onClick={() => router.push('/pricing')}>
+                    Посмотреть тарифы
+                  </Button>
+                </div>
               </div>
             </Card>
           </motion.div>
@@ -313,6 +462,7 @@ export default function Home() {
                 <li><a href="/pricing" className="hover:text-primary-600">Тарифы</a></li>
                 <li><a href="/demo" className="hover:text-primary-600">Демо</a></li>
                 <li><a href="/login" className="hover:text-primary-600">Вход</a></li>
+                <li><a href="/register" className="hover:text-primary-600">Регистрация</a></li>
               </ul>
             </div>
 
@@ -334,7 +484,7 @@ export default function Home() {
           </div>
 
           <div className="pt-8 border-t border-gray-200 text-center text-sm text-gray-600">
-            <p>© 2025 Contract AI System. Все права защищены.</p>
+            <p>© 2025–2026 Contract AI System. Все права защищены.</p>
           </div>
         </div>
       </footer>

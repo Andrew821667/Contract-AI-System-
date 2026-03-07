@@ -3,11 +3,8 @@
 Seed initial users for Contract AI System.
 Run inside Docker container or locally with DATABASE_URL set.
 
-Creates 4 users:
-  - Admin (enterprise)
-  - Lawyer (pro) — обычный пользователь
-  - VIP Client (enterprise)
-  - Demo User (demo)
+Passwords are read from environment variables:
+  SEED_ADMIN_PASSWORD, SEED_LAWYER_PASSWORD, SEED_VIP_PASSWORD, SEED_DEMO_PASSWORD
 """
 import sys
 import os
@@ -21,34 +18,34 @@ from src.services.auth_service import AuthService
 
 
 # ============================================================
-# USER DEFINITIONS
+# USER DEFINITIONS — passwords from env vars
 # ============================================================
 USERS = [
     {
         "email": "admin@contractai.ru",
         "name": "Администратор",
-        "password": "***REMOVED***",
+        "password_env": "SEED_ADMIN_PASSWORD",
         "role": "admin",
         "tier": "enterprise",
     },
     {
         "email": "lawyer@contractai.ru",
         "name": "Юрист Иванов",
-        "password": "***REMOVED***",
+        "password_env": "SEED_LAWYER_PASSWORD",
         "role": "lawyer",
         "tier": "pro",
     },
     {
         "email": "vip@contractai.ru",
         "name": "VIP Клиент",
-        "password": "***REMOVED***",
+        "password_env": "SEED_VIP_PASSWORD",
         "role": "senior_lawyer",
         "tier": "enterprise",
     },
     {
         "email": "demo@contractai.ru",
         "name": "Демо Пользователь",
-        "password": "***REMOVED***",
+        "password_env": "SEED_DEMO_PASSWORD",
         "role": "junior_lawyer",
         "tier": "demo",
     },
@@ -67,13 +64,18 @@ def seed():
                 skipped.append(u["email"])
                 continue
 
+            password = os.environ.get(u["password_env"])
+            if not password:
+                print(f"WARNING: {u['password_env']} not set, skipping {u['email']}")
+                continue
+
             user = User(
                 email=u["email"],
                 name=u["name"],
-                password_hash=AuthService.hash_password(u["password"]),
+                password_hash=AuthService.hash_password(password),
                 role=u["role"],
                 subscription_tier=u["tier"],
-                email_verified=True,   # skip verification for seed users
+                email_verified=True,
                 active=True,
                 is_demo=(u["tier"] == "demo"),
             )
@@ -90,11 +92,11 @@ def seed():
 
         if created:
             print(f"\n  Created {len(created)} users:\n")
-            print(f"  {'Email':<30} {'Password':<16} {'Role':<16} {'Tier'}")
-            print(f"  {'-'*30} {'-'*16} {'-'*16} {'-'*12}")
+            print(f"  {'Email':<30} {'Role':<16} {'Tier'}")
+            print(f"  {'-'*30} {'-'*16} {'-'*12}")
             for u in USERS:
                 if u["email"] in created:
-                    print(f"  {u['email']:<30} {u['password']:<16} {u['role']:<16} {u['tier']}")
+                    print(f"  {u['email']:<30} {u['role']:<16} {u['tier']}")
         else:
             print("\n  No new users created.")
 

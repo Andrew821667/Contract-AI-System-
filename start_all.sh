@@ -279,7 +279,7 @@ echo -e "   ${GREEN}•${NC} Admin Panel (Admins):     ${BLUE}http://localhost:8
 echo -e "   ${GREEN}•${NC} API Documentation:        ${BLUE}http://localhost:8000/api/docs${NC}"
 
 echo -e "\n${CYAN}👥 DEFAULT CREDENTIALS:${NC}"
-echo -e "   ${GREEN}•${NC} Admin:  ${YELLOW}admin@contractai.local${NC} / ${YELLOW}***REMOVED***${NC}"
+echo -e "   ${GREEN}•${NC} Admin:  ${YELLOW}admin@contractai.local${NC} (password from SEED_ADMIN_PASSWORD env var)"
 echo -e "   ${GREEN}•${NC} Check CREDENTIALS.txt for all users"
 
 echo -e "\n${CYAN}📋 PROCESS IDs:${NC}"
