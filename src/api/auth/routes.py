@@ -28,8 +28,8 @@ class UserRegisterRequest(BaseModel):
     email: EmailStr
     name: str = Field(..., min_length=2, max_length=255)
     password: str = Field(..., min_length=8)
-    role: Optional[str] = "junior_lawyer"
-    subscription_tier: Optional[str] = "demo"
+    # SECURITY: role and subscription_tier are NOT accepted from client
+    # New users always get junior_lawyer/demo. Only admin can change roles.
 
 
 class UserLoginRequest(BaseModel):
@@ -79,67 +79,9 @@ class UpdateRoleRequest(BaseModel):
     subscription_tier: Optional[str] = Field(None, pattern="^(demo|basic|pro|enterprise)$")
 
 
-# ==================== OAuth2 Setup ====================
+# ==================== Dependencies (from shared module) ====================
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
-
-
-# ==================== Dependencies ====================
-
-async def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-) -> User:
-    """
-    Get current authenticated user from JWT token
-
-    Raises:
-        HTTPException 401: Invalid or expired token
-    """
-    auth_service = AuthService(db)
-
-    # Verify token
-    payload = auth_service.verify_token(token, token_type="access")
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    user_id = payload.get("user_id")
-
-    # Get user from database
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-
-    if not user.is_active():
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is not active"
-        )
-
-    return user
-
-
-async def require_admin(current_user: User = Depends(get_current_user)) -> User:
-    """
-    Require admin role
-
-    Raises:
-        HTTPException 403: User is not admin
-    """
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required"
-        )
-
-    return current_user
+from src.api.dependencies import get_current_user, require_admin  # noqa: E402
 
 
 def get_client_ip(request: Request) -> Optional[str]:
@@ -203,8 +145,8 @@ async def register(
         email=request_data.email,
         name=request_data.name,
         password=request_data.password,
-        role=request_data.role,
-        subscription_tier=request_data.subscription_tier
+        role="junior_lawyer",          # SECURITY: hardcoded, never from client
+        subscription_tier="demo"       # SECURITY: hardcoded, never from client
     )
 
     if error:

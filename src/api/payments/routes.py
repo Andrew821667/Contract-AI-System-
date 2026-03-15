@@ -19,29 +19,8 @@ from src.services.payment_service import payment_service
 router = APIRouter()
 
 
-# Dependency: Get current user
-async def get_current_user(
-    authorization: str = Depends(lambda request: request.headers.get("Authorization")),
-    db: Session = Depends(get_db)
-) -> User:
-    """Get current authenticated user"""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authorization header"
-        )
-
-    token = authorization.replace("Bearer ", "")
-    auth_service = AuthService(db)
-    user, error = auth_service.verify_access_token(token, db)
-
-    if error or not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=error or "Invalid token"
-        )
-
-    return user
+# Dependency: shared auth (single source of truth)
+from src.api.dependencies import get_current_user  # noqa: E402
 
 
 # Schemas

@@ -42,48 +42,8 @@ from src.services.clause_extractor import ClauseExtractor
 router = APIRouter()
 
 
-# Dependency: Get current user from token
-async def get_current_user(
-    request: Request,
-    db: Session = Depends(get_db)
-) -> User:
-    """Get current authenticated user"""
-    authorization = request.headers.get("Authorization")
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authorization header",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = authorization.replace("Bearer ", "")
-    auth_service = AuthService(db)
-    
-    # Verify token
-    payload = auth_service.verify_token(token, token_type="access")
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    user_id = payload.get("user_id")
-    user = db.query(User).filter(User.id == user_id).first()
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-        
-    if not user.is_active():
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is not active"
-        )
-
-    return user
+# Dependency: shared auth (single source of truth)
+from src.api.dependencies import get_current_user  # noqa: E402
 
 
 # Pydantic schemas

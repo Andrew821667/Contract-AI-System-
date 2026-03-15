@@ -153,7 +153,7 @@ Contract-AI-System-/
 │   ├── src/services/api.ts                 # API клиент (baseURL: localhost:8000)
 │   ├── src/components/ChangePasswordModal.tsx  # Смена пароля при первом входе
 │   ├── next.config.js                      # Proxy /api/* → localhost:8000
-│   └── public/direct-access.html           # Обход логина (для отладки)
+│   └── public/                             # Статические файлы
 │
 ├── admin/                                  # Streamlit админка (порт 8502)
 │   ├── streamlit_dashboard.py              # Главная страница (защищена auth)
@@ -227,3 +227,46 @@ DEEPSEEK_MODEL=deepseek-chat
 | pdf2docx падает на сложных PDF | Fallback на text_to_docx |
 | Только DeepSeek API key | Claude и GPT-4o — добавить ключи в .env |
 | starlette version mismatch | fastapi 0.109.2 vs starlette 0.52.1 — работает, но warning |
+
+---
+
+## План исправлений (аудит 2026-03-15)
+
+Три сеньора (программист, хакер, UX-дизайнер) провели аудит. Ниже — приоритезированный план.
+
+### Фаза 1 — Безопасность (CRITICAL)
+
+| # | Проблема | Файл | Статус |
+|---|----------|------|--------|
+| 1.1 | **Privilege escalation**: `/register` принимает `role` из тела запроса — любой может стать admin | `src/api/auth/routes.py` | ✅ |
+| 1.2 | **Auth bypass**: `direct-access.html` — полный обход логина | `frontend/public/direct-access.html` | ✅ удалён |
+| 1.3 | **CORS**: проверить что не используется wildcard `*` | `src/middleware/security.py` | ✅ конкретные origins |
+| 1.4 | **Пароль в alembic.ini**: `sqlalchemy.url` содержит credentials открытым текстом | `alembic.ini` | ✅ |
+| 1.5 | **SECRET_KEY пустой**: в dev-режиме JWT работает с пустым ключом | `config/settings.py` | ✅ автогенерация |
+| 1.6 | **Rate limiting**: `/login` должен иметь жёсткий лимит (уже 20/min — проверить) | `src/middleware/security.py` | ✅ 20/min |
+
+### Фаза 2 — Критические баги кода
+
+| # | Проблема | Файл | Статус |
+|---|----------|------|--------|
+| 2.1 | **Мутабельные дефолты**: `default={}` в JSON-колонках SQLAlchemy | `src/models/database.py` | ✅ |
+| 2.2 | **Дублирование `get_current_user`**: 4 разных реализации в 4 файлах → единый `src/api/dependencies.py` | `src/api/*/routes.py` | ✅ |
+| 2.3 | **CLAUDE.md устарел**: описывает старую архитектуру (Streamlit UI, 1 сервис) | `CLAUDE.md` | ✅ |
+
+### Фаза 3 — UX и фронтенд (следующая итерация)
+
+| # | Проблема | Описание |
+|---|----------|----------|
+| 3.1 | Нет sidebar навигации | Next.js — пользователь теряется между страницами |
+| 3.2 | Английские статусы | `pending`, `error`, `completed` → русский перевод |
+| 3.3 | Loading states | Нет обратной связи при длительных операциях |
+| 3.4 | Мобильная адаптация | Основные страницы не работают на мобильных |
+
+### Фаза 4 — Инфраструктура (следующий спринт)
+
+| # | Проблема | Описание |
+|---|----------|----------|
+| 4.1 | PostgreSQL + pgvector | Миграция с SQLite для RAG и конкурентности |
+| 4.2 | Docker Compose | Контейнеризация всех 3 сервисов |
+| 4.3 | CI/CD pipeline | GitHub Actions: lint + test + deploy |
+| 4.4 | Async SMTP | Заменить блокирующий smtplib на aiosmtplib |

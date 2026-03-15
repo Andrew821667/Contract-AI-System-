@@ -254,14 +254,14 @@ class ContractFeedback(Base):
     acceptance_status = Column(Boolean, default=None, index=True)  # true=accepted, false=rejected, null=pending
 
     # User corrections (what user changed)
-    user_corrections = Column(JSON, default={})
+    user_corrections = Column(JSON, default=None)
 
     # Generation parameters (for reproducing)
-    generation_params = Column(JSON, default={})
+    generation_params = Column(JSON, default=None)
 
     # Template and context used
     template_id = Column(String(36), ForeignKey('templates.id', ondelete='SET NULL'))
-    rag_context_used = Column(JSON, default={})
+    rag_context_used = Column(JSON, default=None)
 
     # Quality metrics
     validation_errors = Column(Integer, default=0)

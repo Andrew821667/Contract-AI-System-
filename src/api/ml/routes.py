@@ -55,47 +55,9 @@ def get_smart_composer() -> SmartContractComposer:
     return _smart_composer
 
 
-# ========== AUTH DEPENDENCY (Bearer token) ==========
+# ========== AUTH DEPENDENCY (shared) ==========
 
-async def get_current_user(
-    authorization: str = Depends(lambda request: request.headers.get("Authorization")),
-    db: Session = Depends(get_db)
-) -> User:
-    """Get current authenticated user via Bearer token"""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authorization header",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = authorization.replace("Bearer ", "")
-    auth_service = AuthService(db)
-
-    payload = auth_service.verify_token(token, token_type="access")
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    user_id = payload.get("user_id")
-    user = db.query(User).filter(User.id == user_id).first()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-
-    if not user.is_active():
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is not active"
-        )
-
-    return user
+from src.api.dependencies import get_current_user  # noqa: E402
 
 
 # ========== Request/Response Models ==========

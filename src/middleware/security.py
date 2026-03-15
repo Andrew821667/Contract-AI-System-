@@ -212,9 +212,9 @@ def setup_cors(app):
     from config.settings import settings
 
     allowed_origins = [
-        "http://localhost:3000",  # React/Next.js development
-        "http://localhost:8000",  # FastAPI development
-        "http://localhost:8501",  # Streamlit admin
+        "http://localhost:3000",  # Next.js frontend
+        "http://localhost:8000",  # FastAPI backend
+        "http://localhost:8502",  # Streamlit admin panel
     ]
 
     # Add production origins from settings if available

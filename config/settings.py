@@ -82,8 +82,8 @@ class Settings(BaseSettings):
     rag_top_k: int = 5
     embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
 
-    # Security
-    secret_key: str = ""  # REQUIRED in production! Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+    # Security — REQUIRED! Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+    secret_key: str = ""
 
     # Email / SMTP Settings
     smtp_host: str = "smtp.gmail.com"
@@ -113,15 +113,28 @@ class Settings(BaseSettings):
                 "  SECRET_KEY=<generated-key>"
             )
 
-        # Warn if using default/weak key in any environment
+        # Auto-generate SECRET_KEY in dev if not set (with loud warning)
         if self.secret_key in ["", "your-secret-key-here", "changeme", "secret"]:
-            import warnings
-            warnings.warn(
-                "⚠️  Using empty or default SECRET_KEY! This is INSECURE!\n"
-                f"Current environment: {self.app_env}",
-                UserWarning,
-                stacklevel=2
-            )
+            if self.app_env in ("development", "testing"):
+                import secrets
+                self.secret_key = secrets.token_urlsafe(32)
+                import warnings
+                warnings.warn(
+                    "⚠️  SECRET_KEY not set! Auto-generated a temporary key for development.\n"
+                    "JWT tokens will be INVALIDATED on every restart!\n"
+                    "Set SECRET_KEY in .env for persistent sessions:\n"
+                    f"  SECRET_KEY={self.secret_key}",
+                    UserWarning,
+                    stacklevel=2
+                )
+            else:
+                import warnings
+                warnings.warn(
+                    "⚠️  Using empty or default SECRET_KEY! This is INSECURE!\n"
+                    f"Current environment: {self.app_env}",
+                    UserWarning,
+                    stacklevel=2
+                )
 
         # Auto-set debug based on environment (can be overridden by DEBUG env var)
         if not os.environ.get("DEBUG"):
