@@ -8,6 +8,7 @@ import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import api from '@/services/api'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
+import AppLayout from '@/components/AppLayout'
 
 const contractTypes = [
   { value: 'supply', label: 'Договор поставки', icon: '📦', description: 'Поставка товаров и продукции' },
@@ -80,28 +81,8 @@ export default function GenerateContractPage() {
   if (!isReady) return null
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50/30 to-orange-50/20 py-8">
-      <div className="max-w-4xl mx-auto px-4">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <Button
-            variant="outline"
-            onClick={() => router.back()}
-            className="mb-4"
-          >
-            ← Назад
-          </Button>
-          <h1 className="text-4xl font-bold text-stone-900 mb-2">
-            Генератор договоров
-          </h1>
-          <p className="text-stone-600">
-            Создайте профессиональный договор за несколько минут с помощью AI
-          </p>
-        </motion.div>
+    <AppLayout title="Генерация договора">
+      <div className="max-w-4xl mx-auto">
 
         {/* Progress Steps */}
         <div className="flex items-center justify-between mb-8">
@@ -424,6 +405,6 @@ export default function GenerateContractPage() {
           </motion.div>
         )}
       </div>
-    </div>
+    </AppLayout>
   )
 }

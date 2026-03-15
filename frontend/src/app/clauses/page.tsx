@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import api, { ExtractedClause, ClauseStats } from '@/services/api'
+import AppLayout from '@/components/AppLayout'
 
 const CLAUSE_TYPES = [
   { value: '', label: 'Все типы' },
@@ -102,30 +103,8 @@ export default function ClauseLibraryPage() {
   const byType = stats?.by_type || {}
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50/30 to-orange-50/20">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-white/20 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => router.push('/dashboard')}
-                className="p-2 hover:bg-gray-100 rounded-xl transition"
-              >
-                <svg className="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <div>
-                <h1 className="text-2xl font-bold text-stone-800">Библиотека клаузул</h1>
-                <p className="text-sm text-gray-500">{totalClauses} клаузул в библиотеке</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <AppLayout title="Библиотека клаузул">
+      <div>
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
@@ -310,8 +289,6 @@ export default function ClauseLibraryPage() {
             </div>
           )}
         </div>
-      </main>
-
       {/* Clause Detail Modal */}
       <AnimatePresence>
         {selectedClause && (
@@ -447,6 +424,7 @@ export default function ClauseLibraryPage() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+      </div>
+    </AppLayout>
   )
 }

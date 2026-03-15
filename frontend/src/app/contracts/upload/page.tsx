@@ -10,6 +10,7 @@ import FileUpload from '@/components/forms/FileUpload'
 import Badge from '@/components/ui/Badge'
 import api from '@/services/api'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
+import AppLayout from '@/components/AppLayout'
 
 export default function ContractUploadPage() {
   const { isReady } = useAuthGuard()
@@ -81,37 +82,8 @@ export default function ContractUploadPage() {
   if (!isReady) return null
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50/30 to-orange-50/20">
-      {/* Header */}
-      <nav className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-white/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex items-center space-x-3 cursor-pointer"
-              onClick={() => router.push('/dashboard')}
-            >
-              <div className="w-10 h-10 bg-primary-600 rounded-xl shadow-sm flex items-center justify-center">
-                <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-              </div>
-              <span className="text-xl font-bold text-stone-800">Contract AI</span>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-            >
-              <Button variant="outline" size="sm" onClick={() => router.push('/contracts')}>
-                ← К списку договоров
-              </Button>
-            </motion.div>
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+    <AppLayout title="Загрузка договора">
+      <div className="max-w-5xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -365,6 +337,6 @@ export default function ContractUploadPage() {
           </div>
         </div>
       </div>
-    </div>
+    </AppLayout>
   )
 }

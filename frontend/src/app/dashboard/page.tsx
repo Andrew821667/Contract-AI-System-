@@ -8,8 +8,8 @@ import api, { User, DashboardData, ModelStatus } from '@/services/api'
 import toast from 'react-hot-toast'
 import { getUserRole, getRolePermissions, getRoleColor, getRoleLabel } from '@/utils/roles'
 import ChangePasswordModal from '@/components/ChangePasswordModal'
-import NotificationBell from '@/components/NotificationBell'
-import { useNotifications } from '@/hooks/useNotifications'
+import AppLayout from '@/components/AppLayout'
+import { getContractStatusLabel, getContractStatusClass } from '@/utils/statusLabels'
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
   LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -55,7 +55,6 @@ export default function DashboardPage() {
   const [showPasswordChange, setShowPasswordChange] = useState(false)
   const userRole = getUserRole()
   const permissions = getRolePermissions(userRole)
-  const notif = useNotifications()
   const roleColor = getRoleColor(userRole)
   const roleLabel = getRoleLabel(userRole)
 
@@ -172,52 +171,7 @@ export default function DashboardPage() {
   const headlineMetrics = dashboardData?.headline_metrics || {}
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50/30 to-orange-50/20">
-      {/* Modern Header */}
-      <header className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-white/20 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex items-center space-x-4"
-            >
-              <div className="w-12 h-12 bg-primary-600 rounded-xl shadow-sm flex items-center justify-center">
-                <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-stone-800">Contract AI System</h1>
-                <p className="text-sm text-gray-600">Привет, {user?.name}!</p>
-              </div>
-            </motion.div>
-
-            <div className="flex items-center space-x-4">
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                className="px-4 py-2 bg-primary-600 text-white rounded-xl shadow-sm font-semibold text-sm"
-              >
-                {user?.subscription_tier.toUpperCase()}
-              </motion.div>
-              <NotificationBell
-                notifications={notif.notifications}
-                unreadCount={notif.unreadCount}
-                isConnected={notif.isConnected}
-                markAsRead={notif.markAsRead}
-                markAllAsRead={notif.markAllAsRead}
-                clearAll={notif.clearAll}
-              />
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleLogout}
-                className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-all duration-300"
-              >
-                Выход
-              </motion.button>
-            </div>
-          </div>
-        </div>
-      </header>
+    <AppLayout title="Дашборд">
 
       {/* Welcome Modal */}
       {showWelcome && (
@@ -304,7 +258,7 @@ export default function DashboardPage() {
       />
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div>
         {/* Stats Cards */}
         <motion.div
           variants={containerVariants}
@@ -691,13 +645,8 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="flex items-center space-x-3">
-                      <span className={`px-4 py-2 rounded-full text-sm font-semibold
-                        ${contract.status === 'completed' ? 'badge-success' : ''}
-                        ${contract.status === 'analyzing' ? 'badge-warning' : ''}
-                        ${contract.status === 'uploaded' ? 'bg-primary-100 text-primary-800' : ''}
-                        ${contract.status === 'error' ? 'badge-danger' : ''}
-                      `}>
-                        {contract.status}
+                      <span className={`px-4 py-2 rounded-full text-sm font-semibold ${getContractStatusClass(contract.status)}`}>
+                        {getContractStatusLabel(contract.status)}
                       </span>
                       <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -738,7 +687,7 @@ export default function DashboardPage() {
             </motion.div>
           )}
         </motion.div>
-      </main>
-    </div>
+      </div>
+    </AppLayout>
   )
 }
