@@ -16,6 +16,77 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
+def check_admin_auth() -> bool:
+    """
+    Проверка авторизации для админ-панели.
+    Возвращает True если пользователь авторизован, иначе показывает форму входа.
+    """
+    if st.session_state.get("admin_authenticated"):
+        return True
+
+    st.markdown("## 🔐 Вход в админ-панель")
+    st.markdown("---")
+
+    with st.form("admin_login_form"):
+        email = st.text_input("Email", placeholder="admin@contractai.ru")
+        password = st.text_input("Пароль", type="password", placeholder="Введите пароль")
+        submitted = st.form_submit_button("Войти", use_container_width=True)
+
+    if submitted:
+        if not email or not password:
+            st.error("Введите email и пароль")
+            return False
+
+        try:
+            from src.models.database import SessionLocal
+            from src.models.auth_models import User
+            from src.services.auth_service import AuthService
+
+            db = SessionLocal()
+            try:
+                auth = AuthService(db)
+                user = db.query(User).filter(User.email == email).first()
+
+                if not user or not user.password_hash:
+                    st.error("Неверный email или пароль")
+                    return False
+
+                if not auth.verify_password(password, user.password_hash):
+                    st.error("Неверный email или пароль")
+                    return False
+
+                if user.role not in ("admin", "senior_lawyer"):
+                    st.error("Доступ только для администраторов и старших юристов")
+                    return False
+
+                st.session_state["admin_authenticated"] = True
+                st.session_state["admin_user_email"] = user.email
+                st.session_state["admin_user_name"] = user.name
+                st.session_state["admin_user_role"] = user.role
+                st.rerun()
+            finally:
+                db.close()
+        except Exception as e:
+            st.error(f"Ошибка авторизации: {e}")
+            return False
+
+    return False
+
+
+def show_admin_sidebar_user():
+    """Показать информацию о пользователе и кнопку выхода в sidebar."""
+    if st.session_state.get("admin_authenticated"):
+        name = st.session_state.get("admin_user_name", "")
+        role = st.session_state.get("admin_user_role", "")
+        role_label = {"admin": "Администратор", "senior_lawyer": "Старший юрист"}.get(role, role)
+        st.sidebar.markdown(f"👤 **{name}**")
+        st.sidebar.caption(role_label)
+        if st.sidebar.button("🚪 Выйти", key="admin_logout"):
+            for k in ["admin_authenticated", "admin_user_email", "admin_user_name", "admin_user_role"]:
+                st.session_state.pop(k, None)
+            st.rerun()
+
+
 def init_session_state():
     """Инициализирует общие ключи session_state."""
     defaults = {

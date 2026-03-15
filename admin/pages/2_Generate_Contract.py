@@ -27,6 +27,11 @@ st.set_page_config(
     layout="wide"
 )
 
+# Auth check
+from admin.shared.session_helpers import check_admin_auth
+if not check_admin_auth():
+    st.stop()
+
 from admin.shared.ui_components import apply_custom_css, section_header
 from admin.shared.session_helpers import init_session_state, add_to_history
 

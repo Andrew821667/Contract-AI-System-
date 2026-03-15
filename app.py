@@ -64,7 +64,7 @@ from src.utils.knowledge_base import (
 )
 
 # Import improved pages
-from app_pages_improved import page_generator_improved, page_knowledge_base
+from app_pages_improved import page_generator_improved, page_knowledge_base, page_scheduler
 
 # Import agents and services
 try:
@@ -125,6 +125,18 @@ def init_session_state():
         create_demo_users()
         st.session_state.demo_users_created = True
 
+    # Initialize scheduler
+    if 'scheduler_service' not in st.session_state:
+        try:
+            from src.services.scheduler_service import SchedulerService, APSCHEDULER_AVAILABLE
+            if APSCHEDULER_AVAILABLE:
+                svc = SchedulerService(db_session_factory=SessionLocal if AGENTS_AVAILABLE else None)
+                svc.start()
+                st.session_state['scheduler_service'] = svc
+                logger.info("Планировщик инициализирован и запущен")
+        except Exception as e:
+            logger.warning(f"Не удалось запустить планировщик: {e}")
+
 
 def sidebar_navigation():
     """Sidebar navigation"""
@@ -140,6 +152,7 @@ def sidebar_navigation():
         'changes': '📊 Анализ изменений',
         'export': '📤 Экспорт',
         'knowledge_base': '📚 База знаний',
+        'scheduler': '🕐 Планировщик',
         'settings': '⚙️ Настройки'
     }
 
@@ -1632,6 +1645,260 @@ def page_settings():
         st.success("Настройки сохранены (функциональность в разработке)")
 
 
+def _get_kb_service():
+    """Получить или создать KnowledgeBaseService"""
+    if 'kb_service' not in st.session_state:
+        try:
+            from src.services.knowledge_base_service import KnowledgeBaseService
+            db = st.session_state.get('db_session')
+            rag = st.session_state.get('rag_system')
+            if db:
+                st.session_state.kb_service = KnowledgeBaseService(db=db, rag_system=rag)
+            else:
+                return None
+        except Exception as e:
+            logger.error(f"Ошибка инициализации KnowledgeBaseService: {e}")
+            return None
+    return st.session_state.get('kb_service')
+
+
+def page_kb_view():
+    """Просмотр базы знаний RAG — 4 вкладки"""
+    st.title("📚 База знаний RAG")
+
+    kb_service = _get_kb_service()
+    if not kb_service:
+        st.warning("Сервис базы знаний недоступен. Проверьте подключение к БД.")
+        return
+
+    from src.services.knowledge_base_service import KnowledgeBaseService
+
+    tab_keys = list(KnowledgeBaseService.SECTIONS.keys())
+    tab_labels = [
+        f"{s['icon']} {s['label']}" for s in KnowledgeBaseService.SECTIONS.values()
+    ]
+
+    tabs = st.tabs(tab_labels)
+
+    for idx, (doc_type, section) in enumerate(KnowledgeBaseService.SECTIONS.items()):
+        with tabs[idx]:
+            # Метрики
+            stats = kb_service.get_section_stats(doc_type)
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Документов", stats['count'])
+            with col2:
+                st.metric("Чанков", stats['chunks'])
+            with col3:
+                st.metric("Векторизовано", stats['vectorized'])
+            with col4:
+                last_upd = stats['last_updated']
+                st.metric("Обновлено", last_upd.strftime('%d.%m.%Y') if last_upd else '—')
+
+            st.markdown("---")
+
+            # Поиск
+            search_q = st.text_input(
+                "🔍 Поиск по названию",
+                key=f"kb_search_{doc_type}",
+                placeholder="Введите часть названия..."
+            )
+
+            # Таблица документов
+            docs = kb_service.get_documents(doc_type, search_query=search_q if search_q else None)
+
+            if not docs:
+                st.info("Документы не найдены")
+                continue
+
+            for doc in docs:
+                vec_icon = "✅" if doc.is_vectorized else "❌"
+                status_icons = {
+                    'active': '🟢', 'inactive': '⚪', 'pending': '🟡',
+                    'processing': '🔄', 'error': '🔴'
+                }
+                s_icon = status_icons.get(doc.status, '⚪')
+
+                label = f"{s_icon} {doc.title}  |  Чанков: {doc.chunks_count}  |  Вектор: {vec_icon}  |  {doc.created_at.strftime('%d.%m.%Y') if doc.created_at else '—'}"
+
+                with st.expander(label):
+                    # Просмотр
+                    content_preview = doc.content[:2000] if doc.content else ''
+                    st.text_area(
+                        "Содержимое",
+                        value=content_preview,
+                        height=200,
+                        disabled=True,
+                        key=f"view_{doc.id}"
+                    )
+
+                    if doc.file_name:
+                        st.caption(f"Файл: {doc.file_name} | Источник: {doc.source or 'manual'}")
+
+                    st.markdown("---")
+
+                    # Редактирование
+                    with st.form(key=f"edit_form_{doc.id}"):
+                        new_title = st.text_input("Название", value=doc.title, key=f"title_{doc.id}")
+                        new_content = st.text_area(
+                            "Содержимое (редактирование)",
+                            value=doc.content or '',
+                            height=300,
+                            key=f"content_{doc.id}"
+                        )
+                        col_save, col_reindex, col_delete = st.columns(3)
+
+                        with col_save:
+                            save_btn = st.form_submit_button("💾 Сохранить")
+                        with col_reindex:
+                            reindex_btn = st.form_submit_button("🔄 Переиндексировать")
+                        with col_delete:
+                            delete_btn = st.form_submit_button("🗑️ Удалить")
+
+                    if save_btn:
+                        try:
+                            kb_service.update_document(doc.id, new_content, new_title)
+                            st.success("Документ обновлён")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Ошибка: {e}")
+
+                    if reindex_btn:
+                        with st.spinner("Переиндексация..."):
+                            try:
+                                chunks = kb_service.reindex_document(doc.id)
+                                st.success(f"Переиндексирован: {chunks} чанков")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Ошибка переиндексации: {e}")
+
+                    if delete_btn:
+                        # Подтверждение через session state
+                        confirm_key = f"confirm_delete_{doc.id}"
+                        if st.session_state.get(confirm_key):
+                            kb_service.delete_document(doc.id)
+                            st.session_state.pop(confirm_key, None)
+                            st.success("Документ удалён")
+                            st.rerun()
+                        else:
+                            st.session_state[confirm_key] = True
+                            st.warning("Нажмите 'Удалить' ещё раз для подтверждения")
+                            st.rerun()
+
+
+def page_kb_update():
+    """Обновление базы знаний — загрузка файлов"""
+    st.title("🔄 Обновление базы знаний")
+
+    kb_service = _get_kb_service()
+    if not kb_service:
+        st.warning("Сервис базы знаний недоступен. Проверьте подключение к БД.")
+        return
+
+    from src.services.knowledge_base_service import KnowledgeBaseService
+
+    # Выбор раздела
+    section_options = {
+        f"{s['icon']} {s['label']}": doc_type
+        for doc_type, s in KnowledgeBaseService.SECTIONS.items()
+    }
+    selected_label = st.selectbox("Выберите раздел", list(section_options.keys()))
+    doc_type = section_options[selected_label]
+
+    st.markdown("---")
+
+    # Загрузка файлов
+    uploaded_files = st.file_uploader(
+        "Загрузите файлы",
+        type=['txt', 'docx', 'md', 'pdf'],
+        accept_multiple_files=True,
+        key="kb_upload"
+    )
+
+    if uploaded_files:
+        st.markdown("### Загруженные файлы")
+        file_data_list = []
+        for uf in uploaded_files:
+            data = uf.read()
+            file_data_list.append({'name': uf.name, 'data': data, 'size': len(data)})
+            uf.seek(0)
+
+        # Таблица превью
+        for i, fd in enumerate(file_data_list):
+            size_kb = fd['size'] / 1024
+            st.text(f"  {i+1}. {fd['name']} — {size_kb:.1f} KB")
+
+        st.markdown("---")
+
+        # Обработка
+        if st.button("🚀 Сформировать БЗ", type="primary"):
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            results_container = st.container()
+
+            def on_progress(current, total, message):
+                if total > 0:
+                    progress_bar.progress(current / total)
+                status_text.text(message)
+
+            with st.spinner("Обработка файлов..."):
+                results = kb_service.process_batch(file_data_list, doc_type, on_progress)
+
+            progress_bar.progress(1.0)
+            status_text.text("Обработка завершена!")
+
+            # Статистика результатов
+            created = sum(1 for r in results if r.get('status') == 'created')
+            duplicates = sum(1 for r in results if r.get('status') == 'duplicate')
+            errors = sum(1 for r in results if r.get('status') == 'error')
+
+            with results_container:
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("✅ Добавлено", created)
+                with col2:
+                    st.metric("🔄 Дубликаты", duplicates)
+                with col3:
+                    st.metric("❌ Ошибки", errors)
+
+                st.markdown("### Результаты")
+                for r in results:
+                    status = r.get('status', 'unknown')
+                    fname = r.get('filename', '?')
+                    if status == 'created':
+                        st.success(f"✅ {fname} — добавлен ({r.get('chunks_count', 0)} чанков)")
+                    elif status == 'duplicate':
+                        st.info(f"🔄 {fname} — дубликат (уже есть: {r.get('title', '')})")
+                    elif status == 'updated':
+                        st.warning(f"📝 {fname} — обновлён ({r.get('chunks_count', 0)} чанков)")
+                    elif status == 'error':
+                        st.error(f"❌ {fname} — ошибка: {r.get('error', 'неизвестная')}")
+
+    st.markdown("---")
+
+    # Массовая переиндексация
+    st.markdown("### 🔧 Обслуживание")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🔄 Переиндексировать всё", key="reindex_all"):
+            with st.spinner("Переиндексация всех документов..."):
+                try:
+                    count = kb_service.reindex_all()
+                    st.success(f"Переиндексировано: {count} документов")
+                except Exception as e:
+                    st.error(f"Ошибка: {e}")
+
+    with col2:
+        if st.button("🔄 Индексировать ожидающие", key="reindex_pending"):
+            with st.spinner("Индексация документов без векторизации..."):
+                try:
+                    count = kb_service.reindex_pending()
+                    st.success(f"Проиндексировано: {count} документов")
+                except Exception as e:
+                    st.error(f"Ошибка: {e}")
+
+
 def main():
     """Main application"""
     init_session_state()
@@ -1658,6 +1925,8 @@ def main():
         page_export()
     elif page == 'knowledge_base':
         page_knowledge_base()  # Add knowledge base page
+    elif page == 'scheduler':
+        page_scheduler()
     elif page == 'users':
         page_users()  # Admin user management
     elif page == 'logs':

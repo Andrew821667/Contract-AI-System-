@@ -1,7 +1,7 @@
 # 📊 Contract AI System - Текущее состояние проекта
 
-**Последнее обновление:** 2026-03-02
-**Статус:** Stage 3 Smart Router Production — ЗАВЕРШЁН ✅
+**Последнее обновление:** 2026-03-15
+**Статус:** Stage 3 Smart Router Production — ЗАВЕРШЁН ✅ | Scheduler + Admin Auth — ГОТОВ ✅
 
 ---
 
@@ -328,6 +328,61 @@ with concurrent.futures.ThreadPoolExecutor() as executor:
   - Таблица всех обработок
   - Конфигурация моделей и доступность API ключей
 - **Ограничение:** сейчас доступен только DeepSeek API key. Claude и GPT-4o подготовлены — нужно только добавить ключи в .env
+
+### ✅ Stage 3.5: Scheduler + Admin Auth — ГОТОВ (2026-03-15)
+
+Что реализовано:
+
+#### Планировщик фоновых задач (APScheduler)
+- `src/services/scheduler_service.py` — Singleton-сервис на APScheduler 3.10.4
+  - 3 стандартных задачи:
+    - `reindex_pending` — переиндексация документов БЗ (каждые 30 мин)
+    - `cleanup_sessions` — очистка устаревших сессий (ежедневно 03:00 MSK)
+    - `aggregate_analytics` — агрегация метрик (каждый час)
+  - Ручной запуск любой задачи через UI
+  - Логирование каждого выполнения в `ScheduledTaskLog`
+  - Graceful деградация если APScheduler не установлен
+- `src/models/database.py` — новая модель `ScheduledTaskLog` (job_id, status, duration, result, error)
+- `app_pages_improved.py` → `page_scheduler()` — UI страница планировщика:
+  - Статус планировщика (запуск/остановка)
+  - Список задач с описанием, интервалом, следующим запуском
+  - Кнопка «Запустить сейчас» для каждой задачи
+  - Таблица истории выполнений
+- `app.py` — навигация: 🕐 Планировщик + автозапуск при старте
+- `requirements.txt` — добавлен `APScheduler==3.10.4`
+
+#### Авторизация админ-панели (Streamlit)
+- `admin/shared/session_helpers.py` — `check_admin_auth()` + `show_admin_sidebar_user()`
+  - Форма входа email/пароль
+  - Проверка через bcrypt (та же БД что и Next.js фронтенд)
+  - Доступ только для ролей `admin` и `senior_lawyer`
+  - Кнопка «Выйти» в sidebar
+- Все 7 admin pages защищены: dashboard + 6 подстраниц
+- Общие учётные записи с Next.js фронтендом
+
+#### Учётные записи системы
+| Email | Роль | Начальный пароль |
+|-------|------|-----------------|
+| admin@contractai.ru | Администратор (admin) | Admin123! |
+| lawyer@contractai.ru | Юрист (lawyer) | Lawyer123! |
+| vip@contractai.ru | Старший юрист (senior_lawyer) | Vip12345! |
+| demo@contractai.ru | Демо (demo) | Demo1234! |
+
+- При первом входе в Next.js — автоматический диалог смены пароля (`ChangePasswordModal`)
+- Админ-панель: доступ только admin + senior_lawyer
+
+#### Запуск системы (3 сервиса)
+```bash
+# 1. FastAPI бэкенд (порт 8000) — ОБЯЗАТЕЛЕН для авторизации
+source venv/bin/activate
+python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
+
+# 2. Next.js фронтенд (порт 3000)
+cd frontend && npm run dev
+
+# 3. Streamlit админка (порт 8502)
+streamlit run admin/streamlit_dashboard.py --server.port=8502
+```
 
 ### Stage 4: Интеграции + UI
 - Векторный поиск похожих договоров (pgvector)

@@ -26,6 +26,11 @@ st.set_page_config(
     layout="wide"
 )
 
+# Auth check
+from admin.shared.session_helpers import check_admin_auth
+if not check_admin_auth():
+    st.stop()
+
 st.title("📄 Обработка документов")
 st.markdown("**Стеклянный ящик:** видны все промежуточные результаты работы системы")
 

@@ -4,7 +4,7 @@ Database models and connection management
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from config.settings import settings
-from .database import Base, Template, Contract, AnalysisResult, ReviewTask, LegalDocument, ExportLog, ContractFeedback
+from .database import Base, Template, Contract, AnalysisResult, ReviewTask, LegalDocument, ExportLog, ContractFeedback, ScheduledTaskLog
 from .auth_models import (
     User, UserSession, DemoToken, AuditLog,
     PasswordResetRequest, EmailVerification, LoginAttempt
@@ -78,6 +78,7 @@ __all__ = [
     "LegalDocument",
     "ExportLog",
     "ContractFeedback",
+    "ScheduledTaskLog",
     # Analyzer models
     "ContractRisk",
     "ContractRecommendation",

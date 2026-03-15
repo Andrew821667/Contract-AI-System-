@@ -203,12 +203,17 @@ class LegalDocument(Base):
     status = Column(String(20), default='active', index=True)
     is_vectorized = Column(Boolean, default=False, index=True)
     meta_info = Column(JSON, nullable=True)
+    file_hash = Column(String(64), nullable=True, index=True)
+    file_name = Column(String(255), nullable=True)
+    file_path = Column(String(512), nullable=True)
+    chunks_count = Column(Integer, default=0)
+    source = Column(String(50), default='manual')
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     __table_args__ = (
         CheckConstraint(
-            status.in_(['active', 'inactive']),
+            status.in_(['active', 'inactive', 'pending', 'processing', 'error']),
             name='check_legal_doc_status'
         ),
     )
@@ -297,8 +302,35 @@ __all__ = [
     "LegalDocument",
     "ExportLog",
     "ContractFeedback",
+    "ScheduledTaskLog",
     "LLMCache"
 ]
+
+
+class ScheduledTaskLog(Base):
+    """Лог выполнения фоновых задач планировщика"""
+    __tablename__ = "scheduled_task_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(String(100), nullable=False, index=True)
+    job_name = Column(String(200), nullable=False)
+    status = Column(String(20), nullable=False, default='running', index=True)
+    started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    finished_at = Column(DateTime, nullable=True)
+    duration_sec = Column(Float, nullable=True)
+    result = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
+    items_processed = Column(Integer, default=0)
+
+    __table_args__ = (
+        CheckConstraint(
+            status.in_(['running', 'success', 'error', 'skipped']),
+            name='check_task_log_status'
+        ),
+    )
+
+    def __repr__(self):
+        return f"<ScheduledTaskLog(id={self.id}, job={self.job_id}, status={self.status})>"
 
 
 class LLMCache(Base):

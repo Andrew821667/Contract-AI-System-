@@ -36,11 +36,17 @@ from admin.shared.session_helpers import (
     init_session_state,
     get_processing_history,
     get_api_keys_status,
+    check_admin_auth,
+    show_admin_sidebar_user,
 )
 
 # Инициализация
 apply_custom_css()
 init_session_state()
+
+# Авторизация
+if not check_admin_auth():
+    st.stop()
 
 # ─── Боковая панель ─────────────────────────────────────────
 with st.sidebar:
@@ -69,6 +75,7 @@ with st.sidebar:
         st.caption(f"{icon} {provider}")
 
     st.markdown("---")
+    show_admin_sidebar_user()
     st.caption(f"🕐 {datetime.now().strftime('%d.%m.%Y %H:%M')}")
 
 # ─── Основной контент ───────────────────────────────────────

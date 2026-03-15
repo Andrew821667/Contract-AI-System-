@@ -17,6 +17,11 @@ st.set_page_config(
     layout="wide"
 )
 
+# Auth check
+from admin.shared.session_helpers import check_admin_auth
+if not check_admin_auth():
+    st.stop()
+
 st.title("🧪 Тестирование инфраструктуры")
 st.markdown("Тестирование всех компонентов Contract AI System v2.0")
 
