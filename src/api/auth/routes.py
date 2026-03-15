@@ -608,74 +608,46 @@ async def create_user_as_admin(
     # Send invitation email with temp_password
     email_sent = False
     try:
-        from config.settings import settings
-        import smtplib
-        from email.mime.multipart import MIMEMultipart
-        from email.mime.text import MIMEText
+        from html import escape
+        from src.services.email_service import email_service
 
-        if settings.smtp_user and settings.smtp_password:
-            # Create email message
-            msg = MIMEMultipart('alternative')
-            msg['From'] = f"{settings.smtp_from_name} <{settings.smtp_from_email or settings.smtp_user}>"
-            msg['To'] = user.email
-            msg['Subject'] = "Приглашение в Contract AI System"
+        safe_name = escape(user.name)
+        safe_email = escape(user.email)
+        safe_role = escape(user.role)
+        safe_password = escape(temp_password)
 
-            # Email body (HTML) — escape user input to prevent HTML injection
-            from html import escape
-            safe_name = escape(user.name)
-            safe_email = escape(user.email)
-            safe_role = escape(user.role)
-            safe_password = escape(temp_password)
-
-            html = f"""
-            <html>
-            <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-                <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
-                    <h2 style="color: #3B82F6;">Добро пожаловать в Contract AI System!</h2>
-
-                    <p>Здравствуйте, {safe_name}!</p>
-
-                    <p>Для вас создан аккаунт в системе автоматизации работы с договорами.</p>
-
-                    <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                        <p><strong>Email:</strong> {safe_email}</p>
-                        <p><strong>Временный пароль:</strong> <code style="background: #e9ecef; padding: 2px 6px; border-radius: 3px;">{safe_password}</code></p>
-                        <p><strong>Роль:</strong> {safe_role}</p>
-                    </div>
-
-                    <p>⚠️ <strong>Важно:</strong> Пожалуйста, измените временный пароль после первого входа в систему.</p>
-
-                    <p style="margin-top: 30px;">
-                        <a href="{settings.app_url if hasattr(settings, 'app_url') else 'http://localhost:8501'}"
-                           style="background: #3B82F6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
-                            Войти в систему
-                        </a>
-                    </p>
-
-                    <p style="margin-top: 30px; font-size: 12px; color: #666;">
-                        С уважением,<br>
-                        Команда Contract AI System
-                    </p>
+        html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+                <h2 style="color: #3B82F6;">Добро пожаловать в Contract AI System!</h2>
+                <p>Здравствуйте, {safe_name}!</p>
+                <p>Для вас создан аккаунт в системе автоматизации работы с договорами.</p>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                    <p><strong>Email:</strong> {safe_email}</p>
+                    <p><strong>Временный пароль:</strong> <code style="background: #e9ecef; padding: 2px 6px; border-radius: 3px;">{safe_password}</code></p>
+                    <p><strong>Роль:</strong> {safe_role}</p>
                 </div>
-            </body>
-            </html>
-            """
+                <p>⚠️ <strong>Важно:</strong> Пожалуйста, измените временный пароль после первого входа в систему.</p>
+                <p style="margin-top: 30px; font-size: 12px; color: #666;">
+                    С уважением,<br>Команда Contract AI System
+                </p>
+            </div>
+        </body>
+        </html>
+        """
 
-            msg.attach(MIMEText(html, 'html', 'utf-8'))
-
-            # Send email
-            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=30)
-            server.starttls()
-            server.login(settings.smtp_user, settings.smtp_password)
-            server.send_message(msg)
-            server.quit()
-
-            email_sent = True
+        success, err = await email_service.send_email(
+            to_email=user.email,
+            subject="Приглашение в Contract AI System",
+            html_content=html,
+        )
+        email_sent = success
+        if success:
             logger.info(f"Invitation email sent to {user.email}")
 
     except Exception as e:
         logger.warning(f"Failed to send invitation email: {e}")
-        # Don't fail the request if email sending fails
 
     result = {
         "user_id": user.id,

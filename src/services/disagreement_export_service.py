@@ -319,7 +319,7 @@ class DisagreementExportService:
                 'error': str(e)
             }
 
-    def send_via_email(
+    async def send_via_email(
         self,
         disagreement_id: int,
         recipient_email: str,
@@ -356,7 +356,7 @@ class DisagreementExportService:
                 subject = f"Возражения к проекту договора № {disagreement.contract_id}"
 
             # Send email with SMTP
-            email_sent = self._send_email(
+            email_sent = await self._send_email(
                 recipient_email, subject, disagreement.pdf_path
             )
 
@@ -390,33 +390,17 @@ class DisagreementExportService:
                 'error': str(e)
             }
 
-    def _send_email(self, recipient: str, subject: str, attachment_path: str) -> bool:
+    async def _send_email(self, recipient: str, subject: str, attachment_path: str) -> bool:
         """
-        Send email with attachment using SMTP
-
-        Args:
-            recipient: Recipient email address
-            subject: Email subject
-            attachment_path: Path to file to attach
-
-        Returns:
-            True if sent successfully, False otherwise
+        Send email with attachment using async SMTP (aiosmtplib).
+        Falls back to blocking smtplib in a thread pool if aiosmtplib is not installed.
         """
         try:
-            # Check if SMTP credentials are configured
             if not self.smtp_user or not self.smtp_password:
-                logger.warning(
-                    "SMTP credentials not configured. "
-                    "Please set smtp_user and smtp_password in config."
-                )
-                logger.info(f"[SIMULATED] Email would be sent to {recipient}")
-                logger.info(f"[SIMULATED] Subject: {subject}")
-                logger.info(f"[SIMULATED] Attachment: {attachment_path}")
-                logger.info(f"[SIMULATED] SMTP: {self.smtp_host}:{self.smtp_port}")
+                logger.warning("SMTP credentials not configured.")
+                logger.info(f"[SIMULATED] Email to {recipient}, subject: {subject}, attachment: {attachment_path}")
                 return True  # Simulate success
 
-            # Real SMTP implementation
-            import smtplib
             from email.mime.multipart import MIMEMultipart
             from email.mime.text import MIMEText
             from email.mime.base import MIMEBase
@@ -424,55 +408,55 @@ class DisagreementExportService:
 
             logger.info(f"Sending email to {recipient} via {self.smtp_host}:{self.smtp_port}")
 
-            # Create message
             msg = MIMEMultipart()
             msg['From'] = self.smtp_user
             msg['To'] = recipient
             msg['Subject'] = subject
 
-            # Email body
             body = (
-                f"Добрый день!\n\n"
-                f"Во вложении направляем возражения к проекту договора.\n\n"
-                f"С уважением,\n"
-                f"Система Contract AI"
+                "Добрый день!\n\n"
+                "Во вложении направляем возражения к проекту договора.\n\n"
+                "С уважением,\n"
+                "Система Contract AI"
             )
             msg.attach(MIMEText(body, 'plain', 'utf-8'))
 
-            # Attach file
             if os.path.exists(attachment_path):
                 with open(attachment_path, 'rb') as f:
                     part = MIMEBase('application', 'octet-stream')
                     part.set_payload(f.read())
-
                 encoders.encode_base64(part)
                 filename = os.path.basename(attachment_path)
-                part.add_header(
-                    'Content-Disposition',
-                    f'attachment; filename="{filename}"'
-                )
+                part.add_header('Content-Disposition', f'attachment; filename="{filename}"')
                 msg.attach(part)
             else:
                 logger.error(f"Attachment not found: {attachment_path}")
                 return False
 
-            # Send email
-            server = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=30)
-            server.starttls()
-            server.login(self.smtp_user, self.smtp_password)
-            server.send_message(msg)
-            server.quit()
+            try:
+                import aiosmtplib
+                await aiosmtplib.send(
+                    msg,
+                    hostname=self.smtp_host,
+                    port=self.smtp_port,
+                    start_tls=True,
+                    username=self.smtp_user,
+                    password=self.smtp_password,
+                )
+            except ImportError:
+                import smtplib
+                import asyncio
+                def _send_sync():
+                    server = smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=30)
+                    server.starttls()
+                    server.login(self.smtp_user, self.smtp_password)
+                    server.send_message(msg)
+                    server.quit()
+                await asyncio.get_event_loop().run_in_executor(None, _send_sync)
 
             logger.info(f"Email sent successfully to {recipient}")
             return True
 
-        except smtplib.SMTPAuthenticationError as e:
-            logger.error(f"SMTP authentication failed: {e}")
-            logger.error("Please check smtp_user and smtp_password in config")
-            return False
-        except smtplib.SMTPException as e:
-            logger.error(f"SMTP error: {e}")
-            return False
         except Exception as e:
             logger.error(f"Email sending failed: {e}")
             return False

@@ -68,6 +68,7 @@ passlib[bcrypt]==1.7.4
 qrcode[pil]==7.4.2  # For demo link QR codes
 
 # Email & Notifications
+aiosmtplib==3.0.1  # Async SMTP for non-blocking email
 sendgrid==6.11.0  # SendGrid email service (optional)
 
 # Payments

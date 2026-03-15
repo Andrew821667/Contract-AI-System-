@@ -269,4 +269,4 @@ DEEPSEEK_MODEL=deepseek-chat
 | 4.1 | Docker Compose | Контейнеризация всех 3 сервисов + PostgreSQL + nginx | ✅ |
 | 4.2 | CI/CD pipeline | GitHub Actions: lint + test + docker build | ✅ |
 | 4.3 | PostgreSQL + pgvector | Миграция с SQLite для RAG и конкурентности | ❌ (следующий спринт) |
-| 4.4 | Async SMTP | Заменить блокирующий smtplib на aiosmtplib | ❌ (следующий спринт) |
+| 4.4 | Async SMTP | aiosmtplib в email_service, auth/routes, disagreement_export | ✅ |

@@ -5,11 +5,18 @@ Send verification emails, password reset, notifications, etc.
 Supports SMTP and SendGrid
 """
 import os
-import smtplib
+import asyncio
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import Optional, List
 from datetime import datetime
+
+try:
+    import aiosmtplib
+    AIOSMTP_AVAILABLE = True
+except ImportError:
+    AIOSMTP_AVAILABLE = False
+    import smtplib
 
 from loguru import logger
 
@@ -64,34 +71,47 @@ class EmailService:
 
         logger.info(f"Email service initialized with backend: {self.backend}")
 
-    def _send_smtp(self, to_email: str, subject: str, html_content: str, text_content: str) -> tuple[bool, Optional[str]]:
-        """Send email via SMTP"""
+    def _build_message(self, to_email: str, subject: str, html_content: str, text_content: str) -> MIMEMultipart:
+        """Build MIME message"""
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = subject
+        msg['From'] = f"{self.from_name} <{self.from_email}>"
+        msg['To'] = to_email
+        msg.attach(MIMEText(text_content, 'plain', 'utf-8'))
+        msg.attach(MIMEText(html_content, 'html', 'utf-8'))
+        return msg
+
+    async def _send_smtp_async(self, to_email: str, subject: str, html_content: str, text_content: str) -> tuple[bool, Optional[str]]:
+        """Send email via async SMTP (aiosmtplib)"""
         try:
-            # Create message
-            msg = MIMEMultipart('alternative')
-            msg['Subject'] = subject
-            msg['From'] = f"{self.from_name} <{self.from_email}>"
-            msg['To'] = to_email
+            msg = self._build_message(to_email, subject, html_content, text_content)
+            await aiosmtplib.send(
+                msg,
+                hostname=self.smtp_host,
+                port=self.smtp_port,
+                start_tls=self.smtp_use_tls,
+                username=self.smtp_username or None,
+                password=self.smtp_password or None,
+            )
+            logger.info(f"Email sent via async SMTP to {to_email}: {subject}")
+            return True, None
+        except Exception as e:
+            logger.error(f"Async SMTP email error: {e}", exc_info=True)
+            return False, str(e)
 
-            # Attach text and HTML parts
-            part1 = MIMEText(text_content, 'plain', 'utf-8')
-            part2 = MIMEText(html_content, 'html', 'utf-8')
-            msg.attach(part1)
-            msg.attach(part2)
-
-            # Connect and send
+    def _send_smtp_sync(self, to_email: str, subject: str, html_content: str, text_content: str) -> tuple[bool, Optional[str]]:
+        """Send email via blocking SMTP (fallback when aiosmtplib not installed)"""
+        try:
+            msg = self._build_message(to_email, subject, html_content, text_content)
             server = smtplib.SMTP(self.smtp_host, self.smtp_port)
             if self.smtp_use_tls:
                 server.starttls()
             if self.smtp_username and self.smtp_password:
                 server.login(self.smtp_username, self.smtp_password)
-
             server.send_message(msg)
             server.quit()
-
             logger.info(f"Email sent via SMTP to {to_email}: {subject}")
             return True, None
-
         except Exception as e:
             logger.error(f"SMTP email error: {e}", exc_info=True)
             return False, str(e)
@@ -123,7 +143,7 @@ class EmailService:
             logger.error(f"SendGrid email error: {e}", exc_info=True)
             return False, str(e)
 
-    def send_email(
+    async def send_email(
         self,
         to_email: str,
         subject: str,
@@ -131,7 +151,7 @@ class EmailService:
         text_content: Optional[str] = None
     ) -> tuple[bool, Optional[str]]:
         """
-        Send email using configured backend
+        Send email using configured backend (async).
 
         Args:
             to_email: Recipient email address
@@ -144,17 +164,39 @@ class EmailService:
         """
         # Generate text content from HTML if not provided
         if not text_content:
-            # Simple HTML to text conversion
             import re
             text_content = re.sub('<[^<]+?>', '', html_content)
 
         # Send via configured backend
         if self.backend == 'sendgrid':
             return self._send_sendgrid(to_email, subject, html_content, text_content)
+        elif AIOSMTP_AVAILABLE:
+            return await self._send_smtp_async(to_email, subject, html_content, text_content)
         else:
-            return self._send_smtp(to_email, subject, html_content, text_content)
+            # Fallback: run blocking SMTP in thread pool
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None, self._send_smtp_sync, to_email, subject, html_content, text_content
+            )
 
-    def send_verification_email(
+    def send_email_sync(
+        self,
+        to_email: str,
+        subject: str,
+        html_content: str,
+        text_content: Optional[str] = None
+    ) -> tuple[bool, Optional[str]]:
+        """Sync wrapper for use in non-async contexts (e.g. Stripe webhooks)."""
+        if not text_content:
+            import re
+            text_content = re.sub('<[^<]+?>', '', html_content)
+
+        if self.backend == 'sendgrid':
+            return self._send_sendgrid(to_email, subject, html_content, text_content)
+        else:
+            return self._send_smtp_sync(to_email, subject, html_content, text_content)
+
+    async def send_verification_email(
         self,
         to_email: str,
         verification_token: str,
@@ -228,14 +270,14 @@ Contract AI System - Подтверждение email
 © {datetime.now().year} Contract AI System
         """
 
-        return self.send_email(
+        return await self.send_email(
             to_email=to_email,
             subject="Подтвердите ваш email - Contract AI System",
             html_content=html_content,
             text_content=text_content
         )
 
-    def send_password_reset_email(
+    async def send_password_reset_email(
         self,
         to_email: str,
         reset_token: str,
@@ -310,14 +352,14 @@ Contract AI System - Сброс пароля
 © {datetime.now().year} Contract AI System
         """
 
-        return self.send_email(
+        return await self.send_email(
             to_email=to_email,
             subject="Сброс пароля - Contract AI System",
             html_content=html_content,
             text_content=text_content
         )
 
-    def send_welcome_email(
+    async def send_welcome_email(
         self,
         to_email: str,
         user_name: str,
@@ -402,13 +444,13 @@ Contract AI System - Сброс пароля
         </html>
         """
 
-        return self.send_email(
+        return await self.send_email(
             to_email=to_email,
             subject="Добро пожаловать в Contract AI System!",
             html_content=html_content
         )
 
-    def send_analysis_complete_email(
+    async def send_analysis_complete_email(
         self,
         to_email: str,
         user_name: str,
@@ -471,13 +513,13 @@ Contract AI System - Сброс пароля
         </html>
         """
 
-        return self.send_email(
+        return await self.send_email(
             to_email=to_email,
             subject=f'Анализ договора "{contract_name}" завершён',
             html_content=html_content
         )
 
-    def send_demo_expiring_email(
+    async def send_demo_expiring_email(
         self,
         to_email: str,
         user_name: str,
@@ -541,7 +583,7 @@ Contract AI System - Сброс пароля
         </html>
         """
 
-        return self.send_email(
+        return await self.send_email(
             to_email=to_email,
             subject=f"Ваш демо-доступ истекает через {hours_left} ч",
             html_content=html_content
