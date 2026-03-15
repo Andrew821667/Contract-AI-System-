@@ -10,6 +10,7 @@ import { getUserRole, getRolePermissions, getRoleColor, getRoleLabel } from '@/u
 import ChangePasswordModal from '@/components/ChangePasswordModal'
 import AppLayout from '@/components/AppLayout'
 import { getContractStatusLabel, getContractStatusClass } from '@/utils/statusLabels'
+import { SkeletonCard, SkeletonRow, SkeletonChart } from '@/components/ui/Skeleton'
 import {
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
   LineChart, Line, XAxis, YAxis, CartesianGrid,
@@ -409,7 +410,21 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        {/* Analytics Section */}
+        {/* Analytics Section — Skeleton while loading */}
+        {dashboardLoading && (
+          <div className="mb-8">
+            <h2 className="text-2xl font-bold text-stone-800 mb-6">Аналитика</h2>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              {[1, 2, 3, 4].map(i => <SkeletonCard key={i} />)}
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <SkeletonChart />
+              <SkeletonChart />
+            </div>
+          </div>
+        )}
+
+        {/* Analytics Section — Data loaded */}
         {!dashboardLoading && dashboardData && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -601,12 +616,8 @@ export default function DashboardPage() {
           <h2 className="text-2xl font-bold text-stone-800 mb-6">Последние договоры</h2>
 
           {contractsLoading ? (
-            <div className="flex justify-center py-12">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                className="w-12 h-12 border-4 border-primary-500 border-t-transparent rounded-full"
-              />
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => <SkeletonRow key={i} />)}
             </div>
           ) : contractsData && contractsData.contracts?.length > 0 ? (
             <div className="space-y-3">

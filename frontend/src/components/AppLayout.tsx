@@ -18,6 +18,7 @@ interface AppLayoutProps {
 export default function AppLayout({ children, title }: AppLayoutProps) {
   const router = useRouter()
   const notif = useNotifications()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   // Check auth
   useEffect(() => {
@@ -57,19 +58,33 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50/30 to-orange-50/20">
       {/* Sidebar */}
-      <Sidebar user={user || null} onLogout={handleLogout} />
+      <Sidebar
+        user={user || null}
+        onLogout={handleLogout}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
 
-      {/* Main content area */}
-      <div className="pl-64">
+      {/* Main content area — offset on desktop */}
+      <div className="lg:pl-64">
         {/* Top bar */}
         <header className="bg-white/80 backdrop-blur-lg border-b border-gray-100 sticky top-0 z-30">
-          <div className="px-8 py-4 flex items-center justify-between">
-            <div>
+          <div className="px-4 sm:px-8 py-4 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              {/* Hamburger — mobile only */}
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="lg:hidden p-2 hover:bg-gray-100 rounded-xl transition"
+              >
+                <svg className="w-6 h-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
               {title && (
-                <h1 className="text-2xl font-bold text-stone-800">{title}</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-stone-800">{title}</h1>
               )}
             </div>
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3">
               <NotificationBell
                 notifications={notif.notifications}
                 unreadCount={notif.unreadCount}
@@ -78,7 +93,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 markAllAsRead={notif.markAllAsRead}
                 clearAll={notif.clearAll}
               />
-              <div className="text-sm text-gray-500">
+              <div className="hidden sm:block text-sm text-gray-500">
                 {user?.name}
               </div>
             </div>
@@ -86,7 +101,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
         </header>
 
         {/* Page content */}
-        <main className="p-8">
+        <main className="p-4 sm:p-8">
           {children}
         </main>
       </div>

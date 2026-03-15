@@ -1,8 +1,8 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { motion } from 'framer-motion'
-import { getUserRole, getRoleLabel, getRoleColor, getRolePermissions, UserRole } from '@/utils/roles'
+import { motion, AnimatePresence } from 'framer-motion'
+import { getUserRole, getRoleLabel, getRoleColor, getRolePermissions } from '@/utils/roles'
 
 interface NavItem {
   label: string
@@ -64,9 +64,15 @@ const navItems: NavItem[] = [
 interface SidebarProps {
   user: { name?: string; email?: string; role?: string } | null
   onLogout: () => void
+  isOpen: boolean
+  onClose: () => void
 }
 
-export default function Sidebar({ user, onLogout }: SidebarProps) {
+function SidebarContent({ user, onLogout, onNavigate }: {
+  user: SidebarProps['user']
+  onLogout: () => void
+  onNavigate: () => void
+}) {
   const pathname = usePathname()
   const router = useRouter()
   const role = getUserRole()
@@ -79,8 +85,13 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
     return permissions[item.permission] as boolean
   })
 
+  const handleNav = (href: string) => {
+    router.push(href)
+    onNavigate()
+  }
+
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 bg-white border-r border-gray-200 flex flex-col z-40">
+    <>
       {/* Logo */}
       <div className="px-6 py-5 border-b border-gray-100">
         <div className="flex items-center space-x-3">
@@ -100,15 +111,14 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
         {filteredItems.map((item) => {
           const isActive = pathname === item.href ||
-            (item.href !== '/dashboard' && pathname.startsWith(item.href) && item.href !== '/contracts' ? true : false) ||
+            (item.href !== '/dashboard' && item.href !== '/contracts' && pathname.startsWith(item.href)) ||
             (item.href === '/contracts' && pathname === '/contracts')
 
           return (
             <motion.button
               key={item.href}
-              whileHover={{ x: 2 }}
               whileTap={{ scale: 0.98 }}
-              onClick={() => router.push(item.href)}
+              onClick={() => handleNav(item.href)}
               className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200
                 ${isActive
                   ? 'bg-primary-50 text-primary-700 shadow-sm'
@@ -153,6 +163,52 @@ export default function Sidebar({ user, onLogout }: SidebarProps) {
           <span>Выйти</span>
         </button>
       </div>
-    </aside>
+    </>
+  )
+}
+
+export default function Sidebar({ user, onLogout, isOpen, onClose }: SidebarProps) {
+  return (
+    <>
+      {/* Desktop sidebar — always visible on lg+ */}
+      <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-64 bg-white border-r border-gray-200 flex-col z-40">
+        <SidebarContent user={user} onLogout={onLogout} onNavigate={() => {}} />
+      </aside>
+
+      {/* Mobile drawer */}
+      <AnimatePresence>
+        {isOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={onClose}
+              className="lg:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+            />
+            {/* Drawer */}
+            <motion.aside
+              initial={{ x: -280 }}
+              animate={{ x: 0 }}
+              exit={{ x: -280 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="lg:hidden fixed left-0 top-0 h-screen w-72 bg-white shadow-2xl flex flex-col z-50"
+            >
+              {/* Close button */}
+              <button
+                onClick={onClose}
+                className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-xl transition z-10"
+              >
+                <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <SidebarContent user={user} onLogout={onLogout} onNavigate={onClose} />
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   )
 }
