@@ -13,7 +13,11 @@ echo "==> Creating database tables (SQLAlchemy)..."
 python -c "
 from src.models.database import Base, engine
 from src.models.auth_models import *
-from src.models.changes_models import *
+# changes_models imported if exists
+try:
+    from src.models.changes_models import *
+except ImportError:
+    pass
 Base.metadata.create_all(bind=engine)
 print('All tables created successfully')
 " || echo "WARNING: Table creation failed, continuing..."

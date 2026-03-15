@@ -259,14 +259,14 @@ DEEPSEEK_MODEL=deepseek-chat
 |---|----------|----------|
 | 3.1 | ~~Нет sidebar навигации~~ | ✅ `Sidebar.tsx` + `AppLayout.tsx` |
 | 3.2 | ~~Английские статусы~~ | ✅ `statusLabels.ts` — русский перевод |
-| 3.3 | Loading states | Нет обратной связи при длительных операциях |
-| 3.4 | Мобильная адаптация | Основные страницы не работают на мобильных |
+| 3.3 | ~~Loading states~~ | ✅ Skeleton компоненты для async-загрузки |
+| 3.4 | ~~Мобильная адаптация~~ | ✅ Responsive sidebar + hamburger drawer |
 
-### Фаза 4 — Инфраструктура (следующий спринт)
+### Фаза 4 — Инфраструктура
 
-| # | Проблема | Описание |
-|---|----------|----------|
-| 4.1 | PostgreSQL + pgvector | Миграция с SQLite для RAG и конкурентности |
-| 4.2 | Docker Compose | Контейнеризация всех 3 сервисов |
-| 4.3 | CI/CD pipeline | GitHub Actions: lint + test + deploy |
-| 4.4 | Async SMTP | Заменить блокирующий smtplib на aiosmtplib |
+| # | Проблема | Описание | Статус |
+|---|----------|----------|--------|
+| 4.1 | Docker Compose | Контейнеризация всех 3 сервисов + PostgreSQL + nginx | ✅ |
+| 4.2 | CI/CD pipeline | GitHub Actions: lint + test + docker build | ✅ |
+| 4.3 | PostgreSQL + pgvector | Миграция с SQLite для RAG и конкурентности | ❌ (следующий спринт) |
+| 4.4 | Async SMTP | Заменить блокирующий smtplib на aiosmtplib | ❌ (следующий спринт) |
