@@ -1,7 +1,7 @@
 # Contract AI System — Текущее состояние проекта
 
 **Последнее обновление:** 2026-03-15
-**Статус:** Stage 3.5 — Scheduler + Admin Auth + Users ✅
+**Статус:** Stage 4 — Infrastructure + Security Audit Complete ✅
 
 ---
 
@@ -214,7 +214,8 @@ DEEPSEEK_MODEL=deepseek-chat
 | Stage 2.4: Генерация документа | ✅ | Исправленный DOCX + протокол разногласий |
 | Stage 3: Smart Router | ✅ | complexity_scorer + model_router + multi-model |
 | Stage 3.5: Scheduler + Auth | ✅ | APScheduler, admin auth, 4 пользователя |
-| Stage 4: Интеграции | ❌ | pgvector, 1C/ERP, расширение Next.js UI |
+| Stage 4: Инфраструктура | ✅ | Docker, CI/CD, pgvector, async SMTP, security audit |
+| Stage 5: Интеграции | ❌ | 1C/ERP, расширение Next.js UI |
 
 ---
 
@@ -222,7 +223,7 @@ DEEPSEEK_MODEL=deepseek-chat
 
 | Проблема | Решение |
 |----------|---------|
-| RAG отключён | Нужен PostgreSQL + pgvector |
+| RAG отключён (SQLite) | `docker compose -f docker-compose.dev.yml up -d` → PG + pgvector готов, переключить DATABASE_URL |
 | PaddleOCR не установлен | OCR не нужен для TXT/DOCX/PDF с текстом |
 | pdf2docx падает на сложных PDF | Fallback на text_to_docx |
 | Только DeepSeek API key | Claude и GPT-4o — добавить ключи в .env |
@@ -268,5 +269,5 @@ DEEPSEEK_MODEL=deepseek-chat
 |---|----------|----------|--------|
 | 4.1 | Docker Compose | Контейнеризация всех 3 сервисов + PostgreSQL + nginx | ✅ |
 | 4.2 | CI/CD pipeline | GitHub Actions: lint + test + docker build | ✅ |
-| 4.3 | PostgreSQL + pgvector | Миграция с SQLite для RAG и конкурентности | ❌ (следующий спринт) |
+| 4.3 | PostgreSQL + pgvector | pgvector image, init.sql, connection pooling, docker-compose.dev.yml | ✅ |
 | 4.4 | Async SMTP | aiosmtplib в email_service, auth/routes, disagreement_export | ✅ |

@@ -379,8 +379,15 @@ if DATABASE_URL.startswith("sqlite"):
         echo=False  # Set to True for SQL query logging
     )
 else:
-    # For PostgreSQL or other databases
-    engine = create_engine(DATABASE_URL, echo=False)
+    # For PostgreSQL — with connection pooling
+    engine = create_engine(
+        DATABASE_URL,
+        echo=False,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,  # Detect stale connections
+        pool_recycle=300,     # Recycle connections after 5 minutes
+    )
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

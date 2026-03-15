@@ -1,0 +1,35 @@
+# Local development: just PostgreSQL + Redis
+# Usage: docker compose -f docker-compose.dev.yml up -d
+# Then run backend/frontend/admin locally as usual
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: contract-ai-postgres-dev
+    environment:
+      POSTGRES_DB: contract_ai
+      POSTGRES_USER: contract_user
+      POSTGRES_PASSWORD: dev_password
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U contract_user -d contract_ai"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: contract-ai-redis-dev
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_dev:/data
+    ports:
+      - "6379:6379"
+
+volumes:
+  pgdata_dev:
+  redis_dev:

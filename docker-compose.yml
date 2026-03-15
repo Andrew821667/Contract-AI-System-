@@ -1,7 +1,7 @@
 services:
   # PostgreSQL Database
   postgres:
-    image: postgres:14-alpine
+    image: pgvector/pgvector:pg16
     container_name: contract-ai-postgres
     environment:
       POSTGRES_DB: contract_ai
