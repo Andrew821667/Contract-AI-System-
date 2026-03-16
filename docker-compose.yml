@@ -33,10 +33,12 @@ services:
     image: redis:7-alpine
     container_name: contract-ai-redis
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme_in_production}
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme_in_production}
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "REDISCLI_AUTH=$$REDIS_PASSWORD redis-cli ping | grep PONG"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$REDIS_PASSWORD redis-cli ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
