@@ -27,6 +27,14 @@ class OrganizationContextService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    def get_organization(self, org_id: str) -> Organization | None:
+        """Получить организацию по ID."""
+        return (
+            self.db.query(Organization)
+            .filter(Organization.id == org_id, Organization.active.is_(True))
+            .first()
+        )
+
     def get_user_organizations(self, user_id: str) -> list[Organization]:
         """Все активные организации пользователя."""
         memberships = (
