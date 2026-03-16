@@ -54,6 +54,16 @@ class DemoActivateRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=255)
 
 
+class VerifyEmailRequest(BaseModel):
+    """Email verification request"""
+    token: str
+
+
+class ResendVerificationRequest(BaseModel):
+    """Resend verification email request"""
+    email: EmailStr
+
+
 class RefreshTokenRequest(BaseModel):
     """Refresh token request"""
     refresh_token: str
@@ -169,11 +179,103 @@ async def register(
     )
     db.commit()
 
+    # Попробовать отправить verification email (не блокируем при ошибке)
+    try:
+        from src.services.email_service import email_service
+        from src.models.auth_models import EmailVerification as EVModel
+        ev = db.query(EVModel).filter(
+            EVModel.user_id == user.id,
+            EVModel.verified == False
+        ).order_by(EVModel.created_at.desc()).first()
+        if ev:
+            await email_service.send_verification_email(
+                to_email=user.email,
+                verification_token=ev.token,
+                user_name=user.name
+            )
+    except Exception as e:
+        logger.warning(f"Не удалось отправить verification email: {e}")
+
     # Do NOT return tokens — user must verify email first
     # SECURITY: uniform response to prevent account enumeration
     return {
         "message": "Если указанный email свободен, на него будет отправлено письмо для подтверждения."
     }
+
+
+@router.post("/verify-email")
+async def verify_email(
+    request_data: VerifyEmailRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Подтвердить email по токену из письма.
+
+    Принимает токен верификации, проверяет срок действия,
+    отмечает email как подтверждённый.
+
+    **Пример:**
+    ```json
+    {"token": "abc123..."}
+    ```
+    """
+    auth_service = AuthService(db)
+
+    success, error = auth_service.verify_email(request_data.token)
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error
+        )
+
+    return {"message": "Email успешно подтверждён. Теперь вы можете войти в систему."}
+
+
+@router.post("/resend-verification")
+async def resend_verification(
+    request_data: ResendVerificationRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Повторно отправить письмо для подтверждения email.
+
+    Создаёт новый токен верификации (старые инвалидируются).
+    Для защиты от перебора всегда возвращает одинаковый ответ.
+
+    **Пример:**
+    ```json
+    {"email": "user@example.com"}
+    ```
+    """
+    auth_service = AuthService(db)
+
+    # Единообразный ответ для защиты от перебора email
+    uniform_response = {
+        "message": "Если указанный email зарегистрирован и не подтверждён, на него будет отправлено письмо."
+    }
+
+    user = db.query(User).filter(User.email == request_data.email).first()
+
+    if not user or user.email_verified:
+        return uniform_response
+
+    # Создать новый токен верификации
+    verification = auth_service.create_email_verification(user.id, user.email)
+    db.commit()
+
+    # Попробовать отправить email (не блокируем при ошибке)
+    try:
+        from src.services.email_service import email_service
+        await email_service.send_verification_email(
+            to_email=user.email,
+            verification_token=verification.token,
+            user_name=user.name
+        )
+    except Exception as e:
+        logger.warning(f"Не удалось отправить verification email: {e}")
+
+    return uniform_response
 
 
 @router.post("/login")

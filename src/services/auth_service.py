@@ -181,6 +181,90 @@ class AuthService:
         except jwt.InvalidTokenError:
             return None
 
+    # ==================== Email Verification ====================
+
+    def create_email_verification(self, user_id: str, email: str) -> EmailVerification:
+        """
+        Создать запись верификации email с безопасным токеном.
+
+        Инвалидирует все предыдущие неиспользованные токены для этого пользователя.
+
+        Args:
+            user_id: ID пользователя
+            email: Email для верификации
+
+        Returns:
+            EmailVerification объект с токеном
+        """
+        # Инвалидировать старые неиспользованные верификации
+        self.db.query(EmailVerification).filter(
+            EmailVerification.user_id == user_id,
+            EmailVerification.verified == False
+        ).delete()
+
+        token = secrets.token_urlsafe(32)
+
+        verification = EmailVerification(
+            user_id=user_id,
+            email=email,
+            token=token,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=24)
+        )
+        self.db.add(verification)
+        self.db.flush()
+
+        from loguru import logger
+        verification_url = f"/api/v1/auth/verify-email?token={token}"
+        logger.info(f"[EMAIL VERIFICATION] URL для {email}: {verification_url}")
+
+        return verification
+
+    def verify_email(self, token: str) -> Tuple[bool, Optional[str]]:
+        """
+        Подтвердить email по токену верификации.
+
+        Args:
+            token: Токен верификации из ссылки
+
+        Returns:
+            (success, error_message)
+        """
+        verification = self.db.query(EmailVerification).filter(
+            EmailVerification.token == token
+        ).first()
+
+        if not verification:
+            return False, "Неверный токен верификации"
+
+        if verification.verified:
+            return False, "Email уже подтверждён"
+
+        if verification.expires_at < datetime.now(timezone.utc):
+            return False, "Срок действия токена истёк. Запросите новое письмо."
+
+        # Отметить верификацию как использованную
+        verification.verified = True
+        verification.verified_at = datetime.now(timezone.utc)
+
+        # Подтвердить email пользователя
+        user = self.db.query(User).filter(User.id == verification.user_id).first()
+        if not user:
+            return False, "Пользователь не найден"
+
+        user.email_verified = True
+        user.verification_token = None  # Очистить токен из модели User
+
+        # Записать в аудит
+        self.log_action(
+            user_id=user.id,
+            action="email_verified",
+            status="success",
+            details={"email": verification.email}
+        )
+
+        self.db.commit()
+        return True, None
+
     # ==================== User Registration ====================
 
     def register_user(
@@ -219,9 +303,6 @@ class AuthService:
         # Hash password
         password_hash = self.hash_password(password)
 
-        # Generate verification token
-        verification_token = secrets.token_urlsafe(32) if send_verification else None
-
         # Create user
         user = User(
             email=email,
@@ -230,7 +311,6 @@ class AuthService:
             role=role,
             subscription_tier=subscription_tier,
             email_verified=not send_verification,  # Skip verification for demo
-            verification_token=verification_token,
             active=True
         )
 
@@ -239,13 +319,7 @@ class AuthService:
 
         # Create email verification record
         if send_verification:
-            verification = EmailVerification(
-                user_id=user.id,
-                email=email,
-                token=verification_token,
-                expires_at=datetime.now(timezone.utc) + timedelta(days=7)
-            )
-            self.db.add(verification)
+            self.create_email_verification(user.id, email)
 
         # Log registration
         self.log_action(
@@ -560,7 +634,12 @@ class AuthService:
 
     def refresh_session(self, refresh_token: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """
-        Refresh access token using refresh token
+        Refresh access token using refresh token (rotation).
+
+        Implements one-time use refresh tokens:
+        - Old session is revoked, new session is created
+        - If a revoked refresh token is reused, ALL user sessions are
+          revoked (token theft detection)
 
         Args:
             refresh_token: Refresh token string
@@ -568,34 +647,93 @@ class AuthService:
         Returns:
             (new_tokens dict, error message if failed)
         """
-        # Verify refresh token
+        # Verify refresh token (signature, expiry, iss, aud)
         payload = self.verify_token(refresh_token, token_type="refresh")
         if not payload:
-            return None, "Invalid or expired refresh token"
+            return None, "Недействительный или просроченный refresh-токен"
 
         user_id = payload.get("user_id")
 
-        # Find session
+        # Find session by refresh token
         session = self.db.query(UserSession).filter(
             UserSession.refresh_token == refresh_token,
             UserSession.user_id == user_id
         ).first()
 
-        if not session or not session.is_valid():
-            return None, "Session expired or invalid"
+        if not session:
+            return None, "Сессия не найдена"
 
-        # Create new tokens
+        # --- Token theft detection ---
+        # If the refresh token has already been revoked, someone is reusing
+        # a token that was already rotated. Revoke ALL sessions for this user.
+        if session.revoked:
+            self.db.query(UserSession).filter(
+                UserSession.user_id == user_id,
+                UserSession.revoked == False
+            ).update({
+                "revoked": True,
+                "revoked_at": datetime.now(timezone.utc),
+                "revoke_reason": "refresh_token_reuse_detected"
+            })
+
+            self.log_action(
+                user_id=user_id,
+                action="refresh_token_reuse_detected",
+                status="failed",
+                severity="critical",
+                details={"revoked_session_id": session.id}
+            )
+
+            self.db.commit()
+            return None, "Обнаружено повторное использование токена. Все сессии отозваны. Войдите заново."
+
+        # Check session validity (expiry)
+        if not session.is_valid():
+            return None, "Сессия истекла или недействительна"
+
+        # --- Revoke old session ---
+        session.revoked = True
+        session.revoked_at = datetime.now(timezone.utc)
+        session.revoke_reason = "refresh_token_rotation"
+
+        # --- Find user for response ---
+        user = self.db.query(User).filter(User.id == user_id).first()
+        if not user or not user.is_active():
+            self.db.commit()
+            return None, "Пользователь не найден или неактивен"
+
+        # --- Create new tokens ---
         new_access_token = self.create_access_token(user_id)
         new_refresh_token = self.create_refresh_token(user_id)
 
-        # Update session
-        session.access_token = new_access_token
-        session.refresh_token = new_refresh_token
-        session.last_activity = datetime.now(timezone.utc)
+        # --- Create new session ---
+        new_session = UserSession(
+            user_id=user_id,
+            access_token=new_access_token,
+            refresh_token=new_refresh_token,
+            ip_address=session.ip_address,
+            user_agent=session.user_agent,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=self.REFRESH_TOKEN_EXPIRE_DAYS)
+        )
+        self.db.add(new_session)
+
+        self.log_action(
+            user_id=user_id,
+            action="token_refreshed",
+            status="success",
+            details={"old_session_id": session.id, "new_session_id": new_session.id}
+        )
 
         self.db.commit()
 
         return {
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "role": user.role,
+                "subscription_tier": user.subscription_tier
+            },
             "access_token": new_access_token,
             "refresh_token": new_refresh_token,
             "token_type": "Bearer",
