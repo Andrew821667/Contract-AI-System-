@@ -33,7 +33,7 @@ jobs:
           APP_ENV: testing
           DATABASE_URL: sqlite:///./test_ci.db
         run: |
-          pytest tests/ -v --tb=short -q 2>&1 || echo "Tests completed (some may be skipped without LLM keys)"
+          pytest tests/ -v --tb=short -q -k "not llm and not openai and not deepseek and not anthropic"
 
   # Frontend: lint + build
   frontend:
@@ -53,7 +53,7 @@ jobs:
 
       - name: Lint
         working-directory: frontend
-        run: npm run lint 2>&1 || echo "Lint completed"
+        run: npm run lint
 
       - name: Build
         working-directory: frontend
