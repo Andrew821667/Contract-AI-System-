@@ -97,8 +97,16 @@ class AIActionParserService:
             return None
 
         confidence = float(data.get("confidence", 0.0))
-        # Auto-approve если confidence >= 0.9 и action не требует обязательного approval
-        approval_required = confidence < 0.9
+        # Определяем, нужно ли одобрение
+        always_approve_types = {
+            "modify_clause", "generate_contract", "assign_reviewer",
+            "change_workflow_status", "send_notification",
+        }
+        if action_type in always_approve_types:
+            approval_required = True
+        else:
+            # Auto-approve если confidence >= 0.9
+            approval_required = confidence < 0.9
 
         action = AIAction(
             session_id=session_id,

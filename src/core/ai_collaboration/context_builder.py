@@ -99,46 +99,56 @@ class AIContextBuilderService:
         )
 
     def _load_comments(self, document_id: str) -> list[dict[str, Any]]:
-        """Загрузить комментарии к документу (когда модуль collaboration будет готов)."""
-        # TODO: подключить Comment модель из collaboration
-        from .models import AIAction, AISession
+        """Загрузить комментарии к документу."""
+        from src.core.collaboration.models import Comment
 
-        # Пока: загружаем AI-actions типа create_comment_draft как «комментарии»
-        sessions = (
-            self.db.query(AISession)
-            .filter(AISession.document_id == document_id)
+        comments = (
+            self.db.query(Comment)
+            .filter(Comment.document_id == document_id)
+            .order_by(Comment.created_at.desc())
+            .limit(30)
             .all()
         )
-        session_ids = [s.id for s in sessions]
-        if not session_ids:
-            return []
-
-        actions = (
-            self.db.query(AIAction)
-            .filter(
-                AIAction.session_id.in_(session_ids),
-                AIAction.action_type == "create_comment_draft",
-                AIAction.execution_status == "executed",
-            )
-            .order_by(AIAction.created_at.desc())
-            .limit(20)
-            .all()
-        )
-
         return [
             {
-                "id": a.id,
-                "type": a.action_type,
-                "payload": a.payload,
-                "created_at": a.created_at.isoformat() if a.created_at else None,
+                "id": c.id,
+                "author_id": c.author_id,
+                "content": c.content,
+                "anchor_type": c.anchor_type,
+                "anchor_id": c.anchor_id,
+                "created_at": c.created_at.isoformat() if c.created_at else None,
             }
-            for a in actions
+            for c in comments
         ]
 
     def _load_workflow_state(self, document_id: str) -> dict[str, Any]:
-        """Загрузить состояние workflow (когда модуль workflow будет готов)."""
-        # TODO: подключить WorkflowExecution из workflow модуля
-        return {}
+        """Загрузить состояние workflow."""
+        from src.core.workflow.models import WorkflowExecution, WorkflowTask
+
+        execution = (
+            self.db.query(WorkflowExecution)
+            .filter(WorkflowExecution.document_id == document_id)
+            .order_by(WorkflowExecution.started_at.desc())
+            .first()
+        )
+        if not execution:
+            return {}
+
+        tasks = (
+            self.db.query(WorkflowTask)
+            .filter(WorkflowTask.execution_id == execution.id)
+            .order_by(WorkflowTask.step_order)
+            .all()
+        )
+        return {
+            "execution_id": execution.id,
+            "status": execution.status,
+            "current_step": execution.current_step,
+            "tasks": [
+                {"id": t.id, "name": t.step_name, "status": t.status, "assignee_id": t.assignee_id}
+                for t in tasks
+            ],
+        }
 
     def _load_prior_actions(self, document_id: str, user_id: str) -> list[dict[str, Any]]:
         """Загрузить предыдущие AI-действия для контекста."""

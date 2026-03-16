@@ -195,18 +195,73 @@ class AICollaboratorService:
         llm_profile: Any,
     ) -> dict[str, Any]:
         """
-        Вызов LLM. Абстрактный — будет подключён к реальному LLMGateway.
+        Вызов LLM через self.llm_router (LLMRouterAdapter).
 
-        На данном этапе возвращает placeholder для тестирования архитектуры.
-        Реальная интеграция: через src.services.llm_gateway.LLMGateway.
+        Собирает system prompt из AIContext, формирует messages из истории,
+        вызывает LLM и возвращает результат.
         """
-        # TODO: интеграция с LLMGateway
-        # Пока — placeholder
-        return {
-            "content": "[AI response placeholder — LLM integration pending]",
-            "tokens_input": 0,
-            "tokens_output": 0,
-        }
+        system_prompt = self._build_system_prompt(context)
+        messages = [{"role": t.role, "content": t.content} for t in history]
+
+        result = await self.llm_router.call(messages, llm_profile, system_prompt=system_prompt)
+        return result
+
+    def _build_system_prompt(self, context: AIContext) -> str:
+        """
+        Построить системный промпт из AIContext.
+
+        Включает: метаданные документа, стадию, роль пользователя,
+        топ-5 findings, состояние workflow, инструкцию по формату actions.
+        """
+        parts: list[str] = []
+
+        # Метаданные документа
+        parts.append("# Контекст документа")
+        parts.append(f"- Document ID: {context.document_id}")
+        if context.document_type:
+            parts.append(f"- Тип документа: {context.document_type}")
+        if context.document_metadata:
+            meta_items = ", ".join(f"{k}: {v}" for k, v in context.document_metadata.items())
+            parts.append(f"- Метаданные: {meta_items}")
+
+        # Стадия и роль
+        parts.append(f"\n# Стадия: {context.stage}")
+        if context.user_role:
+            parts.append(f"# Роль пользователя: {context.user_role}")
+
+        # Findings (топ 5)
+        if context.findings:
+            parts.append("\n# Findings (топ 5)")
+            for finding in context.findings[:5]:
+                severity = finding.get("severity", "info")
+                title = finding.get("title", finding.get("description", "—"))
+                parts.append(f"- [{severity}] {title}")
+
+        # Workflow state
+        if context.workflow_state:
+            parts.append("\n# Состояние workflow")
+            for key, value in context.workflow_state.items():
+                parts.append(f"- {key}: {value}")
+
+        # Инструкция по actions
+        parts.append("\n# Формат действий")
+        parts.append(
+            "Если нужно предложить действие, выведи его в блоке:\n"
+            "```action\n"
+            '{"action_type": "<тип>", "target_entity_type": "finding|clause|document", '
+            '"target_entity_id": "<id>", "payload": {...}, "rationale": "<причина>", "confidence": 0.85}\n'
+            "```\n"
+            "Доступные action_type: explain_finding, suggest_clause, modify_clause, "
+            "create_comment_draft, suggest_risk_mitigation, create_summary, "
+            "compare_versions, translate_clause, answer_question, "
+            "draft_negotiation_response, analyze_risks, extract_clauses, "
+            "search_knowledge, generate_contract"
+        )
+
+        # Язык
+        parts.append("\n# Язык\nОтвечай на русском языке.")
+
+        return "\n".join(parts)
 
     def _record_audit(self, session: AISession, event_type: str, details: dict[str, Any]) -> None:
         record = AIAuditRecord(
