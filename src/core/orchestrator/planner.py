@@ -54,6 +54,37 @@ _PLAN_TEMPLATES: dict[str, list[dict[str, Any]]] = {
         {"name": "Анализ сгенерированного", "step_type": "tool_call", "tool_id": "risk_scorer"},
         {"name": "Одобрение", "step_type": "approval_checkpoint"},
     ],
+    "compare_versions": [
+        {"name": "Парсинг документа A", "step_type": "tool_call", "tool_id": "document_parser"},
+        {"name": "Сравнение версий", "step_type": "tool_call", "tool_id": "document_diff"},
+        {"name": "Анализ изменений", "step_type": "agent_delegation", "agent_id": "changes_analyzer"},
+    ],
+    "negotiation_support": [
+        {"name": "Парсинг документа", "step_type": "tool_call", "tool_id": "document_parser"},
+        {"name": "Извлечение клауз", "step_type": "tool_call", "tool_id": "clause_extractor"},
+        {"name": "Оценка рисков", "step_type": "tool_call", "tool_id": "risk_scorer"},
+        {"name": "Анализ разногласий", "step_type": "agent_delegation", "agent_id": "disagreement_analyzer"},
+        {"name": "Подготовка позиции", "step_type": "tool_call", "tool_id": "smart_composer"},
+        {"name": "Одобрение позиции", "step_type": "approval_checkpoint"},
+    ],
+    "quick_intake": [
+        {"name": "Парсинг документа", "step_type": "tool_call", "tool_id": "document_parser"},
+        {"name": "Оценка сложности", "step_type": "tool_call", "tool_id": "complexity_scorer"},
+        {"name": "Классификация", "step_type": "agent_delegation", "agent_id": "onboarding_agent"},
+    ],
+    "compliance_check": [
+        {"name": "Парсинг документа", "step_type": "tool_call", "tool_id": "document_parser"},
+        {"name": "Извлечение клауз", "step_type": "tool_call", "tool_id": "clause_extractor"},
+        {"name": "Проверка клауз по библиотеке", "step_type": "tool_call", "tool_id": "clause_library"},
+        {"name": "Валидация", "step_type": "tool_call", "tool_id": "contract_validator"},
+        {"name": "Оценка рисков", "step_type": "tool_call", "tool_id": "risk_scorer"},
+        {
+            "name": "Проверка критических рисков",
+            "step_type": "condition",
+            "condition": {"field": "step.5.output.risk_level", "op": "in", "value": ["HIGH", "CRITICAL"]},
+        },
+        {"name": "Одобрение при высоком риске", "step_type": "approval_checkpoint"},
+    ],
 }
 
 # Маппинг ключевых слов цели → шаблон
@@ -65,6 +96,19 @@ _GOAL_KEYWORDS: dict[str, str] = {
     "генерац": "generate_contract",
     "создай": "generate_contract",
     "подготов": "prepare_for_review",
+    "сравн": "compare_versions",
+    "версии": "compare_versions",
+    "изменен": "compare_versions",
+    "перегов": "negotiation_support",
+    "разноглас": "negotiation_support",
+    "позици": "negotiation_support",
+    "прием": "quick_intake",
+    "приём": "quick_intake",
+    "загрузк": "quick_intake",
+    "классиф": "quick_intake",
+    "комплаенс": "compliance_check",
+    "соответств": "compliance_check",
+    "валидац": "compliance_check",
 }
 
 
