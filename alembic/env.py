@@ -15,6 +15,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from src.models.database import Base
 from src.models.auth_models import *  # noqa: F401,F403 — register User, Session, etc.
 
+# Import all core models so Alembic sees the new tables
+from src.core.identity_org.models import *  # noqa: F401,F403
+from src.core.policies.models import *  # noqa: F401,F403
+from src.core.tools.models import *  # noqa: F401,F403
+from src.core.agents.models import *  # noqa: F401,F403
+from src.core.ai_collaboration.models import *  # noqa: F401,F403
+from src.core.orchestrator.models import *  # noqa: F401,F403
+from src.core.workflow.models import *  # noqa: F401,F403
+from src.core.collaboration.models import *  # noqa: F401,F403
+from src.core.templates.models import *  # noqa: F401,F403
+from src.core.integrations.models import *  # noqa: F401,F403
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config

@@ -171,6 +171,10 @@ app.include_router(clauses_router, prefix="/api/v1/clauses", tags=["Clause Libra
 app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["Analytics"])
 app.include_router(ml_router, prefix="/api/v1/ml", tags=["ML & AI"])
 
+# API v2 — AI-collaborative OS
+from src.api.v2.router import v2_router
+app.include_router(v2_router, prefix="/api/v2", tags=["API v2"])
+
 
 # NOTE: Static files for contracts are NOT mounted publicly.
 # Use the authenticated /api/v1/contracts/{id}/download endpoint instead.

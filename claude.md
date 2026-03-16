@@ -1,59 +1,60 @@
 # Contract AI System
 
-**Статус:** Stage 3.5 — Scheduler + Admin Auth + Users
-**Обновлено:** 2026-03-15
+**Статус:** Phase 0 — Архитектурная трансформация
+**Обновлено:** 2026-03-16
 
 ---
 
-## ВАЖНО: Читай current.md ПЕРВЫМ!
+## ВАЖНО: Читай current.md и DEVELOPMENT_PLAN.md ПЕРВЫМ!
 
-`current.md` содержит актуальное состояние проекта, все грабли и уроки.
-Этот файл (CLAUDE.md) — краткая справка для быстрого старта.
-
----
-
-## Архитектура: 3 сервиса
-
-| Сервис | Порт | Технология |
-|--------|------|------------|
-| **FastAPI бэкенд** | 8000 | Python/uvicorn |
-| **Next.js фронтенд** | 3000 | Node.js/Next.js 14 |
-| **Streamlit админка** | 8502 | Python/Streamlit |
-
-**ФРОНТЕНД = Next.js!** Streamlit используется ТОЛЬКО для админки.
-Файлы `_app_streamlit_legacy.py` и `_app_pages_legacy.py` — DEPRECATED.
+- `current.md` — полное состояние проекта, план разработки, что переиспользуем
+- `DEVELOPMENT_PLAN.md` — ERD, интерфейсы, API contracts, структура модулей, user flows
 
 ---
 
-## Запуск
+## Что мы строим
 
-```bash
-cd ~/Desktop/Contract-AI-System-
-source venv/bin/activate
+**AI-collaborative contract operating system** — НЕ простой анализатор договоров.
 
-# 1. Бэкенд (ОБЯЗАТЕЛЕН для логина!)
-python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
-
-# 2. Фронтенд (отдельный терминал)
-cd frontend && npm run dev
-
-# 3. Админка (отдельный терминал)
-cd ~/Desktop/Contract-AI-System-
-streamlit run admin/streamlit_dashboard.py --server.port=8502
+### Архитектурная формула
 ```
+hierarchical LLM cascade + AI collaborator layer + agent orchestrator layer
++ specialized agents + controlled tool ecosystem + user/org-aware policy system
++ standalone/branch-ready contract domain
+```
+
+### Референс
+**OpenClaw** (github.com/openclaw/openclaw) — ментальная модель:
+- Session isolation, typed tools (Skills), deterministic orchestration (Lobster)
+- **"Don't orchestrate with LLMs. Use them for creative work, use code for plumbing."**
+
+### Принципы (НАРУШАТЬ НЕЛЬЗЯ)
+1. **AI-first** — AI в каждом этапе lifecycle документа
+2. **Policy-first** — ни один AI action без policy check + audit
+3. **Tool-first** — оркестратор через tools/agents, никогда напрямую
+4. **Deterministic orchestration** — планы детерминированные, LLM для creative work
+5. **Org/user-aware** — AI ведёт себя по-разному для разных пользователей/ролей
+6. **Branch-ready** — standalone + embedded mode
+
+---
+
+## Текущая фаза: Phase 0
+
+Создание архитектурного каркаса в `src/core/` — НЕ ломая существующий код.
+
+Новый код: `src/core/` (13 подмодулей)
+Новые API: `/api/v2/` (рядом с существующим v1)
+Миграции: backward-compatible (новые таблицы, старые не трогаем)
 
 ---
 
 ## Стек
 
+- **Backend:** FastAPI, SQLAlchemy, Pydantic v2, Python 3.11 (`python3`)
 - **Frontend:** Next.js 14, React 18, TypeScript, Tailwind CSS, Zustand
-- **Backend:** FastAPI, SQLAlchemy, Pydantic v2, uvicorn
-- **Admin:** Streamlit multipage
-- **DB:** SQLite (dev) / PostgreSQL 16+ (prod)
-- **LLM:** DeepSeek-chat (основной), GPT-4o-mini (fallback)
-- **Auth:** JWT (HS256) + bcrypt
-- **Scheduler:** APScheduler 3.10.4
-- **Python:** 3.11 (используй `python3`, НЕ `python`)
+- **DB:** SQLite (dev) / PostgreSQL 16 + pgvector (prod)
+- **LLM:** DeepSeek (primary), Claude (expert), GPT-4o (fallback), + 3 more
+- **Infra:** Docker Compose (6 services), Nginx, Redis, GitHub Actions
 
 ---
 
@@ -61,39 +62,24 @@ streamlit run admin/streamlit_dashboard.py --server.port=8502
 
 | Файл | Назначение |
 |------|------------|
-| `current.md` | Полное состояние проекта — **ЧИТАЙ ПЕРВЫМ** |
-| `src/main.py` | FastAPI приложение |
+| `current.md` | **Полное состояние + план** — ЧИТАЙ ПЕРВЫМ |
+| `DEVELOPMENT_PLAN.md` | ERD, интерфейсы, API, структура, flows |
+| `src/core/` | **НОВОЕ** — ядро AI-collaborative OS |
+| `src/api/v2/` | **НОВОЕ** — API v2 для новых доменов |
 | `src/api/dependencies.py` | Единый `get_current_user` (НЕ дублировать!) |
-| `src/api/auth/routes.py` | Login, register, change-password |
-| `src/services/auth_service.py` | JWT + bcrypt + sessions |
-| `src/models/database.py` | SQLAlchemy модели + engine + SessionLocal |
-| `src/models/auth_models.py` | User, UserSession, AuditLog |
-| `config/settings.py` | Pydantic Settings (SECRET_KEY, API keys) |
-| `frontend/src/services/api.ts` | API клиент Next.js |
-| `admin/streamlit_dashboard.py` | Главная страница админки |
-
----
-
-## Учётные записи
-
-| Email | Роль |
-|-------|------|
-| admin@contractai.ru | admin |
-| lawyer@contractai.ru | lawyer |
-| vip@contractai.ru | senior_lawyer |
-| demo@contractai.ru | demo |
-
-> Пароли задаются через переменные окружения SEED_*_PASSWORD в .env.docker.
-> НЕ храните пароли в файлах репозитория!
+| `src/services/llm_gateway.py` | LLM Gateway (6 провайдеров) |
+| `src/services/model_router.py` | LLM cascade routing |
+| `src/agents/` | Существующие агенты (→ рефакторинг в registry) |
+| `config/settings.py` | Pydantic Settings |
 
 ---
 
 ## Правила разработки
 
-1. **UI на русском языке** — все интерфейсы и сообщения
-2. **Пользователь общается по-русски**
-3. **SECRET_KEY в .env обязателен** — без него JWT не работает
-4. **`get_current_user`** — только из `src/api/dependencies.py`, НЕ дублировать
-5. **Регистрация** — роль всегда `junior_lawyer`, НЕ принимать из клиента
-6. **CORS** — только конкретные origins, НЕ wildcard `*`
-7. **.env не в git** (есть в .gitignore)
+1. **UI и коммуникация на русском языке**
+2. **Python 3.11** — `python3`, НЕ `python`
+3. **Новый код в `src/core/`** — не ломай существующий `src/services/`
+4. **API v2 рядом с v1** — backward-compatible
+5. **Policy-first** — любой AI action через policy + audit
+6. **`get_current_user`** — только из `src/api/dependencies.py`
+7. **.env не в git**, SECRET_KEY обязателен

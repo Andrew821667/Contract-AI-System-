@@ -18,6 +18,18 @@ from src.models.auth_models import User
 from src.main import app
 from src.services.auth_service import AuthService
 
+# Import core models so Base.metadata sees them
+import src.core.identity_org.models
+import src.core.policies.models
+import src.core.tools.models
+import src.core.agents.models
+import src.core.ai_collaboration.models
+import src.core.orchestrator.models
+import src.core.workflow.models
+import src.core.collaboration.models
+import src.core.templates.models
+import src.core.integrations.models
+
 # Module-level state shared between fixtures within one test
 _current_engine = None
 _current_session_factory = None

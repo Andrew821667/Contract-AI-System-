@@ -1,273 +1,384 @@
-# Contract AI System — Текущее состояние проекта
+# Contract AI System — ЧИТАЙ ПЕРВЫМ!
 
-**Последнее обновление:** 2026-03-15
-**Статус:** Stage 4 — Infrastructure + Security Audit Complete ✅
+**Последнее обновление:** 2026-03-16
+**Статус:** Phase 0 — Архитектурная трансформация в AI-collaborative Contract OS
+**Предыдущие этапы:** Stages 1-4.5 завершены ✅ (базовый продукт + security hardening)
 
 ---
 
-## КРИТИЧЕСКИ ВАЖНО ДЛЯ НОВОГО АГЕНТА
+## ЧТО МЫ СТРОИМ
 
-### Архитектура: 3 сервиса
+### Миссия
+**AI-collaborative contract operating system** — система, в которой AI является центральным коллаборатором в работе с договорами, а не пассивным чат-виджетом рядом с документом.
 
-Система работает на **трёх** независимых сервисах. **ВСЕ ТРИ** должны быть запущены:
+### Архитектурная формула
+```
+Contract-AI-System = hierarchical LLM cascade
+                   + AI collaborator layer
+                   + agent orchestrator layer
+                   + specialized agents
+                   + controlled tool ecosystem
+                   + user/org-aware policy system
+                   + standalone/branch-ready contract domain
+```
 
-| Сервис | Порт | Технология | Назначение |
-|--------|------|------------|------------|
-| **FastAPI бэкенд** | 8000 | Python/uvicorn | API, авторизация, БД, LLM |
-| **Next.js фронтенд** | 3000 | Node.js/Next.js 14 | Основной UI для пользователей |
-| **Streamlit админка** | 8502 | Python/Streamlit | Внутренний инструмент (анализ, метрики) |
+### Референсная модель
+**OpenClaw** (https://github.com/openclaw/openclaw, 163K★) — ментальная модель для agentic patterns:
+- Gateway как единый control plane для sessions/tools/events
+- Session isolation per agent+user
+- SOUL.md = философия агента (не конфигурация, а поведение)
+- Skills = typed tools с formal schema + eligibility gating
+- **Lobster-паттерн: "Don't orchestrate with LLMs. Use them for creative work, use code for plumbing."** Детерминированные YAML-планы, НЕ LLM-based routing
+- Agent-to-Agent communication через explicit allowlists
+- Config-first approach (policies/profiles как данные, не hardcoded logic)
 
-**ФРОНТЕНД — ТОЛЬКО Next.js!** Старый Streamlit UI (`_app_streamlit_legacy.py`) — DEPRECATED. НЕ ИСПОЛЬЗУЙ `app.py` как UI. Streamlit используется ТОЛЬКО для админки.
+### Ключевые принципы (НАРУШАТЬ НЕЛЬЗЯ)
+1. **AI-first** — AI встроен в КАЖДЫЙ этап lifecycle документа, не прикручен сбоку
+2. **Policy-first execution** — ни один AI action, tool call или orchestration step не выполняется без permission/policy/audit
+3. **Tool-first execution** — оркестратор действует ТОЛЬКО через зарегистрированные tools и agents, никогда напрямую
+4. **User/org-aware** — AI ведёт себя по-разному в зависимости от пользователя, роли, организации, роли в документе
+5. **Deterministic orchestration** — оркестратор строит план детерминированно (по типу документа, risk band, policy), LLM только для creative work
+6. **Branch-ready** — standalone + embedded branch mode с самого начала архитектуры
+7. **Каскадная LLM** — orchestration level (fast/cheap) → specialized agent level (domain) → tool level (deterministic)
 
-### Порядок запуска (СТРОГО!)
+### Что это НЕ является
+- ❌ Обычный CLM без агентного ядра
+- ❌ Простой AI chatbot рядом с документом
+- ❌ Builder-first/no-code платформа
+- ❌ Monolithic LLM app без policy/roles/orchestration
 
+---
+
+## 14 АРХИТЕКТУРНЫХ СЛОЁВ
+
+| # | Слой | Назначение | Текущая готовность |
+|---|------|------------|--------------------|
+| 1 | **Identity / Organization** | Users, orgs, units, memberships, company/functional/document roles | 🟡 20% (User+Role есть, Org нет) |
+| 2 | **Policy** | MultiLevelPolicyResolver, approval rules, action permissions, cascade platform→tenant→org→user→doc | 🔴 0% |
+| 3 | **LLM Routing** | Каскадный выбор моделей по task/sensitivity/cost/tenant policy | 🟡 40% (model_router.py) |
+| 4 | **AI Collaboration** | AI sessions, context builder, conversation turns, typed AI actions, action lifecycle | 🔴 0% |
+| 5 | **Agent Orchestration** | Orchestrator runs, execution plans, plan steps, approval checkpoints, execution trace | 🔴 5% (заглушка) |
+| 6 | **Specialized Agents** | Agent registry, 8+ специализированных агентов, delegation model | 🟡 25% (agents есть, registry нет) |
+| 7 | **Tool Registry / Execution** | Formal tool schemas, eligibility gating, invocation pipeline, policy checks | 🔴 10% (сервисы есть, формализации нет) |
+| 8 | **Workflow** | Workflow engine, definitions, 14 статусов, templates, AI-triggered routing, SLA | 🟡 15% (ReviewTask есть) |
+| 9 | **Collaboration** | Comments, threads, mentions, anchors, assignments, AI-generated comments | 🔴 5% (feedback есть) |
+| 10 | **Template Governance** | Template registry, versions, variables, clause policy, generation traceability | 🟡 20% (template_manager) |
+| 11 | **Contract Domain** | Documents, versions, findings, risk summaries, clause links | 🟢 60% (CRUD работает) |
+| 12 | **Integration** | Event model, webhooks, adapter abstraction, public API | 🔴 5% |
+| 13 | **Audit / Compliance** | AI audit, security events, access logs, integrity records, traceability | 🟡 15% (AuditLog есть) |
+| 14 | **Frontend Workspace** | AI Panel, Goal Box, Execution Plan, Workflow Timeline, Comments, Org Admin | 🟡 20% (базовый CRUD) |
+
+---
+
+## ПЛАН РАЗРАБОТКИ (АКТИВНЫЙ)
+
+### Phase 0: Architecture & Contracts Foundation — ВЫПОЛНЕНО ✅
+**Статус:** ✅ Завершено (2026-03-16, ветка AI_first)
+**Цель:** архитектурный каркас, интерфейсы, ERD, новая структура модулей
+
+Результат:
+- [x] `src/core/` — 11 подмодулей, 63 файла, ~6500 строк
+- [x] 8 Protocol-интерфейсов: ITool, IAgent, IPolicyResolver, IContextBuilder, ILLMRouter, IAuditLogger, IToolRegistry, IAgentRegistry
+- [x] 12 enums, 10 Pydantic value objects (ToolContext, ToolResult, PolicyDecision, AIContext, etc.)
+- [x] 37 новых SQLAlchemy таблиц (backward-compatible, Alembic миграция 012)
+- [x] 34 API v2 эндпоинта (8 роутеров: ai_sessions, ai_actions, orchestrator, organizations, policies, tools_agents, workflow, comments)
+- [x] Сервисы: MultiLevelPolicyResolver, ToolRegistry+Invoker, AgentRegistry+Delegator, AICollaboratorService, ExecutionPlanner, StepExecutor, WorkflowEngine, CommentService, EventBus, WebhookService, AuditQueryService
+- [x] 5 tool-адаптеров (document_parser, risk_scorer, clause_extractor, contract_generator, rag_search)
+- [x] Тесты: 313 passed, 0 failed (0 регрессий)
+
+### Phase 1: Identity / Organization / Policy Backbone ← МЫ ЗДЕСЬ
+**Статус:** 🔄 Модели и сервисы готовы в Phase 0, нужна интеграция
+**Цель:** org-aware фундамент — подключить к реальным данным
+
+Deliverables:
+- [x] Organization, OrganizationUnit, OrganizationMembership (модели в src/core/identity_org/)
+- [x] DocumentParticipationRole (7 ролей)
+- [x] TenantContext, UserAgentPolicyProfile (модели готовы)
+- [x] MultiLevelPolicyResolver (реализован в src/core/policies/resolver.py)
+- [x] Policy CRUD API (3 эндпоинта в /api/v2/policies)
+- [ ] Миграция User/Role в новую модель (связать существующих users с organizations)
+- [ ] Seed data: создать platform-level policies по умолчанию
+- [ ] Интеграция OrganizationContextService в get_current_user pipeline
+
+### Phase 2: AI Collaboration Core
+**Статус:** ⏳ Ожидает Phase 1
+**Цель:** AI как активный коллаборатор
+
+Deliverables:
+- [ ] AISession (per document + user + stage)
+- [ ] AIContextBuilder (document + version + findings + comments + workflow + role + org + policy)
+- [ ] AIConversationTurn
+- [ ] AIAction с 15+ типами (explain_finding, suggest_clause, create_comment_draft, etc.)
+- [ ] AI Action lifecycle: parse → normalize → policy check → threshold → execute/approval/block → audit
+- [ ] AIActionPolicy, AIApprovalService, AIAuditService
+- [ ] **Frontend:** AI Panel (Ask/Explain/Draft/Route/Compare/Negotiate/Summarize/Actions)
+
+### Phase 3: Tool Registry & Tool Execution
+**Статус:** ⏳ Ожидает Phase 2
+**Цель:** формализовать ВСЕ сервисы как typed tools (паттерн OpenClaw Skills)
+
+Deliverables:
+- [ ] Tool Registry (tool_id, name, schema, permissions, policy tags, risk level, sync/async)
+- [ ] Формализация 16+ существующих сервисов как tools
+- [ ] Tool invocation pipeline: validate → policy check → execute → audit → return
+- [ ] Tool eligibility gating (role, org, document type, risk)
+
+### Phase 4: Agent Registry & Specialized Agents
+**Статус:** ⏳ Ожидает Phase 3
+**Цель:** специализированные агенты с delegation model
+
+Deliverables:
+- [ ] Agent Registry (specialization, allowed tools, task types, policy, autonomy, confidence)
+- [ ] Рефакторинг 8 существующих агентов в новую модель
+- [ ] Agent delegation model, invocation audit
+
+### Phase 5: Agent Orchestrator Runtime
+**Статус:** ⏳ Ожидает Phase 4
+**Цель:** центральный runtime для high-level goals
+
+Deliverables:
+- [ ] OrchestratorRun, ExecutionPlanner (детерминированный, Lobster-паттерн)
+- [ ] PlanStep execution: tool calls + agent delegations + approval checkpoints
+- [ ] Conditional branching, loop limits, error handling
+- [ ] Human-in-the-loop: approval gates, resume tokens
+- [ ] **Frontend:** Goal Box + Execution Plan UI
+
+### Phase 6: Workflow Engine
+**Статус:** ⏳ Ожидает Phase 5
+**Цель:** полноценный workflow с AI-triggered routing
+
+Deliverables:
+- [ ] WorkflowDefinition + WorkflowExecution
+- [ ] 14 статусов документа (uploaded → archived)
+- [ ] Workflow templates по типу/юрисдикции/сумме/risk
+- [ ] AI-triggered routing, SLA tracking
+- [ ] **Frontend:** Workflow Timeline
+
+### Phase 7: Collaboration Core
+**Статус:** ⏳ Ожидает Phase 6
+**Цель:** командная работа с участием AI
+
+Deliverables:
+- [ ] Comments (document/section/clause-level), threads, mentions
+- [ ] AI-finding-linked comments, version-aware anchoring
+- [ ] AI в collaboration: draft comments, summarize discussions
+- [ ] **Frontend:** Comments/Threads Panel
+
+### Phase 8: Template Governance + Clause Policy
+**Статус:** ⏳ Ожидает Phase 7
+
+Deliverables:
+- [ ] Template registry (versions, variables, validation)
+- [ ] Clause policy (approved/prohibited/risky/alternatives)
+- [ ] Conversational template completion через AI
+- [ ] **Frontend:** Template Registry + Clause Policy Manager
+
+### Phase 9: Negotiation & Version Intelligence
+**Статус:** ⏳ Ожидает Phase 8
+
+Deliverables:
+- [ ] AI-assisted disagreement flow, draft возражений
+- [ ] Version comparison, material change detection
+- [ ] **Frontend:** Negotiation workspace
+
+### Phase 10: Integration Core + Event Model
+**Статус:** ⏳ Ожидает Phase 9
+
+Deliverables:
+- [ ] Event model (15+ domain events)
+- [ ] Webhook delivery + retry, adapter abstraction
+- [ ] Public integration API, integration settings UI
+
+### Phase 11: LLM Cascade Hardening
+**Статус:** ⏳ Ожидает Phase 10
+
+Deliverables:
+- [ ] LLM routing policies (tenant, sensitivity, cost, latency, confidentiality)
+- [ ] Local-first / external toggle, 3-level cascade
+- [ ] Fallback modes (LLM unavailable → workflow continues)
+
+### Phase 12: Branch Mode + Enterprise Hardening
+**Статус:** ⏳ Ожидает Phase 11
+
+Deliverables:
+- [ ] Standalone + embedded branch mode
+- [ ] Shared identity/tools/policy bindings
+- [ ] Full RBAC, tenant isolation, sensitive field masking
+- [ ] Integrity tracking (hashes, verification, version linkage)
+
+---
+
+## СУЩЕСТВУЮЩИЙ КОД — ЧТО ПЕРЕИСПОЛЬЗУЕМ
+
+### Backend (src/)
+| Компонент | Файлы | Роль в новой архитектуре |
+|-----------|-------|--------------------------|
+| **LLM Gateway** | `services/llm_gateway.py` | → LLM Routing Layer (6 провайдеров: Claude, OpenAI, Perplexity, Yandex, DeepSeek, Qwen) |
+| **Model Router** | `services/model_router.py` | → LLM Routing Layer (DeepSeek→Claude→GPT-4o cascade) |
+| **Agents** | `agents/*.py` (8 шт) | → Specialized Agents Layer (рефакторинг в formal registry) |
+| **RAG** | `services/rag_system.py`, `enhanced_rag.py`, `rag_service.py` | → Tool (ChromaDB + pgvector hybrid search) |
+| **Risk Analysis** | `services/risk_scorer.py`, `risk_analyzer.py`, `ml/risk_predictor.py` | → Tool (risk scoring) |
+| **Document Processing** | `services/document_processor.py`, `text_extractor.py`, `document_parser*.py` | → Tool (document intake) |
+| **Contract Generation** | `services/contract_generation_service.py`, `llm_contract_generator.py` | → Tool (contract generator) |
+| **Clause Library** | `services/clause_library_service.py`, `clause_extractor.py` | → Tool (clause search/extract) |
+| **Templates** | `services/template_manager.py`, `template_comparator.py` | → Template Governance Layer |
+| **Disagreement** | `services/disagreement_service.py`, `disagreement_export_service.py` | → Tool (negotiation) |
+| **Auth** | `services/auth_service.py`, `models/auth_models.py` | → Identity Layer (JWT, sessions, audit) |
+| **Orchestrator** | `orchestrator/main_graph.py` | → Agent Orchestration Layer (переписать) |
+
+### Frontend (frontend/)
+| Компонент | Роль в новой архитектуре |
+|-----------|--------------------------|
+| Next.js 14 + Tailwind + Zustand | Основа остаётся, расширяем |
+| Login, Dashboard, Contracts CRUD | Сохраняем, добавляем AI Panel |
+| Sidebar, responsive layout | Сохраняем |
+| api.ts (API клиент) | Расширяем для новых endpoints |
+
+### Infrastructure
+| Компонент | Статус |
+|-----------|--------|
+| Docker Compose (6 сервисов) | ✅ Работает на порту 8090 |
+| PostgreSQL 16 + pgvector | ✅ Готов |
+| Redis | ✅ Готов |
+| Nginx reverse proxy | ✅ Готов |
+| CI/CD (GitHub Actions) | ✅ Работает |
+| 274 теста | ✅ Все проходят |
+
+---
+
+## ЦЕЛЕВАЯ СТРУКТУРА МОДУЛЕЙ
+
+```
+src/
+├── core/                          # НОВОЕ: ядро AI-collaborative OS
+│   ├── identity_org/              # Organizations, memberships, roles
+│   ├── policies/                  # MultiLevelPolicyResolver, approval rules
+│   ├── ai_collaboration/          # AI sessions, context, actions, lifecycle
+│   ├── orchestrator/              # Orchestrator runs, execution plans, steps
+│   ├── tools/                     # Tool registry, schemas, invocation pipeline
+│   ├── agents/                    # Agent registry, delegation, invocation
+│   ├── workflow/                  # Workflow engine, definitions, tasks
+│   ├── collaboration/             # Comments, threads, mentions, anchors
+│   ├── templates/                 # Template governance, clause policy
+│   ├── integrations/              # Event model, webhooks, adapters
+│   └── audit/                     # AI audit, security events, integrity
+│
+├── api/                           # FastAPI routes (расширяем)
+│   ├── auth/                      # Существующий auth
+│   ├── contracts/                 # Существующий contracts
+│   ├── v2/                        # НОВОЕ: API v2 для новых доменов
+│   │   ├── ai_sessions.py
+│   │   ├── ai_actions.py
+│   │   ├── orchestrator.py
+│   │   ├── workflow.py
+│   │   ├── comments.py
+│   │   ├── organizations.py
+│   │   ├── policies.py
+│   │   ├── tools.py
+│   │   └── agents.py
+│   └── websocket/
+│
+├── services/                      # Существующие сервисы (→ формализуются как tools)
+├── agents/                        # Существующие агенты (→ рефакторинг в registry)
+├── models/                        # Существующие модели (расширяем)
+├── middleware/                     # Security middleware
+└── main.py                        # FastAPI app
+```
+
+---
+
+## ДОКУМЕНТЫ ПРОЕКТА
+
+| Документ | Назначение |
+|----------|------------|
+| `current.md` | **ЭТОТ ФАЙЛ** — читай первым! Состояние, план, архитектура |
+| `CLAUDE.md` | Краткая справка для агента (обновить после Phase 0) |
+| `CONTRACT_AI_SYSTEM_SPECIFICATION.md` | Оригинальная спецификация (Stages 1-5) |
+| `DEVELOPMENT_PLAN.md` | **НОВОЕ** — детальный план разработки с ERD и интерфейсами |
+
+### ТЗ новой концепции (3 документа)
+Хранятся в сообщениях пользователя (2026-03-16):
+1. **Техническое задание** — 30 разделов, полная архитектурная спецификация
+2. **Roadmap** — 12 этапов (P0-P3): architecture → identity → workspace → workflow → tools → orchestrator → templates → negotiation → integrations → llm cascade → branch mode → enterprise
+3. **Implementation Brief** — инструкция для агента разработки: что строить, в каком порядке, что запрещено
+
+---
+
+## ЭКСПЛУАТАЦИЯ
+
+### Docker (рекомендуется)
+```bash
+cd ~/Desktop/Contract-AI-System-
+docker compose --env-file .env.docker up --build -d
+# Всё работает на http://localhost:8090
+```
+
+### Локально (dev)
 ```bash
 cd ~/Desktop/Contract-AI-System-
 source venv/bin/activate
-
-# 1. СНАЧАЛА бэкенд (без него логин не работает!)
-python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000
-
-# 2. Фронтенд (в отдельном терминале)
-cd frontend && npm run dev
-
-# 3. Админка (в отдельном терминале)
-cd ~/Desktop/Contract-AI-System-
-streamlit run admin/streamlit_dashboard.py --server.port=8502
+python3 -m uvicorn src.main:app --host 0.0.0.0 --port 8000  # Бэкенд
+cd frontend && npm run dev                                     # Фронтенд (порт 3000)
+streamlit run admin/streamlit_dashboard.py --server.port=8502  # Админка
 ```
 
-### Критические грабли (уроки 2026-03-15)
+### Учётные записи
+| Email | Роль | Пароль |
+|-------|------|--------|
+| admin@contractai.ru | admin | Admin123! |
+| lawyer@contractai.ru | lawyer | Lawyer123! |
+| vip@contractai.ru | senior_lawyer | Vip12345! |
+| demo@contractai.ru | demo | Demo1234! |
 
-1. **SECRET_KEY в .env ОБЯЗАТЕЛЕН!** Если пустой — JWT токены не работают → логин падает молча.
-   ```
-   SECRET_KEY=gYPs9IPFp3lNs5d3e0u_yuEbMqcdofDJUsGq1Qmc0KE
-   ```
-   Генерация: `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
-
-2. **FastAPI бэкенд ОБЯЗАТЕЛЕН для логина!** Next.js фронтенд шлёт POST на `localhost:8000/api/v1/auth/login`. Без бэкенда — "Неверный email или пароль".
-
-3. **Зависимости бэкенда могут отсутствовать** в venv. При запуске `uvicorn src.main:app` проверяй ошибки:
-   - `sse-starlette` — `pip install sse-starlette`
-   - `pypdf` — `pip install pypdf`
-
-4. **Git: битая ветка `refs/heads/main 2`** — если fetch/pull падает с `bad object refs/heads/main 2`:
-   ```bash
-   rm -f ".git/refs/heads/main 2"
-   git fetch origin
-   ```
-
-5. **Пользователи живут в SQLite** (`contract_ai.db`, таблица `users`). Если БД пересоздана — пользователей нет. Нужно создать заново (см. раздел "Учётные записи").
-
-6. **Next.js кеш** — после изменений перезапускай фронт:
-   ```bash
-   rm -rf frontend/.next/cache
-   cd frontend && npm run dev
-   ```
-
-7. **Streamlit multipage**: `admin/streamlit_dashboard.py` — главная, страницы в `admin/pages/`. Каждая page — standalone с `st.set_page_config()`.
-
-8. **Пользователь общается по-русски** и ожидает русские ответы.
-
-9. **Весь UI на русском языке!**
-
-10. **Python 3.11** на текущей машине (`/opt/homebrew/Cellar/python@3.11`). Используй `python3`, НЕ `python`.
-
----
-
-## Учётные записи системы
-
-| Email | Роль | Пароль | Доступ |
-|-------|------|--------|--------|
-| admin@contractai.ru | admin | Admin123! | Next.js + Админка |
-| lawyer@contractai.ru | lawyer | Lawyer123! | Только Next.js |
-| vip@contractai.ru | senior_lawyer | Vip12345! | Next.js + Админка |
-| demo@contractai.ru | demo | Demo1234! | Только Next.js |
-
-- При первом входе в Next.js — модалка смены пароля (`ChangePasswordModal`)
-- Админка Streamlit: только `admin` и `senior_lawyer`
-- Пароли хешируются bcrypt, общая БД для обоих интерфейсов
-
-### Создание пользователей (если БД пустая)
-
-```python
-python3 << 'EOF'
-import sys; sys.path.insert(0, '.')
-from src.models.database import SessionLocal
-from src.models.auth_models import User
-from src.services.auth_service import AuthService
-
-db = SessionLocal()
-auth = AuthService(db)
-
-users = [
-    ("admin@contractai.ru", "Администратор", "Admin123!", "admin", "enterprise"),
-    ("lawyer@contractai.ru", "Юрист", "Lawyer123!", "lawyer", "pro"),
-    ("vip@contractai.ru", "VIP Юрист", "Vip12345!", "senior_lawyer", "enterprise"),
-    ("demo@contractai.ru", "Демо пользователь", "Demo1234!", "demo", "demo"),
-]
-for email, name, pwd, role, tier in users:
-    user = User(email=email, name=name, password_hash=auth.hash_password(pwd),
-                role=role, subscription_tier=tier, email_verified=True, active=True,
-                is_demo=(role == "demo"))
-    db.add(user)
-db.commit(); db.close()
-EOF
+### .env (ключевые переменные)
 ```
-
----
-
-## Структура проекта
-
-```
-Contract-AI-System-/
-├── .env                                    # API ключи + SECRET_KEY (НЕ в git!)
-├── current.md                              # ЭТОТ ФАЙЛ — читай ПЕРВЫМ!
-├── config/settings.py                      # Pydantic Settings
-│
-├── src/                                    # Python бэкенд
-│   ├── main.py                             # FastAPI app (порт 8000)
-│   ├── api/                                # API роуты (auth, contracts, etc.)
-│   │   └── auth/routes.py                  # Login, register, change-password
-│   ├── services/
-│   │   ├── auth_service.py                 # JWT + bcrypt + session management
-│   │   ├── document_processor.py           # Оркестратор пайплайна (6 этапов)
-│   │   ├── text_extractor.py               # Извлечение текста + DOCX конвертация
-│   │   ├── llm_extractor.py                # LLM extraction (DeepSeek/OpenAI)
-│   │   ├── scheduler_service.py            # APScheduler — фоновые задачи
-│   │   ├── knowledge_base_service.py       # CRUD для базы знаний (RAG)
-│   │   ├── template_comparator.py          # Сравнение с шаблоном
-│   │   ├── risk_scorer.py                  # Risk scoring 0-100
-│   │   ├── stage2_document_generator.py    # Генерация DOCX + протокол
-│   │   ├── complexity_scorer.py            # Оценка сложности документа
-│   │   └── model_router.py                 # Smart Router (выбор LLM модели)
-│   └── models/
-│       ├── database.py                     # SQLAlchemy модели (ScheduledTaskLog, LegalDocument, etc.)
-│       └── auth_models.py                  # User, UserSession, DemoToken, AuditLog
-│
-├── frontend/                               # Next.js 14 фронтенд (порт 3000)
-│   ├── src/app/
-│   │   ├── login/page.tsx                  # Страница логина
-│   │   ├── dashboard/page.tsx              # Dashboard + ChangePasswordModal
-│   │   ├── contracts/                      # Договоры (upload, generate, [id])
-│   │   └── clauses/                        # Библиотека клаузул
-│   ├── src/services/api.ts                 # API клиент (baseURL: localhost:8000)
-│   ├── src/components/ChangePasswordModal.tsx  # Смена пароля при первом входе
-│   ├── next.config.js                      # Proxy /api/* → localhost:8000
-│   └── public/                             # Статические файлы
-│
-├── admin/                                  # Streamlit админка (порт 8502)
-│   ├── streamlit_dashboard.py              # Главная страница (защищена auth)
-│   ├── shared/
-│   │   ├── session_helpers.py              # check_admin_auth(), show_admin_sidebar_user()
-│   │   └── ui_components.py                # Общие компоненты UI
-│   └── pages/
-│       ├── 0_Test_Infrastructure.py        # Тесты инфраструктуры
-│       ├── 1_Process_Documents.py          # "Стеклянный ящик" — анализ документов
-│       ├── 2_Generate_Contract.py          # Генерация договоров
-│       ├── 3_Model_Metrics.py              # Метрики Smart Router
-│       ├── 4_Disagreement_Protocol.py      # Протокол разногласий
-│       ├── 5_Contract_Library.py           # Библиотека договоров
-│       └── 6_Scheduler.py                  # Планировщик фоновых задач
-│
-├── _app_streamlit_legacy.py                # DEPRECATED: старый Streamlit UI
-├── _app_pages_legacy.py                    # DEPRECATED: старые страницы Streamlit
-│
-├── alembic/                                # Миграции БД
-├── tests/                                  # Тесты (pytest)
-└── CONTRACT_AI_SYSTEM_SPECIFICATION.md     # Полная спецификация
-```
-
----
-
-## .env (ключевые переменные)
-
-```
-DATABASE_URL=sqlite:///./contract_ai.db
-SECRET_KEY=<ОБЯЗАТЕЛЬНО! Генерируй через secrets.token_urlsafe(32)>
+SECRET_KEY=<ОБЯЗАТЕЛЬНО! secrets.token_urlsafe(32)>
+DATABASE_URL=sqlite:///./contract_ai.db  # dev
 DEEPSEEK_API_KEY=<ключ>
-DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
-DEEPSEEK_MODEL=deepseek-chat
 ```
 
----
-
-## Технический стек
-
-- **Фронтенд:** Next.js 14, React 18, TypeScript, Tailwind CSS, Zustand, React Query
-- **Бэкенд:** FastAPI, SQLAlchemy, Pydantic v2, uvicorn
-- **Админка:** Streamlit (multipage)
-- **БД:** SQLite (dev) / PostgreSQL 16+ (prod)
-- **LLM:** DeepSeek-chat (основной), GPT-4o-mini (fallback), Claude (будущее)
-- **Auth:** JWT (HS256) + bcrypt, 60-мин access token, 30-дней refresh
-- **Scheduler:** APScheduler 3.10.4
-- **NLP:** SpaCy (ru_core_news_sm)
+### Технический стек
+- **Backend:** FastAPI, SQLAlchemy, Pydantic v2, Python 3.11 (`python3`)
+- **Frontend:** Next.js 14, React 18, TypeScript, Tailwind CSS, Zustand
+- **Admin:** Streamlit multipage
+- **DB:** SQLite (dev) / PostgreSQL 16 + pgvector (prod)
+- **LLM:** DeepSeek (основной), Claude (expert), GPT-4o (fallback), + Perplexity, Yandex, Qwen
+- **Auth:** JWT (HS256) + bcrypt + session management + email verification
+- **Infra:** Docker Compose, Nginx, Redis, GitHub Actions CI/CD
 
 ---
 
-## Прогресс
+## ПРАВИЛА РАЗРАБОТКИ
 
-| Этап | Статус | Описание |
-|------|--------|----------|
-| Stage 2.1: Загрузка черновиков | ✅ | PDF/DOCX/TXT/HTML/XML → конвертация в DOCX |
-| Stage 2.2: Сравнение с шаблоном | ✅ | template_comparator.py, LLM-сравнение |
-| Stage 2.3: Risk Scoring | ✅ | risk_scorer.py, rule-based 0-100 |
-| Stage 2.4: Генерация документа | ✅ | Исправленный DOCX + протокол разногласий |
-| Stage 3: Smart Router | ✅ | complexity_scorer + model_router + multi-model |
-| Stage 3.5: Scheduler + Auth | ✅ | APScheduler, admin auth, 4 пользователя |
-| Stage 4: Инфраструктура | ✅ | Docker, CI/CD, pgvector, async SMTP, security audit |
-| Stage 5: Интеграции | ❌ | 1C/ERP, расширение Next.js UI |
-
----
-
-## Известные проблемы
-
-| Проблема | Решение |
-|----------|---------|
-| RAG отключён (SQLite) | `docker compose -f docker-compose.dev.yml up -d` → PG + pgvector готов, переключить DATABASE_URL |
-| PaddleOCR не установлен | OCR не нужен для TXT/DOCX/PDF с текстом |
-| pdf2docx падает на сложных PDF | Fallback на text_to_docx |
-| Только DeepSeek API key | Claude и GPT-4o — добавить ключи в .env |
-| starlette version mismatch | fastapi 0.109.2 vs starlette 0.52.1 — работает, но warning |
+1. **UI и коммуникация на русском языке**
+2. **Python 3.11** — используй `python3`, НЕ `python`
+3. **`get_current_user`** — только из `src/api/dependencies.py`, НЕ дублировать
+4. **CORS** — только конкретные origins, НЕ wildcard `*`
+5. **Policy-first** — любой AI action через policy check + audit
+6. **Tool-first** — оркестратор не выполняет действия напрямую, только через tools/agents
+7. **Не ломай существующее** — новый код в `src/core/`, API v2 рядом с v1, миграции backward-compatible
+8. **.env не в git** (есть в .gitignore)
+9. **SECRET_KEY обязателен** — без него JWT не работает
 
 ---
 
-## План исправлений (аудит 2026-03-15)
+## ИСТОРИЯ ЗАВЕРШЁННЫХ ЭТАПОВ
 
-Три сеньора (программист, хакер, UX-дизайнер) провели аудит. Ниже — приоритезированный план.
+<details>
+<summary>Stages 1-4.5 (завершены до 2026-03-16)</summary>
 
-### Фаза 1 — Безопасность (CRITICAL)
+| Этап | Описание |
+|------|----------|
+| Stage 2.1 | Загрузка черновиков: PDF/DOCX/TXT/HTML/XML → DOCX |
+| Stage 2.2 | Сравнение с шаблоном (template_comparator.py) |
+| Stage 2.3 | Risk Scoring (risk_scorer.py, 0-100) |
+| Stage 2.4 | Генерация DOCX + протокол разногласий |
+| Stage 3 | Smart Router (complexity_scorer + model_router) |
+| Stage 3.5 | Scheduler + Admin Auth + 4 пользователя |
+| Stage 4 | Docker, CI/CD, pgvector, async SMTP |
+| Stage 4.5 | Security Hardening: 25+ уязвимостей (JWT jti/iss/aud, token rotation, rate limiting, XSS, CORS, account enumeration, etc.) |
 
-| # | Проблема | Файл | Статус |
-|---|----------|------|--------|
-| 1.1 | **Privilege escalation**: `/register` принимает `role` из тела запроса — любой может стать admin | `src/api/auth/routes.py` | ✅ |
-| 1.2 | **Auth bypass**: `direct-access.html` — полный обход логина | `frontend/public/direct-access.html` | ✅ удалён |
-| 1.3 | **CORS**: проверить что не используется wildcard `*` | `src/middleware/security.py` | ✅ конкретные origins |
-| 1.4 | **Пароль в alembic.ini**: `sqlalchemy.url` содержит credentials открытым текстом | `alembic.ini` | ✅ |
-| 1.5 | **SECRET_KEY пустой**: в dev-режиме JWT работает с пустым ключом | `config/settings.py` | ✅ автогенерация |
-| 1.6 | **Rate limiting**: `/login` должен иметь жёсткий лимит (уже 20/min — проверить) | `src/middleware/security.py` | ✅ 20/min |
-
-### Фаза 2 — Критические баги кода
-
-| # | Проблема | Файл | Статус |
-|---|----------|------|--------|
-| 2.1 | **Мутабельные дефолты**: `default={}` в JSON-колонках SQLAlchemy | `src/models/database.py` | ✅ |
-| 2.2 | **Дублирование `get_current_user`**: 4 разных реализации в 4 файлах → единый `src/api/dependencies.py` | `src/api/*/routes.py` | ✅ |
-| 2.3 | **CLAUDE.md устарел**: описывает старую архитектуру (Streamlit UI, 1 сервис) | `CLAUDE.md` | ✅ |
-
-### Фаза 3 — UX и фронтенд (следующая итерация)
-
-| # | Проблема | Описание |
-|---|----------|----------|
-| 3.1 | ~~Нет sidebar навигации~~ | ✅ `Sidebar.tsx` + `AppLayout.tsx` |
-| 3.2 | ~~Английские статусы~~ | ✅ `statusLabels.ts` — русский перевод |
-| 3.3 | ~~Loading states~~ | ✅ Skeleton компоненты для async-загрузки |
-| 3.4 | ~~Мобильная адаптация~~ | ✅ Responsive sidebar + hamburger drawer |
-
-### Фаза 4 — Инфраструктура
-
-| # | Проблема | Описание | Статус |
-|---|----------|----------|--------|
-| 4.1 | Docker Compose | Контейнеризация всех 3 сервисов + PostgreSQL + nginx | ✅ |
-| 4.2 | CI/CD pipeline | GitHub Actions: lint + test + docker build | ✅ |
-| 4.3 | PostgreSQL + pgvector | pgvector image, init.sql, connection pooling, docker-compose.dev.yml | ✅ |
-| 4.4 | Async SMTP | aiosmtplib в email_service, auth/routes, disagreement_export | ✅ |
+274 теста, 0 ошибок. Docker: 6 контейнеров healthy на порту 8090.
+</details>
+</content>
+</invoke>
