@@ -129,6 +129,10 @@ class ToolContext(BaseModel):
     step_id: str | None = None
     invoker: str = "user"  # user | agent:<agent_id> | orchestrator
     correlation_id: str = Field(default_factory=lambda: str(uuid4()))
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    # metadata keys used by eligibility gating:
+    #   "user_permissions": list[str] — permissions the caller holds
+    #   "max_risk_level": str — maximum allowed tool risk level (low|medium|high|critical)
 
 
 class ValidationResult(BaseModel):
