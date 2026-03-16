@@ -62,9 +62,33 @@ def client(test_db):
     # Override BOTH get_db functions (models/__init__.py and models/database.py)
     app.dependency_overrides[get_db_database] = _get_test_db
     app.dependency_overrides[get_db_models] = _get_test_db
+
+    # Clear ALL rate limiter buckets to prevent 429 in tests
+    _clear_rate_limit_buckets(app)
+
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+def _clear_rate_limit_buckets(application):
+    """Walk the entire ASGI middleware stack and clear any rate limiter buckets."""
+    visited = set()
+    stack = [application]
+    while stack:
+        obj = stack.pop()
+        obj_id = id(obj)
+        if obj_id in visited:
+            continue
+        visited.add(obj_id)
+        if hasattr(obj, 'buckets') and isinstance(getattr(obj, 'buckets', None), dict):
+            obj.buckets.clear()
+        # Starlette wraps middleware: obj.app is the next layer
+        if hasattr(obj, 'app'):
+            stack.append(obj.app)
+        # Also check middleware_stack for FastAPI
+        if hasattr(obj, 'middleware_stack') and obj.middleware_stack:
+            stack.append(obj.middleware_stack)
 
 
 @pytest.fixture()

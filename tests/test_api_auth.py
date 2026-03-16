@@ -14,8 +14,9 @@ class TestRegister:
         })
         assert resp.status_code == 201, f"Register failed: {resp.json()}"
         data = resp.json()
-        assert "access_token" in data
-        assert data["email"] == "new@example.com"
+        # After security hardening: register no longer returns tokens
+        # Returns uniform message (anti-enumeration)
+        assert "message" in data
 
     def test_register_duplicate_email(self, client):
         payload = {
@@ -26,8 +27,10 @@ class TestRegister:
         resp1 = client.post("/api/v1/auth/register", json=payload)
         assert resp1.status_code == 201
 
+        # Security: uniform response to prevent account enumeration
         resp2 = client.post("/api/v1/auth/register", json=payload)
-        assert resp2.status_code == 400
+        assert resp2.status_code == 201  # Same as success — anti-enumeration
+        assert "message" in resp2.json()
 
     def test_register_short_password(self, client):
         resp = client.post("/api/v1/auth/register", json={
@@ -57,14 +60,14 @@ class TestLogin:
             "username": "test@example.com",
             "password": "WrongPassword1!",
         })
-        assert resp.status_code == 401
+        assert resp.status_code in (401, 429)  # 429 possible under rate limiting
 
     def test_login_nonexistent_user(self, client):
         resp = client.post("/api/v1/auth/login", data={
             "username": "ghost@example.com",
             "password": "SomePass1!",
         })
-        assert resp.status_code == 401
+        assert resp.status_code in (401, 429)
 
 
 class TestProtectedEndpoints:

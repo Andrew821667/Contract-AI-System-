@@ -8,11 +8,13 @@ class TestAnalysisWebSocket:
     """WS /api/v1/ws/analysis/{contract_id}"""
 
     def test_connect_invalid_token(self, client):
-        with pytest.raises(Exception):
-            with client.websocket_connect(
-                "/api/v1/ws/analysis/fake-contract?token=invalid.token"
-            ) as ws:
-                ws.receive_json()
+        """Invalid token → accepted then closed with error message."""
+        with client.websocket_connect(
+            "/api/v1/ws/analysis/fake-contract?token=invalid.token"
+        ) as ws:
+            data = ws.receive_json()
+            assert data["type"] == "error"
+            assert "Authentication failed" in data["message"]
 
     def test_connect_valid_token_contract_not_found(self, client, test_user, test_db):
         """Valid token but contract doesn't exist → close 1008."""
@@ -30,11 +32,13 @@ class TestNotificationsWebSocket:
     """WS /api/v1/ws/notifications"""
 
     def test_connect_invalid_token(self, client):
-        with pytest.raises(Exception):
-            with client.websocket_connect(
-                "/api/v1/ws/notifications?token=bad-token"
-            ) as ws:
-                ws.receive_json()
+        """Invalid token → accepted then closed with error message."""
+        with client.websocket_connect(
+            "/api/v1/ws/notifications?token=bad-token"
+        ) as ws:
+            data = ws.receive_json()
+            assert data["type"] == "error"
+            assert "Authentication failed" in data["message"]
 
     def test_connect_valid_token(self, client, test_user, test_db):
         """Valid token → receive 'connected' message."""
