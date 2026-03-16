@@ -72,56 +72,43 @@ manager = ConnectionManager()
 async def websocket_analysis_updates(
     websocket: WebSocket,
     contract_id: str,
-    token: str = Query(...),
+    token: str = Query(None),
     db: Session = Depends(get_db)
 ):
     """
-    WebSocket endpoint for real-time contract analysis updates
+    WebSocket endpoint for real-time contract analysis updates.
 
-    **Usage:**
-    ```javascript
-    const ws = new WebSocket('ws://localhost:8000/api/v1/ws/analysis/CONTRACT_ID?token=ACCESS_TOKEN');
+    **Auth:** Send token as first message: {"type": "auth", "token": "ACCESS_TOKEN"}
+    (Legacy: ?token= query param is still supported but deprecated)
 
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        console.log('Progress:', data.progress);
-        console.log('Status:', data.status);
-        console.log('Message:', data.message);
-    };
-    ```
-
-    **Message format:**
-    ```json
-    {
-        "type": "progress",
-        "contract_id": "...",
-        "status": "analyzing",
-        "progress": 45,
-        "message": "Analyzing clause 5/10...",
-        "data": {...}
-    }
-    ```
-
-    **Status values:**
-    - uploaded: Contract uploaded, waiting for analysis
-    - analyzing: Analysis in progress
-    - completed: Analysis finished successfully
-    - error: Analysis failed
-
-    **Message types:**
-    - progress: Progress update (0-100%)
-    - status_change: Status changed
-    - clause_analyzed: Individual clause analysis complete
-    - risk_found: New risk detected
-    - analysis_complete: Full analysis finished
-    - error: Error occurred
+    **Message types:** progress, status_change, clause_analyzed, risk_found, analysis_complete, error
     """
-    # Verify token
+    # Accept connection first, then authenticate via first message
+    await websocket.accept()
+
+    # Authenticate: prefer first-message auth, fallback to query param (legacy)
     auth_service = AuthService(db)
-    payload = auth_service.verify_token(token, token_type="access")
+    payload = None
+
+    if token:
+        # Legacy: token in URL query param
+        payload = auth_service.verify_token(token, token_type="access")
+
     if not payload:
+        # Wait for auth message (timeout 10s)
+        try:
+            raw = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
+            msg = json.loads(raw)
+            if msg.get("type") == "auth" and msg.get("token"):
+                payload = auth_service.verify_token(msg["token"], token_type="access")
+        except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
+            pass
+
+    if not payload:
+        await websocket.send_json({"type": "error", "message": "Authentication failed"})
         await websocket.close(code=1008, reason="Invalid token")
         return
+
     user = db.query(User).filter(User.id == payload.get("user_id")).first()
     if not user:
         await websocket.close(code=1008, reason="User not found")
@@ -137,8 +124,11 @@ async def websocket_analysis_updates(
         await websocket.close(code=1008, reason="Permission denied")
         return
 
-    # Connect client
-    await manager.connect(websocket, contract_id)
+    # Register connection (already accepted above)
+    if contract_id not in manager.active_connections:
+        manager.active_connections[contract_id] = set()
+    manager.active_connections[contract_id].add(websocket)
+    logger.info(f"WebSocket connected for contract {contract_id}. Total: {len(manager.active_connections[contract_id])}")
 
     try:
         # Send initial status
@@ -215,41 +205,46 @@ async def websocket_analysis_updates(
 @router.websocket("/notifications")
 async def websocket_notifications(
     websocket: WebSocket,
-    token: str = Query(...),
+    token: str = Query(None),
     db: Session = Depends(get_db)
 ):
     """
-    WebSocket endpoint for user notifications
+    WebSocket endpoint for user notifications.
 
-    **Usage:**
-    ```javascript
-    const ws = new WebSocket('ws://localhost:8000/api/v1/ws/notifications?token=ACCESS_TOKEN');
+    **Auth:** Send token as first message: {"type": "auth", "token": "ACCESS_TOKEN"}
+    (Legacy: ?token= query param is still supported but deprecated)
 
-    ws.onmessage = (event) => {
-        const notification = JSON.parse(event.data);
-        showNotification(notification.title, notification.message);
-    };
-    ```
-
-    **Notification types:**
-    - analysis_complete: Contract analysis finished
-    - contract_uploaded: New contract uploaded
-    - export_ready: Export file ready for download
-    - subscription_expiring: Subscription expiring soon
-    - limit_reached: Daily limit reached
+    **Notification types:** analysis_complete, contract_uploaded, export_ready,
+    subscription_expiring, limit_reached
     """
-    # Verify token
+    # Accept connection first, then authenticate via first message
+    await websocket.accept()
+
     auth_service = AuthService(db)
-    payload = auth_service.verify_token(token, token_type="access")
+    payload = None
+
+    if token:
+        payload = auth_service.verify_token(token, token_type="access")
+
     if not payload:
+        try:
+            raw = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
+            msg = json.loads(raw)
+            if msg.get("type") == "auth" and msg.get("token"):
+                payload = auth_service.verify_token(msg["token"], token_type="access")
+        except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
+            pass
+
+    if not payload:
+        await websocket.send_json({"type": "error", "message": "Authentication failed"})
         await websocket.close(code=1008, reason="Invalid token")
         return
+
     user = db.query(User).filter(User.id == payload.get("user_id")).first()
     if not user:
         await websocket.close(code=1008, reason="User not found")
         return
 
-    await websocket.accept()
     logger.info(f"User {user.id} connected to notifications")
 
     try:

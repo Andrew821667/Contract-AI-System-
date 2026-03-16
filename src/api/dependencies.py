@@ -10,7 +10,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from src.models.database import get_db
-from src.models.auth_models import User
+from src.models.auth_models import User, UserSession
 from src.services.auth_service import AuthService
 
 
@@ -38,6 +38,20 @@ async def get_current_user(
         )
 
     user_id = payload.get("user_id")
+
+    # Check token revocation: verify session is not revoked
+    session = db.query(UserSession).filter(
+        UserSession.user_id == user_id,
+        UserSession.access_token == token,
+        UserSession.revoked == False
+    ).first()
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session revoked or invalid",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     user = db.query(User).filter(User.id == user_id).first()
 
     if not user:
@@ -50,6 +64,13 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is not active"
+        )
+
+    # Check email verification
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email not verified"
         )
 
     return user

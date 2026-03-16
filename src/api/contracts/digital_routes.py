@@ -32,10 +32,13 @@ async def digitalize_contract(
     Reads the contract file from disk, computes hash, signs, and stores in DB.
     """
     try:
-        # Get contract and read file
+        # Get contract and verify ownership
         contract = db.query(Contract).filter(Contract.id == contract_id).first()
         if not contract:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
+
+        if contract.assigned_to != current_user.id and current_user.role != "admin":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
         if not contract.file_path or not os.path.exists(contract.file_path):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract file not found on disk")
@@ -61,13 +64,13 @@ async def digitalize_contract(
             "created_at": digital.created_at.isoformat() if digital.created_at else None,
         }
 
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid request for digitalization")
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error digitalizing contract {contract_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
 
 # ==================== LIST DIGITAL VERSIONS ====================
@@ -80,12 +83,18 @@ async def get_digital_versions(
 ):
     """Get all digital versions for a contract"""
     try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
+        if contract.assigned_to != current_user.id and current_user.role != "admin":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
         service = DigitalContractService(db)
         versions = service.get_versions(contract_id)
         return {"versions": versions, "total": len(versions)}
     except Exception as e:
         logger.error(f"Error getting digital versions for {contract_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
 
 # ==================== VERIFY ====================
@@ -99,14 +108,20 @@ async def verify_digital_contract(
 ):
     """Verify integrity of a specific digital contract version"""
     try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
+        if contract.assigned_to != current_user.id and current_user.role != "admin":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
         service = DigitalContractService(db)
         result = service.verify(digital_id)
         return result
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Digital contract not found")
     except Exception as e:
         logger.error(f"Error verifying digital contract {digital_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
 
 # ==================== HASH CHAIN ====================
@@ -119,12 +134,18 @@ async def get_hash_chain(
 ):
     """Get the linear hash-chain of all digital versions"""
     try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
+        if contract.assigned_to != current_user.id and current_user.role != "admin":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
         service = DigitalContractService(db)
         chain = service.get_chain(contract_id)
         return {"chain": chain, "length": len(chain)}
     except Exception as e:
         logger.error(f"Error getting hash chain for {contract_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
 
 # ==================== DAG ====================
@@ -137,9 +158,15 @@ async def get_dag(
 ):
     """Get the DAG structure (nodes + edges) for merge scenarios"""
     try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
+        if contract.assigned_to != current_user.id and current_user.role != "admin":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
         service = DigitalContractService(db)
         dag = service.get_dag(contract_id)
         return dag
     except Exception as e:
         logger.error(f"Error getting DAG for {contract_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")

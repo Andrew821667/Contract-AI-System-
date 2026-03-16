@@ -10,10 +10,17 @@ from src.services.auth_service import AuthService
 def seed():
     db = SessionLocal()
     try:
+        force = os.getenv("FORCE_RESEED", "").lower() in ("true", "1", "yes")
         existing = db.query(User).first()
-        if existing:
+
+        if existing and not force:
             print("Users already exist, skipping seed.")
             return
+
+        if existing and force:
+            count = db.query(User).delete()
+            db.commit()
+            print(f"FORCE_RESEED: deleted {count} existing users.")
 
         auth = AuthService(db)
         users = [

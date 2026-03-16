@@ -203,39 +203,37 @@ class LLMGateway:
             # No rate limiting
             response = self._make_api_call(prompt, system_prompt, temperature, max_tokens, **kwargs)
 
-            # Парсинг JSON если требуется
-            if response_format == "json":
-                try:
-                    # Clean markdown code blocks if present
-                    cleaned_response = response.strip()
+        # Парсинг JSON если требуется (applies to both rate-limited and non-rate-limited paths)
+        if response_format == "json":
+            try:
+                # Clean markdown code blocks if present
+                cleaned_response = response.strip()
 
-                    # Remove markdown code fences
-                    if cleaned_response.startswith("```"):
-                        lines = cleaned_response.split('\n')
-                        if lines[0].startswith("```"):
-                            lines = lines[1:]
-                        if lines and lines[-1].strip() == "```":
-                            lines = lines[:-1]
-                        cleaned_response = '\n'.join(lines).strip()
+                # Remove markdown code fences
+                if cleaned_response.startswith("```"):
+                    lines = cleaned_response.split('\n')
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].strip() == "```":
+                        lines = lines[:-1]
+                    cleaned_response = '\n'.join(lines).strip()
 
-                    return json.loads(cleaned_response)
-                except json.JSONDecodeError as e:
-                    logger.error(f"Failed to parse JSON response: {e}")
-                    logger.error(f"Raw response: {response[:500]}")
+                return json.loads(cleaned_response)
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON response: {e}")
+                logger.debug(f"Raw response (truncated): {response[:500]}")
 
-                    # Попытка извлечь JSON из текста
-                    import re
-                    json_match = re.search(r'(\[.*\]|\{.*\})', response, re.DOTALL)
-                    if json_match:
-                        try:
-                            logger.info("Attempting to extract JSON from text response...")
-                            return json.loads(json_match.group(1))
-                        except (json.JSONDecodeError, ValueError) as e2:
-                            logger.error(f"JSON extraction fallback also failed: {e2}")
+                # Попытка извлечь JSON из текста
+                import re
+                json_match = re.search(r'(\[.*\]|\{.*\})', response, re.DOTALL)
+                if json_match:
+                    try:
+                        logger.info("Attempting to extract JSON from text response...")
+                        return json.loads(json_match.group(1))
+                    except (json.JSONDecodeError, ValueError) as e2:
+                        logger.error(f"JSON extraction fallback also failed: {e2}")
 
-                    raise ValueError(f"LLM returned invalid JSON. Response starts with: {response[:200]}")
-
-            return response
+                raise ValueError("LLM returned invalid JSON")
 
         return response
 

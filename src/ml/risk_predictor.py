@@ -219,11 +219,10 @@ class MLRiskPredictor:
         """Load existing model or initialize new one"""
         if os.path.exists(self.model_path) and os.path.exists(self.scaler_path):
             try:
-                with open(self.model_path, 'rb') as f:
-                    self.model = pickle.load(f)
-                with open(self.scaler_path, 'rb') as f:
-                    self.scaler = pickle.load(f)
-                logger.info(f"✅ Loaded ML model from {self.model_path}")
+                import joblib
+                self.model = joblib.load(self.model_path)
+                self.scaler = joblib.load(self.scaler_path)
+                logger.info(f"Loaded ML model from {self.model_path}")
             except Exception as e:
                 logger.error(f"❌ Failed to load model: {e}")
                 self._initialize_new_model()
@@ -514,10 +513,9 @@ class MLRiskPredictor:
         """Save trained model to disk"""
         os.makedirs(os.path.dirname(self.model_path), exist_ok=True)
 
-        with open(self.model_path, 'wb') as f:
-            pickle.dump(self.model, f)
-        with open(self.scaler_path, 'wb') as f:
-            pickle.dump(self.scaler, f)
+        import joblib
+        joblib.dump(self.model, self.model_path)
+        joblib.dump(self.scaler, self.scaler_path)
 
         logger.info(f"💾 Model saved to {self.model_path}")
 

@@ -150,11 +150,14 @@ async def register(
     )
 
     if error:
+        # SECURITY: uniform response to prevent account enumeration.
+        # If the email already exists, return the same success-like message
+        # so attackers cannot determine whether an email is registered.
+        if "already" in (error or "").lower() or "exist" in (error or "").lower():
+            return {
+                "message": "Если указанный email свободен, на него будет отправлено письмо для подтверждения."
+            }
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
-
-    # Create tokens
-    access_token = auth_service.create_access_token(user.id)
-    refresh_token = auth_service.create_refresh_token(user.id)
 
     # Log registration from IP
     ip_address = get_client_ip(request)
@@ -166,20 +169,10 @@ async def register(
     )
     db.commit()
 
+    # Do NOT return tokens — user must verify email first
+    # SECURITY: uniform response to prevent account enumeration
     return {
-        "user_id": user.id,
-        "email": user.email,
-        "name": user.name,
-        "access_token": access_token,
-        "refresh_token": refresh_token,
-        "token_type": "Bearer",
-        "user": {
-            "id": user.id,
-            "email": user.email,
-            "name": user.name,
-            "role": user.role,
-        },
-        "message": "Registration successful."
+        "message": "Если указанный email свободен, на него будет отправлено письмо для подтверждения."
     }
 
 
@@ -482,13 +475,29 @@ async def change_password(
             detail="Неверный текущий пароль"
         )
 
+    # Validate new password strength
+    is_strong, strength_error = auth_service.validate_password_strength(request_data.new_password)
+    if not is_strong:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=strength_error
+        )
+
     # Update password
     current_user.password_hash = auth_service.hash_password(request_data.new_password)
+
+    # Revoke all other sessions (force re-login)
+    from src.models.auth_models import UserSession
+    db.query(UserSession).filter(
+        UserSession.user_id == current_user.id,
+        UserSession.revoked == False
+    ).update({"revoked": True})
+
     db.commit()
 
-    logger.info(f"Password changed for user {current_user.email}")
+    logger.info(f"Password changed for user {current_user.email}, all sessions revoked")
 
-    return {"message": "Пароль успешно изменён"}
+    return {"message": "Пароль успешно изменён. Все сессии завершены, войдите заново."}
 
 
 # ==================== Admin Endpoints ====================

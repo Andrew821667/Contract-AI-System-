@@ -43,8 +43,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # Specific limits for endpoints
         self.endpoint_limits = {
-            '/api/v1/auth/login': 20,
-            '/api/v1/auth/register': 20,
+            '/api/v1/auth/login': 10,
+            '/api/v1/auth/register': 5,
             '/api/v1/auth/demo-activate': 50,
         }
 
@@ -70,9 +70,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         return response
 
+    # Trusted proxy CIDRs — only trust X-Forwarded-For from these
+    _TRUSTED_PROXIES = {"127.0.0.1", "::1", "172.16.0.0/12", "10.0.0.0/8", "192.168.0.0/16"}
+
     def _get_client_ip(self, request: Request) -> str:
-        """Extract client IP from request (only trust X-Forwarded-For behind reverse proxy)"""
-        return request.client.host if request.client else "unknown"
+        """Extract client IP, trusting X-Forwarded-For only behind nginx/docker proxy."""
+        direct_ip = request.client.host if request.client else "unknown"
+        # In Docker, the direct client is nginx (172.x.x.x / 127.0.0.1)
+        # Trust X-Forwarded-For only from internal network
+        if direct_ip.startswith(("172.", "10.", "192.168.", "127.")):
+            forwarded = request.headers.get("X-Forwarded-For")
+            if forwarded:
+                return forwarded.split(",")[0].strip()
+        return direct_ip
 
     def _allow_request(self, client_ip: str, limit: int) -> bool:
         """
@@ -96,8 +106,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         )
         bucket['last_update'] = now
 
-        # Periodically clean up stale entries (every ~1000 requests)
-        if len(self.buckets) > 10000:
+        # Periodically clean up stale entries
+        if len(self.buckets) > 1000:
             stale_threshold = now - 3600  # 1 hour
             stale_keys = [k for k, v in self.buckets.items() if v['last_update'] < stale_threshold]
             for k in stale_keys:
@@ -212,8 +222,8 @@ def setup_cors(app):
     from config.settings import settings
 
     allowed_origins = [
-        "http://localhost:3000",  # Next.js frontend
-        "http://localhost:8000",  # FastAPI backend
+        "http://localhost:3000",  # Next.js frontend (dev)
+        "http://localhost:8090",  # Nginx proxy (Docker)
         "http://localhost:8502",  # Streamlit admin panel
     ]
 

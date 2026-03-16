@@ -51,10 +51,11 @@ export default function Modal({
             exit={{ opacity: 0 }}
             onClick={onClose}
             className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+            aria-hidden="true"
           />
 
           {/* Modal */}
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -71,6 +72,7 @@ export default function Modal({
                   <h3 className="text-xl font-bold gradient-text">{title}</h3>
                   <button
                     onClick={onClose}
+                    aria-label="Закрыть"
                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                   >
                     <svg className="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">

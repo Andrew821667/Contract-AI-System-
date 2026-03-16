@@ -360,7 +360,8 @@ class APIClient {
     localStorage.setItem('access_token', accessToken);
     localStorage.setItem('refresh_token', refreshToken);
     // Set cookie for Next.js middleware (server-side auth check)
-    document.cookie = `access_token=${accessToken}; path=/; max-age=3600; SameSite=Lax`;
+    // Set a flag cookie for Next.js middleware (no sensitive data — token stays in localStorage only)
+    document.cookie = `has_token=1; path=/; max-age=3600; SameSite=Lax`;
   }
 
   private clearTokens() {
@@ -368,7 +369,7 @@ class APIClient {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user');
-    document.cookie = 'access_token=; path=/; max-age=0';
+    document.cookie = 'has_token=; path=/; max-age=0';
   }
 
   // ==================== Authentication ====================

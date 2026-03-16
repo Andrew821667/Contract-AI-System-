@@ -159,7 +159,7 @@ def test_orchestrator_agent():
     print("\n8. Test workflow routing for different document types...")
     test_types = [
         ("disagreement", "Disagreement document"),
-        ("new_contract", "New contract generation"),
+        ("contract", "New contract generation"),
         ("tracked_changes", "Document with tracked changes")
     ]
 
@@ -186,6 +186,7 @@ def test_orchestrator_agent():
 
         except Exception as e:
             print(f"   ✗ {description}: {e}")
+            db.rollback()
 
     # Test 4: Get workflow status
     print("\n9. Get workflow status...")

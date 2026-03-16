@@ -1,10 +1,7 @@
 """
 Database models and connection management
 """
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
-from config.settings import settings
-from .database import Base, Template, Contract, AnalysisResult, ReviewTask, LegalDocument, ExportLog, ContractFeedback, ScheduledTaskLog
+from .database import Base, engine, SessionLocal, get_db, Template, Contract, AnalysisResult, ReviewTask, LegalDocument, ExportLog, ContractFeedback, ScheduledTaskLog
 from .auth_models import (
     User, UserSession, DemoToken, AuditLog,
     PasswordResetRequest, EmailVerification, LoginAttempt
@@ -17,45 +14,13 @@ from .ml_feedback_models import RiskPredictionFeedback, ModelTrainingBatch
 from .digital_models import DigitalContract
 from .clause_models import ExtractedClause
 
-# !>740=85 engine
-engine = create_engine(
-    settings.database_url,
-    echo=(settings.app_env == "development"),  # SQL ;>38 2 dev @568<5
-    future=True
-)
-
-# Session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 
 def init_db():
-    """=8F80;878@C5B 107C 40==KE (A>740QB 2A5 B01;8FK)"""
+    """Initialize database (create all tables)"""
     Base.metadata.create_all(bind=engine)
-    print(" Database initialized")
+    print("Database initialized")
 
 
-def get_db() -> Session:
-    """
-    Dependency 4;O ?>;CG5=8O A5AA88 
-
-    A?>;L7>20=85:
-    ```python
-    db = get_db()
-    try:
-        # @01>B0 A 
-        db.commit()
-    finally:
-        db.close()
-    ```
-    """
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-# -:A?>@B
 __all__ = [
     "engine",
     "SessionLocal",

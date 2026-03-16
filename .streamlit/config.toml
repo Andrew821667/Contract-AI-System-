@@ -1,6 +1,6 @@
 [server]
 maxUploadSize = 200
-enableXsrfProtection = false
+enableXsrfProtection = true
 port = 8501
 
 [browser]

@@ -132,7 +132,9 @@ export function useAnalysisWebSocket(
     }
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-    const wsUrl = apiUrl.replace(/^http/, 'ws') + `/api/v1/ws/analysis/${contractId}?token=${token}`
+    // Security: do NOT pass token as query parameter (it leaks into server logs / Referer headers).
+    // Instead, send it as the first message after connection.
+    const wsUrl = apiUrl.replace(/^http/, 'ws') + `/api/v1/ws/analysis/${contractId}`
 
     closeWs()
 
@@ -142,6 +144,8 @@ export function useAnalysisWebSocket(
 
       ws.onopen = () => {
         if (unmountedRef.current) return
+        // Authenticate by sending token as the first message
+        ws.send(JSON.stringify({ type: 'auth', token }))
         setIsConnected(true)
         reconnectAttemptsRef.current = 0
         setMessage('Подключено к серверу')

@@ -76,12 +76,15 @@ streamlit run admin/streamlit_dashboard.py --server.port=8502
 
 ## Учётные записи
 
-| Email | Роль | Пароль |
-|-------|------|--------|
-| admin@contractai.ru | admin | Admin123! |
-| lawyer@contractai.ru | lawyer | Lawyer123! |
-| vip@contractai.ru | senior_lawyer | Vip12345! |
-| demo@contractai.ru | demo | Demo1234! |
+| Email | Роль |
+|-------|------|
+| admin@contractai.ru | admin |
+| lawyer@contractai.ru | lawyer |
+| vip@contractai.ru | senior_lawyer |
+| demo@contractai.ru | demo |
+
+> Пароли задаются через переменные окружения SEED_*_PASSWORD в .env.docker.
+> НЕ храните пароли в файлах репозитория!
 
 ---
 

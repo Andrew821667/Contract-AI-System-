@@ -106,9 +106,11 @@ export function useNotifications(): UseNotificationsReturn {
     if (!token) return
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    // Security: do NOT pass token as query parameter (it leaks into server logs / Referer headers).
+    // Send it as the first message after connection.
     const wsUrl =
       apiUrl.replace(/^http/, 'ws') +
-      `/api/v1/ws/notifications?token=${token}`
+      `/api/v1/ws/notifications`
 
     closeWs()
 
@@ -118,6 +120,8 @@ export function useNotifications(): UseNotificationsReturn {
 
       ws.onopen = () => {
         if (unmountedRef.current) return
+        // Authenticate by sending token as the first message
+        ws.send(JSON.stringify({ type: 'auth', token }))
         setIsConnected(true)
         reconnectAttemptsRef.current = 0
       }

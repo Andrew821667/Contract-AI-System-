@@ -11,6 +11,7 @@ Handles all authentication operations:
 """
 
 import secrets
+import uuid
 import bcrypt
 import jwt
 from datetime import datetime, timedelta, timezone
@@ -103,43 +104,56 @@ class AuthService:
 
     # ==================== JWT Token Management ====================
 
+    # Claims that cannot be overridden via additional_claims
+    _RESERVED_CLAIMS = {"user_id", "type", "exp", "iat", "jti", "iss", "aud"}
+
     def create_access_token(self, user_id: str, additional_claims: Optional[Dict] = None) -> str:
         """
-        Create JWT access token
+        Create JWT access token with jti, iss, aud claims.
 
         Args:
             user_id: User ID
-            additional_claims: Optional additional claims to include
+            additional_claims: Optional additional claims (reserved keys are filtered)
 
         Returns:
             JWT token string
         """
+        now = datetime.now(timezone.utc)
         payload = {
             "user_id": user_id,
             "type": "access",
-            "exp": datetime.now(timezone.utc) + timedelta(minutes=self.ACCESS_TOKEN_EXPIRE_MINUTES),
-            "iat": datetime.now(timezone.utc)
+            "jti": str(uuid.uuid4()),
+            "iss": "contract-ai-system",
+            "aud": "contract-ai-system",
+            "exp": now + timedelta(minutes=self.ACCESS_TOKEN_EXPIRE_MINUTES),
+            "iat": now,
         }
 
         if additional_claims:
-            payload.update(additional_claims)
+            # Whitelist: prevent overwriting system fields
+            safe = {k: v for k, v in additional_claims.items() if k not in self._RESERVED_CLAIMS}
+            payload.update(safe)
 
         return jwt.encode(payload, self.JWT_SECRET, algorithm=self.JWT_ALGORITHM)
 
     def create_refresh_token(self, user_id: str) -> str:
-        """Create JWT refresh token"""
+        """Create JWT refresh token with jti, iss, aud claims."""
+        now = datetime.now(timezone.utc)
         payload = {
             "user_id": user_id,
             "type": "refresh",
-            "exp": datetime.now(timezone.utc) + timedelta(days=self.REFRESH_TOKEN_EXPIRE_DAYS),
-            "iat": datetime.now(timezone.utc)
+            "jti": str(uuid.uuid4()),
+            "iss": "contract-ai-system",
+            "aud": "contract-ai-system",
+            "exp": now + timedelta(days=self.REFRESH_TOKEN_EXPIRE_DAYS),
+            "iat": now,
         }
 
         return jwt.encode(payload, self.JWT_SECRET, algorithm=self.JWT_ALGORITHM)
 
     def verify_token(self, token: str, token_type: str = "access") -> Optional[Dict[str, Any]]:
         """
-        Verify and decode JWT token
+        Verify and decode JWT token (validates iss/aud claims).
 
         Args:
             token: JWT token string
@@ -149,7 +163,13 @@ class AuthService:
             Decoded payload if valid, None otherwise
         """
         try:
-            payload = jwt.decode(token, self.JWT_SECRET, algorithms=[self.JWT_ALGORITHM])
+            payload = jwt.decode(
+                token,
+                self.JWT_SECRET,
+                algorithms=[self.JWT_ALGORITHM],
+                issuer="contract-ai-system",
+                audience="contract-ai-system",
+            )
 
             if payload.get("type") != token_type:
                 return None

@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 import json
 import asyncio
 import os
+import time
 
 from src.ml.risk_predictor import MLRiskPredictor, RiskLevel, quick_predict_risk
 from src.services.smart_composer import SmartContractComposer, create_smart_composer
@@ -205,7 +206,7 @@ async def predict_risk(
 
     except Exception as e:
         logger.error(f"Risk prediction failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ========== FEEDBACK ENDPOINT ==========
@@ -252,7 +253,7 @@ async def submit_risk_feedback(
     except Exception as e:
         db.rollback()
         logger.error(f"Save feedback failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ========== MODEL STATUS ENDPOINT ==========
@@ -303,13 +304,24 @@ async def get_model_status(
 
     except Exception as e:
         logger.error(f"Get model status failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ========== SMART COMPOSER ENDPOINTS ==========
 
 # In-memory session storage (use Redis in production)
 _composer_sessions: Dict[str, any] = {}
+_COMPOSER_MAX_SESSIONS_PER_USER = 5
+_COMPOSER_SESSION_TTL_SECONDS = 3600  # 1 hour
+
+
+def _cleanup_expired_sessions():
+    """Remove expired composer sessions."""
+    now = time.time()
+    expired = [sid for sid, s in _composer_sessions.items()
+               if now - s.get('created_ts', 0) > _COMPOSER_SESSION_TTL_SECONDS]
+    for sid in expired:
+        del _composer_sessions[sid]
 
 
 @router.post("/composer/start")
@@ -327,6 +339,18 @@ async def start_composition(
     **Access:** Requires authentication
     """
     try:
+        # Cleanup expired sessions first
+        _cleanup_expired_sessions()
+
+        # Enforce per-user session limit
+        user_sessions = [sid for sid, s in _composer_sessions.items()
+                         if s.get('user_id') == current_user.id]
+        if len(user_sessions) >= _COMPOSER_MAX_SESSIONS_PER_USER:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many active composer sessions. Close existing sessions first."
+            )
+
         composer = get_smart_composer()
 
         context = composer.start_composition(
@@ -339,11 +363,12 @@ async def start_composition(
         # Generate session ID
         session_id = str(uuid.uuid4())
 
-        # Store context
+        # Store context with timestamp for TTL
         _composer_sessions[session_id] = {
             'context': context,
             'user_id': current_user.id,
-            'created_at': datetime.now().isoformat()
+            'created_at': datetime.now().isoformat(),
+            'created_ts': time.time(),
         }
 
         # Get suggested sections
@@ -357,9 +382,11 @@ async def start_composition(
             'message': 'Composition session started. Begin drafting!'
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Start composition failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/composer/suggest")
@@ -527,7 +554,7 @@ async def rag_search(
 
     except Exception as e:
         logger.error(f"RAG search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/kb/add")
@@ -569,7 +596,7 @@ async def add_knowledge(
 
     except Exception as e:
         logger.error(f"Add knowledge failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/kb/statistics")
@@ -595,7 +622,7 @@ async def get_kb_statistics(
 
     except Exception as e:
         logger.error(f"Get KB statistics failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Import needed modules

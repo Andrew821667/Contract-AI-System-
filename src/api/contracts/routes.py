@@ -78,7 +78,6 @@ class ContractGenerateRequest(BaseModel):
 
 class ContractGenerateResponse(BaseModel):
     contract_id: str
-    file_path: str
     status: str
     message: str
 
@@ -178,7 +177,7 @@ async def upload_contract(
         except FileValidationError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File validation failed: {str(e)}"
+                detail="File validation failed"
             )
 
         # Create contract record in database
@@ -209,16 +208,16 @@ async def upload_contract(
             message='Contract uploaded successfully'
         )
 
-    except FileValidationError as e:
+    except FileValidationError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
+            detail="File validation failed"
         )
     except Exception as e:
         logger.error(f"Error uploading contract: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error uploading contract: {str(e)}"
+            detail="Error uploading contract"
         )
 
 
@@ -404,7 +403,7 @@ async def analyze_contract(
         logger.error(f"Error starting analysis: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error starting analysis: {str(e)}"
+            detail="Error starting analysis"
         )
 
 
@@ -459,7 +458,7 @@ async def generate_contract(
         logger.error(f"Error generating contract: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error generating contract: {str(e)}"
+            detail="Error generating contract"
         )
 
 
@@ -508,7 +507,7 @@ async def generate_disagreements(
         logger.error(f"Error generating disagreements: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error: {str(e)}"
+            detail="Internal server error"
         )
 
 
@@ -559,7 +558,7 @@ async def export_contract(
         logger.error(f"Error exporting contract: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error: {str(e)}"
+            detail="Internal server error"
         )
 
 
@@ -631,7 +630,7 @@ async def list_contracts(
         logger.error(f"Error listing contracts: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error: {str(e)}"
+            detail="Internal server error"
         )
 
 
@@ -666,7 +665,6 @@ async def get_contract_details(
             'contract': {
                 'id': contract.id,
                 'file_name': contract.file_name,
-                'file_path': contract.file_path,
                 'status': contract.status,
                 'contract_type': contract.contract_type,
                 'created_at': contract.created_at.isoformat() if contract.created_at else None,
@@ -686,7 +684,7 @@ async def get_contract_details(
         logger.error(f"Error getting contract details: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error: {str(e)}"
+            detail="Internal server error"
         )
 
 
@@ -732,7 +730,7 @@ async def download_contract(
         logger.error(f"Error downloading contract: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error: {str(e)}"
+            detail="Internal server error"
         )
 
 
@@ -768,7 +766,7 @@ async def upload_version(
                 upload_dir="data/contracts/versions"
             )
         except FileValidationError as e:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"File validation failed: {str(e)}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File validation failed")
 
         # Compute SHA-256 hash
         file_hash = hashlib.sha256(file_data).hexdigest()
@@ -817,7 +815,7 @@ async def upload_version(
         raise
     except Exception as e:
         logger.error(f"Error uploading version: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
 
 @router.get("/{contract_id}/versions")
@@ -862,7 +860,7 @@ async def list_versions(
         raise
     except Exception as e:
         logger.error(f"Error listing versions: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
 
 @router.post("/{contract_id}/compare", response_model=CompareResultResponse)
@@ -1007,7 +1005,7 @@ async def compare_versions(
         raise
     except Exception as e:
         logger.error(f"Error comparing versions: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error")
 
 
 # ==================== STREAMING ANALYSIS ====================
@@ -1039,7 +1037,7 @@ async def analyze_contract_stream(
         try:
             parsed_xml = parser.parse(contract.file_path)
         except Exception as e:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Parse error: {e}")
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Document parse error")
 
     async def event_generator():
         try:
@@ -1209,4 +1207,4 @@ async def export_annotated_docx(
         )
     except Exception as e:
         logger.error(f"Annotated DOCX export error: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Export error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Export error")

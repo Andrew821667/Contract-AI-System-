@@ -10,8 +10,8 @@ const authRoutes = ['/login', '/register']
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Check for auth token in cookies
-  const token = request.cookies.get('access_token')?.value
+  // Check for auth flag cookie (does NOT contain the actual JWT — just a presence flag)
+  const token = request.cookies.get('has_token')?.value
 
   // Protected routes: redirect to login if no token
   const isProtected = protectedRoutes.some(route => pathname.startsWith(route))

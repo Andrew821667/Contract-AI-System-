@@ -72,10 +72,8 @@ export default function DashboardPage() {
       if (!passwordChanged && userStr) {
         try {
           const userData = JSON.parse(userStr)
-          // Check if using demo credentials (default passwords)
-          const defaultEmails = ['demo@example.com', 'admin@example.com', 'lawyer@example.com', 'junior@example.com']
-          if (defaultEmails.includes(userData.email)) {
-            // Show password change dialog after welcome
+          // Show password change dialog for demo users
+          if (userData.is_demo || userData.role === 'demo') {
             setTimeout(() => {
               setShowPasswordChange(true)
             }, 2000)
@@ -129,10 +127,8 @@ export default function DashboardPage() {
     staleTime: 120000,
   })
 
-  const handleLogout = () => {
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
-    localStorage.removeItem('user')
+  const handleLogout = async () => {
+    await api.logout()
     localStorage.removeItem('passwordChanged')
     toast.success('Вы вышли из системы', {
       style: { borderRadius: '12px' }

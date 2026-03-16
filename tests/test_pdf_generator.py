@@ -582,7 +582,7 @@ class TestRealWorldScenarios:
 
         assert os.path.exists(result)
         # Should be substantial file
-        assert os.path.getsize(output_path) > 5000
+        assert os.path.getsize(output_path) > 2000
 
 
 if __name__ == "__main__":

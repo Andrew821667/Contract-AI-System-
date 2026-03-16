@@ -5,8 +5,9 @@ Stripe integration for subscriptions
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Header
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, Dict, Any
+from urllib.parse import urlparse
 
 from loguru import logger
 
@@ -29,6 +30,19 @@ class CheckoutRequest(BaseModel):
     success_url: str
     cancel_url: str
 
+    @field_validator("success_url", "cancel_url")
+    @classmethod
+    def validate_redirect_url(cls, v: str) -> str:
+        """Prevent open redirect — only allow same-origin URLs."""
+        parsed = urlparse(v)
+        allowed_hosts = {"localhost", "127.0.0.1", ""}
+        # Allow relative URLs and localhost variants
+        if parsed.hostname and parsed.hostname not in allowed_hosts:
+            raise ValueError(f"Redirect URL host not allowed: {parsed.hostname}")
+        if parsed.scheme and parsed.scheme not in ("http", "https", ""):
+            raise ValueError(f"Redirect URL scheme not allowed: {parsed.scheme}")
+        return v
+
 
 class CheckoutResponse(BaseModel):
     checkout_url: str
@@ -37,6 +51,18 @@ class CheckoutResponse(BaseModel):
 
 class PortalRequest(BaseModel):
     return_url: str
+
+    @field_validator("return_url")
+    @classmethod
+    def validate_redirect_url(cls, v: str) -> str:
+        """Prevent open redirect — only allow same-origin URLs."""
+        parsed = urlparse(v)
+        allowed_hosts = {"localhost", "127.0.0.1", ""}
+        if parsed.hostname and parsed.hostname not in allowed_hosts:
+            raise ValueError(f"Redirect URL host not allowed: {parsed.hostname}")
+        if parsed.scheme and parsed.scheme not in ("http", "https", ""):
+            raise ValueError(f"Redirect URL scheme not allowed: {parsed.scheme}")
+        return v
 
 
 class PortalResponse(BaseModel):
@@ -112,7 +138,7 @@ async def create_checkout_session(
         if error:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to create checkout session: {error}"
+                detail="Failed to create checkout session"
             )
 
         logger.info(f"Checkout session created for user {current_user.id}, tier {request_data.tier}")
@@ -125,7 +151,7 @@ async def create_checkout_session(
         logger.error(f"Error creating checkout session: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error: {str(e)}"
+            detail="Internal server error"
         )
 
 
@@ -163,7 +189,7 @@ async def create_portal_session(
         if error:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to create portal session: {error}"
+                detail="Failed to create portal session"
             )
 
         logger.info(f"Customer portal session created for user {current_user.id}")
@@ -176,7 +202,7 @@ async def create_portal_session(
         logger.error(f"Error creating portal session: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error: {str(e)}"
+            detail="Internal server error"
         )
 
 
@@ -240,7 +266,7 @@ async def cancel_subscription(
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to cancel subscription: {error}"
+                detail="Failed to cancel subscription"
             )
 
         logger.info(f"Subscription cancelled for user {current_user.id} (immediately={request_data.immediately})")
@@ -256,7 +282,7 @@ async def cancel_subscription(
         logger.error(f"Error cancelling subscription: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error: {str(e)}"
+            detail="Internal server error"
         )
 
 
@@ -305,7 +331,7 @@ async def stripe_webhook(
             logger.error(f"Webhook processing failed: {error}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Webhook error: {error}"
+                detail="Webhook processing error"
             )
 
         return {'received': True}
@@ -316,5 +342,5 @@ async def stripe_webhook(
         logger.error(f"Webhook error: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error: {str(e)}"
+            detail="Internal server error"
         )

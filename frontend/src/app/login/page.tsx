@@ -171,30 +171,19 @@ export default function LoginPage() {
               </a>
             </div>
 
-            {/* Demo Credentials */}
+            {/* Demo Access */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.6 }}
-              className="mt-6 p-4 bg-stone-50 rounded-xl border border-stone-200"
+              className="mt-6 p-4 bg-stone-50 rounded-xl border border-stone-200 text-center"
             >
-              <p className="text-sm font-semibold text-stone-700 mb-2 flex items-center">
-                <svg className="h-4 w-4 mr-2 text-stone-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Демо-аккаунты:
+              <p className="text-sm text-stone-600">
+                Хотите попробовать?{' '}
+                <a href="/demo" className="font-semibold text-primary-600 hover:text-primary-700 underline">
+                  Запросить демо-доступ
+                </a>
               </p>
-              <div className="space-y-1.5 text-xs text-stone-600">
-                <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
-                  <span className="font-semibold">Demo:</span>
-                  <code className="bg-stone-200 text-stone-700 px-2 py-0.5 rounded">demo@contractai.ru</code>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
-                  <span className="font-semibold">Admin:</span>
-                  <code className="bg-stone-200 text-stone-700 px-2 py-0.5 rounded">admin@contractai.ru</code>
-                </div>
-                <p className="text-stone-400 mt-1">Пароли выданы администратором</p>
-              </div>
             </motion.div>
           </motion.div>
 

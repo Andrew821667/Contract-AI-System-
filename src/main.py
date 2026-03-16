@@ -72,15 +72,16 @@ async def lifespan(app: FastAPI):
     logger.info("👋 Shutting down Contract AI System Backend...")
 
 
-# Create FastAPI app
+# Create FastAPI app — disable docs in production
+_is_debug = getattr(settings, "debug", False)
 app = FastAPI(
     title="Contract AI System API",
     description="Backend API for Contract AI System with authentication, contract analysis, and document generation",
     version="1.0.0",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json",
-    lifespan=lifespan
+    docs_url="/api/docs" if _is_debug else None,
+    redoc_url="/api/redoc" if _is_debug else None,
+    openapi_url="/api/openapi.json" if _is_debug else None,
+    lifespan=lifespan,
 )
 
 # Security middleware setup (includes CORS, rate limiting, security headers)

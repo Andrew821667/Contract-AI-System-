@@ -235,9 +235,16 @@ def render_docx_preview(docx_bytes: bytes) -> str:
     """Конвертирует DOCX bytes в HTML через mammoth для предпросмотра"""
     try:
         import mammoth
+        import bleach
         result = mammoth.convert_to_html(io.BytesIO(docx_bytes))
-        html = result.value
-        # Оборачиваем в стили для лучшего отображения
+        # Sanitize HTML to prevent XSS from malicious DOCX content
+        allowed_tags = list(bleach.ALLOWED_TAGS) + [
+            'p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'table', 'tr', 'td', 'th', 'thead', 'tbody',
+            'ul', 'ol', 'li', 'strong', 'em', 'u', 'span', 'div', 'img',
+        ]
+        allowed_attrs = {**bleach.ALLOWED_ATTRIBUTES, '*': ['style', 'class'], 'img': ['src', 'alt']}
+        html = bleach.clean(result.value, tags=allowed_tags, attributes=allowed_attrs)
         styled_html = f"""
         <div style="background: white; color: black; padding: 20px; border: 1px solid #ddd;
                     border-radius: 8px; font-family: 'Times New Roman', serif; line-height: 1.6;
@@ -246,8 +253,8 @@ def render_docx_preview(docx_bytes: bytes) -> str:
         </div>
         """
         return styled_html
-    except Exception as e:
-        return f"<p style='color:red;'>Ошибка предпросмотра: {e}</p>"
+    except Exception:
+        return "<p style='color:red;'>Ошибка предпросмотра документа</p>"
 
 
 def get_entity_purpose(entity_type: str) -> str:

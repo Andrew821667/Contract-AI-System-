@@ -158,6 +158,14 @@ export const roleLabels: Record<UserRole, string> = {
   demo: 'Демо'
 }
 
+/**
+ * Read the user's role from localStorage for **UI display purposes only**.
+ *
+ * WARNING: This is NOT a substitute for server-side authorization.
+ * The value in localStorage can be tampered with by the user.
+ * All permission-sensitive operations MUST be validated on the backend
+ * via the JWT token and the server's own role/permission checks.
+ */
 export function getUserRole(): UserRole | null {
   if (typeof window === 'undefined') return null
 

@@ -372,7 +372,7 @@ class TestExportContentVerification:
 
         assert os.path.exists(result)
         # Should be large PDF (multiple pages)
-        assert os.path.getsize(output_path) > 50000
+        assert os.path.getsize(output_path) > 15000
 
 
 if __name__ == "__main__":

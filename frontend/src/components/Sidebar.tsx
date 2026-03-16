@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getUserRole, getRoleLabel, getRoleColor, getRolePermissions } from '@/utils/roles'
+import { useTheme } from '@/hooks/useTheme'
 
 interface NavItem {
   label: string
@@ -79,6 +80,7 @@ function SidebarContent({ user, onLogout, onNavigate }: {
   const permissions = getRolePermissions(role)
   const roleLabel = getRoleLabel(role)
   const roleColor = getRoleColor(role)
+  const { resolvedTheme, toggleTheme, mounted } = useTheme()
 
   const filteredItems = navItems.filter(item => {
     if (!item.permission) return true
@@ -93,7 +95,7 @@ function SidebarContent({ user, onLogout, onNavigate }: {
   return (
     <>
       {/* Logo */}
-      <div className="px-6 py-5 border-b border-gray-100">
+      <div className="px-6 py-5 border-b border-gray-100 dark:border-dark-700">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center shadow-sm">
             <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -101,14 +103,14 @@ function SidebarContent({ user, onLogout, onNavigate }: {
             </svg>
           </div>
           <div>
-            <h1 className="text-lg font-bold text-stone-800 leading-tight">Contract AI</h1>
-            <p className="text-xs text-gray-500">Система</p>
+            <h1 className="text-lg font-bold text-stone-800 dark:text-gray-100 leading-tight">Contract AI</h1>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Система</p>
           </div>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto" aria-label="Основная навигация">
         {filteredItems.map((item) => {
           const isActive = pathname === item.href ||
             (item.href !== '/dashboard' && item.href !== '/contracts' && pathname.startsWith(item.href)) ||
@@ -119,13 +121,14 @@ function SidebarContent({ user, onLogout, onNavigate }: {
               key={item.href}
               whileTap={{ scale: 0.98 }}
               onClick={() => handleNav(item.href)}
+              aria-current={isActive ? 'page' : undefined}
               className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200
                 ${isActive
-                  ? 'bg-primary-50 text-primary-700 shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                  ? 'bg-primary-50 text-primary-700 shadow-sm dark:bg-primary-900/30 dark:text-primary-300'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-dark-700 dark:hover:text-gray-200'
                 }`}
             >
-              <span className={isActive ? 'text-primary-600' : 'text-gray-400'}>
+              <span className={isActive ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 dark:text-gray-500'}>
                 {item.icon}
               </span>
               <span>{item.label}</span>
@@ -140,8 +143,29 @@ function SidebarContent({ user, onLogout, onNavigate }: {
         })}
       </nav>
 
+      {/* Theme toggle */}
+      <div className="px-4 py-2 border-t border-gray-100 dark:border-dark-700">
+        {mounted && (
+          <button
+            onClick={toggleTheme}
+            className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-dark-700 rounded-xl transition-all duration-200"
+          >
+            {resolvedTheme === 'dark' ? (
+              <svg className="w-5 h-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+              </svg>
+            )}
+            <span>{resolvedTheme === 'dark' ? 'Светлая тема' : 'Тёмная тема'}</span>
+          </button>
+        )}
+      </div>
+
       {/* User section */}
-      <div className="border-t border-gray-100 p-4">
+      <div className="border-t border-gray-100 dark:border-dark-700 p-4">
         <div className="flex items-center space-x-3 mb-3">
           <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${roleColor.gradient} flex items-center justify-center`}>
             <span className="text-white text-sm font-bold">
@@ -149,13 +173,13 @@ function SidebarContent({ user, onLogout, onNavigate }: {
             </span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-stone-800 truncate">{user?.name}</p>
+            <p className="text-sm font-semibold text-stone-800 dark:text-gray-100 truncate">{user?.name}</p>
             <p className={`text-xs font-medium ${roleColor.text}`}>{roleLabel}</p>
           </div>
         </div>
         <button
           onClick={onLogout}
-          className="w-full flex items-center justify-center space-x-2 px-4 py-2 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
+          className="w-full flex items-center justify-center space-x-2 px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all duration-200"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -171,7 +195,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }: SidebarProp
   return (
     <>
       {/* Desktop sidebar — always visible on lg+ */}
-      <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-64 bg-white border-r border-gray-200 flex-col z-40">
+      <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-64 bg-white dark:bg-dark-900 border-r border-gray-200 dark:border-dark-700 flex-col z-40">
         <SidebarContent user={user} onLogout={onLogout} onNavigate={() => {}} />
       </aside>
 
@@ -193,12 +217,13 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }: SidebarProp
               animate={{ x: 0 }}
               exit={{ x: -280 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="lg:hidden fixed left-0 top-0 h-screen w-72 bg-white shadow-2xl flex flex-col z-50"
+              className="lg:hidden fixed left-0 top-0 h-screen w-72 bg-white dark:bg-dark-900 shadow-2xl flex flex-col z-50"
             >
               {/* Close button */}
               <button
                 onClick={onClose}
-                className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-xl transition z-10"
+                aria-label="Закрыть меню"
+                className="absolute top-4 right-4 p-2 hover:bg-gray-100 dark:hover:bg-dark-700 rounded-xl transition z-10"
               >
                 <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

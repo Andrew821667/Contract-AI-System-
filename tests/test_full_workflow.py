@@ -9,6 +9,7 @@ Comprehensive test of the complete workflow with new features:
 """
 import sys
 import os
+import pytest
 
 # Set up paths
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
@@ -26,6 +27,24 @@ import json
 logger.remove()
 logger.add(sys.stderr, level="INFO")
 
+
+def _llm_available():
+    """Check if LLM API is reachable with configured provider/model"""
+    try:
+        gw = LLMGateway(model=settings.llm_quick_model)
+        gw.call(prompt="ping", max_tokens=5)
+        return True
+    except Exception:
+        return False
+
+
+requires_llm = pytest.mark.skipif(
+    not _llm_available(),
+    reason="LLM API not available (wrong provider/model or no API key)"
+)
+
+
+@requires_llm
 def test_llm_gateway_with_cache():
     """Test 1: LLMGateway with caching"""
     logger.info("=" * 60)
@@ -68,6 +87,7 @@ def test_llm_gateway_with_cache():
 
     return True
 
+@requires_llm
 def test_batching():
     """Test 2: Batch analysis of clauses"""
     logger.info("\n" + "=" * 60)
@@ -97,6 +117,7 @@ def test_batching():
 
     return len(results) == len(mock_clauses)
 
+@requires_llm
 def test_deep_analysis():
     """Test 3: Deep analysis with gpt-4o"""
     logger.info("\n" + "=" * 60)
@@ -145,6 +166,7 @@ def test_deep_analysis():
         traceback.print_exc()
         return False
 
+@requires_llm
 def test_token_tracking():
     """Test 4: Token tracking and cost calculation"""
     logger.info("\n" + "=" * 60)

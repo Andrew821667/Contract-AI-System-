@@ -47,13 +47,17 @@ async def list_clauses(
         if contract_id:
             filters['contract_id'] = contract_id
 
+        # SECURITY: filter by current user's contracts only (admins see all)
+        if current_user.role != "admin":
+            filters['user_id'] = current_user.id
+
         return service.get_library(filters=filters, page=page, page_size=page_size)
 
     except Exception as e:
         logger.error(f"Error listing clauses: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error listing clauses: {str(e)}"
+            detail="Internal server error"
         )
 
 
@@ -71,7 +75,7 @@ async def get_clause_stats(
         logger.error(f"Error getting clause stats: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error: {str(e)}"
+            detail="Internal server error"
         )
 
 
@@ -98,7 +102,7 @@ async def search_clauses(
         logger.error(f"Error searching clauses: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error: {str(e)}"
+            detail="Internal server error"
         )
 
 
@@ -127,5 +131,5 @@ async def get_clause_details(
         logger.error(f"Error getting clause {clause_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error: {str(e)}"
+            detail="Internal server error"
         )
