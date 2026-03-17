@@ -961,3 +961,138 @@ class TestVersionIntelligenceService:
 
         # Cleanup
         del _comparison_cache["test-comp-1"]
+
+
+# ═══════════════════════════════════════════════
+# Phase 10: Integration Core + Event Model
+# ═══════════════════════════════════════════════
+
+
+class TestEventTypes:
+    """Тесты каталога событий."""
+
+    def test_all_event_types_count(self):
+        from src.core.integrations.event_types import ALL_EVENT_TYPES
+        assert len(ALL_EVENT_TYPES) >= 20
+
+    def test_event_type_structure(self):
+        from src.core.integrations.event_types import CONTRACT_UPLOADED
+        assert CONTRACT_UPLOADED.name == "contract.uploaded"
+        assert CONTRACT_UPLOADED.entity_type == "contract"
+        assert CONTRACT_UPLOADED.severity == "info"
+
+    def test_security_events_critical(self):
+        from src.core.integrations.event_types import POLICY_VIOLATION
+        assert POLICY_VIOLATION.severity == "critical"
+
+    def test_all_events_have_unique_names(self):
+        from src.core.integrations.event_types import ALL_EVENT_TYPES
+        names = list(ALL_EVENT_TYPES.keys())
+        assert len(names) == len(set(names))
+
+
+class TestEventBusService:
+    """Тесты EventBus с persistence."""
+
+    @pytest.mark.asyncio
+    async def test_emit_event(self, test_db):
+        from src.core.integrations.event_bus import EventBusService
+
+        bus = EventBusService(test_db)
+        event = await bus.emit(
+            event_type="contract.uploaded",
+            entity_type="contract",
+            entity_id="doc-evt-1",
+            payload={"filename": "test.docx"},
+            emitted_by="user:test-1",
+        )
+
+        assert event.id is not None
+        assert event.event_type == "contract.uploaded"
+        assert event.entity_id == "doc-evt-1"
+
+    @pytest.mark.asyncio
+    async def test_subscribe_and_handle(self, test_db):
+        from src.core.integrations.event_bus import EventBusService
+
+        bus = EventBusService(test_db)
+        received = []
+
+        async def handler(event):
+            received.append(event.event_type)
+
+        bus.subscribe("contract.analyzed", handler)
+
+        await bus.emit(
+            event_type="contract.analyzed",
+            entity_type="contract",
+            entity_id="doc-evt-2",
+        )
+
+        assert len(received) == 1
+        assert received[0] == "contract.analyzed"
+
+    @pytest.mark.asyncio
+    async def test_wildcard_handler(self, test_db):
+        from src.core.integrations.event_bus import EventBusService
+
+        bus = EventBusService(test_db)
+        received = []
+
+        async def handler(event):
+            received.append(event.event_type)
+
+        bus.subscribe("*", handler)
+
+        await bus.emit("contract.uploaded", "contract", "doc-1")
+        await bus.emit("workflow.started", "workflow", "wf-1")
+
+        assert len(received) == 2
+
+    def test_get_events(self, test_db):
+        from src.core.integrations.event_bus import EventBusService
+        from src.core.integrations.models import DomainEvent
+
+        # Create events directly
+        for i in range(3):
+            test_db.add(DomainEvent(
+                event_type=f"test.event.{i}",
+                entity_type="test",
+                entity_id=f"ent-{i}",
+            ))
+        test_db.flush()
+
+        bus = EventBusService(test_db)
+        events = bus.get_events(entity_type="test")
+        assert len(events) == 3
+
+
+class TestEventDispatcher:
+    """Тесты EventDispatcher."""
+
+    def test_setup_subscribes(self, test_db):
+        from src.core.integrations.event_bus import EventBusService
+        from src.core.integrations.webhook_service import WebhookService
+        from src.core.integrations.dispatcher import EventDispatcher
+
+        bus = EventBusService(test_db)
+        webhook = WebhookService(test_db)
+        dispatcher = EventDispatcher(db=test_db, event_bus=bus, webhook_service=webhook)
+
+        assert len(bus._handlers) == 0
+        dispatcher.setup()
+        assert "*" in bus._handlers
+        assert len(bus._handlers["*"]) == 1
+
+    def test_webhook_filter(self, test_db):
+        from src.core.integrations.event_bus import EventBusService
+        from src.core.integrations.webhook_service import WebhookService
+        from src.core.integrations.dispatcher import EventDispatcher
+
+        bus = EventBusService(test_db)
+        webhook = WebhookService(test_db)
+        dispatcher = EventDispatcher(db=test_db, event_bus=bus, webhook_service=webhook)
+
+        dispatcher.set_webhook_filter({"contract.uploaded", "contract.approved"})
+        assert dispatcher._webhook_event_filter is not None
+        assert "contract.uploaded" in dispatcher._webhook_event_filter

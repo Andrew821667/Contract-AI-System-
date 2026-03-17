@@ -16,6 +16,7 @@ from src.api.v2.workflow import router as workflow_router
 from src.api.v2.comments import router as comments_router
 from src.api.v2.negotiations import router as negotiations_router
 from src.api.v2.versions import router as versions_router
+from src.api.v2.integrations import router as integrations_router
 
 v2_router = APIRouter()
 
@@ -29,3 +30,4 @@ v2_router.include_router(workflow_router)
 v2_router.include_router(comments_router)
 v2_router.include_router(negotiations_router)
 v2_router.include_router(versions_router)
+v2_router.include_router(integrations_router)

@@ -188,13 +188,16 @@ Contract-AI-System = hierarchical LLM cascade
 - [x] 12 новых тестов (39 total core tests)
 - [ ] **Frontend:** Negotiation workspace
 
-### Phase 10: Integration Core + Event Model ← СЛЕДУЮЩИЙ
-**Статус:** ⏳
+### Phase 10: Integration Core + Event Model — ВЫПОЛНЕНО ✅
+**Статус:** ✅ Завершено (2026-03-17)
 
-Deliverables:
-- [ ] Event model (15+ domain events)
-- [ ] Webhook delivery + retry, adapter abstraction
-- [ ] Public integration API, integration settings UI
+Результат:
+- [x] 20 domain event types в 5 категориях (contract, AI, workflow, negotiation, security)
+- [x] EventDispatcher — wildcard подписка на EventBus → webhook delivery с фильтрацией
+- [x] API v2: 7 integration endpoints (events listing, webhook CRUD, delivery history, retry)
+- [x] Bootstrap: WebhookService + EventDispatcher зарегистрированы в CoreServices
+- [x] 10 новых тестов (49 total core tests)
+- [ ] **Frontend:** Integration settings UI
 
 ### Phase 11: LLM Cascade Hardening
 **Статус:** ⏳ Ожидает Phase 10

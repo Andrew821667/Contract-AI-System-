@@ -25,6 +25,8 @@ from src.core.agents.registry import AgentRegistryService
 from src.core.audit.service import AuditQueryService
 from src.core.collaboration.service import CommentService
 from src.core.integrations.event_bus import EventBusService
+from src.core.integrations.webhook_service import WebhookService
+from src.core.integrations.dispatcher import EventDispatcher
 from src.core.negotiation.service import NegotiationService
 from src.core.negotiation.version_service import VersionIntelligenceService
 from src.core.orchestrator.orchestrator_service import AgentOrchestratorService
@@ -81,6 +83,8 @@ class CoreServices:
 
         # Integrations
         self.event_bus: EventBusService | None = None
+        self.webhook_service: WebhookService | None = None
+        self.event_dispatcher: EventDispatcher | None = None
 
         # Negotiation & Version Intelligence (Phase 9)
         self.negotiation_service: NegotiationService | None = None
@@ -192,10 +196,17 @@ def bootstrap(db: Session) -> CoreServices:
         policy_resolver=svc.policy_resolver,
     )
 
-    # ── 12. Event Bus ────────────────────────────────────────────────
+    # ── 12. Event Bus & Integrations ────────────────────────────────
     svc.event_bus = EventBusService(db)
+    svc.webhook_service = WebhookService(db)
+    svc.event_dispatcher = EventDispatcher(
+        db=db,
+        event_bus=svc.event_bus,
+        webhook_service=svc.webhook_service,
+    )
+    svc.event_dispatcher.setup()
 
-    # ── 12. Bootstrap tools & agents ─────────────────────────────────
+    # ── 13. Bootstrap tools & agents ─────────────────────────────────
     _register_tools(svc.tool_registry)
     _bootstrap_agents(svc.agent_registry, db)
 
