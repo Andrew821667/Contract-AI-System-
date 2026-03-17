@@ -46,8 +46,8 @@ class Disagreement(Base):
     approved_by = Column(String(36), ForeignKey('users.id', ondelete='SET NULL'))
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     sent_at = Column(DateTime)
     responded_at = Column(DateTime)
 
@@ -118,8 +118,8 @@ class DisagreementObjection(Base):
     effectiveness_feedback = Column(Text)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     disagreement = relationship("Disagreement", back_populates="objections")
@@ -172,7 +172,7 @@ class DisagreementExportLog(Base):
     export_metadata = Column(JSON, default=dict)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     disagreement = relationship("Disagreement", back_populates="export_logs")
@@ -218,8 +218,8 @@ class DisagreementFeedback(Base):
     suggestions = Column(Text)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     disagreement = relationship("Disagreement", back_populates="feedbacks")

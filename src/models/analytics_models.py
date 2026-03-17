@@ -39,7 +39,7 @@ class AnalyticsMetricLog(Base):
     extra_metadata = Column(JSON, nullable=True)  # Additional context as JSON
     
     # Timestamp
-    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     
     # Indexes for efficient queries
     __table_args__ = (
@@ -82,8 +82,8 @@ class AggregatedMetric(Base):
     user_id = Column(String(36), nullable=True, index=True)
     
     # Created/updated
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     
     # Indexes
     __table_args__ = (

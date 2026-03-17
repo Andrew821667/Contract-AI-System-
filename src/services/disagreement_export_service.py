@@ -370,7 +370,7 @@ class DisagreementExportService:
 
             export_log.email_to = recipient_email
             export_log.email_subject = subject
-            export_log.email_sent_at = datetime.utcnow()
+            export_log.email_sent_at = datetime.now(timezone.utc)
             export_log.email_status = 'sent' if email_sent else 'failed'
             self.db_session.commit()
 

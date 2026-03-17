@@ -9,8 +9,8 @@ from pydantic import BaseModel, Field
 
 
 class AISessionCreate(BaseModel):
-    document_id: str
-    stage: str = "intake"
+    document_id: str = Field(..., max_length=50)
+    stage: str = Field("intake", max_length=50)
 
 
 class AISessionRead(BaseModel):
@@ -64,6 +64,6 @@ class AIActionRead(BaseModel):
 
 
 class AIActionApprovalCreate(BaseModel):
-    decision: str  # approve | reject | edit_and_approve
-    comment: str | None = None
+    decision: str = Field(..., max_length=30)  # approve | reject | edit_and_approve
+    comment: str | None = Field(None, max_length=5000)
     edited_payload: dict[str, Any] | None = None

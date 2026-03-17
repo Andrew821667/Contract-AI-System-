@@ -10,7 +10,7 @@ AI Action Execution Service — выполнение одобренных AI-д�
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from loguru import logger
@@ -179,7 +179,7 @@ class AIActionExecutionService:
 
         if result.success:
             action.execution_status = "executed"
-            action.executed_at = datetime.utcnow()
+            action.executed_at = datetime.now(timezone.utc)
             action.payload = {**(action.payload or {}), "result": result.data}
         else:
             action.execution_status = "failed"
@@ -198,7 +198,7 @@ class AIActionExecutionService:
     async def _execute_direct(self, action: AIAction, user_id: str) -> bool:
         """Выполнить действие напрямую — результат уже в payload."""
         action.execution_status = "executed"
-        action.executed_at = datetime.utcnow()
+        action.executed_at = datetime.now(timezone.utc)
         self.db.flush()
 
         self._record_audit(action, "action_executed", {

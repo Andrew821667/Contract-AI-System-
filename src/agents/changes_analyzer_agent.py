@@ -320,7 +320,7 @@ Return JSON:
         report_path = self.report_generator.generate_report(analysis_dict, changes_dict)
 
         analysis.report_pdf_path = report_path
-        analysis.report_generated_at = datetime.utcnow()
+        analysis.report_generated_at = datetime.now(timezone.utc)
         self.db.commit()
 
         return report_path

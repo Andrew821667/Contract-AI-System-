@@ -7,7 +7,7 @@ API v2 — Integrations
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
@@ -32,11 +32,11 @@ class EventTypeInfo(BaseModel):
 
 
 class WebhookConfigCreate(BaseModel):
-    name: str
-    url: str
-    secret: str | None = None
-    event_filter: list[str] | None = None
-    org_id: str | None = None
+    name: str = Field(..., min_length=1, max_length=255)
+    url: str = Field(..., min_length=1, max_length=2000)
+    secret: str | None = Field(None, max_length=500)
+    event_filter: list[str] | None = Field(None, max_length=100)
+    org_id: str | None = Field(None, max_length=50)
 
 
 class WebhookConfigRead(BaseModel):
@@ -72,6 +72,7 @@ async def list_events(
     entity_id: str | None = Query(None, description="ID сущности"),
     event_type: str | None = Query(None, description="Тип события"),
     limit: int = Query(50, ge=1, le=500, description="Лимит записей"),
+    offset: int = Query(0, ge=0, description="Смещение"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -89,7 +90,7 @@ async def list_events(
         query = query.filter(DomainEvent.entity_id == entity_id)
     if event_type:
         query = query.filter(DomainEvent.event_type == event_type)
-    return query.order_by(DomainEvent.created_at.desc()).limit(limit).all()
+    return query.order_by(DomainEvent.created_at.desc()).offset(offset).limit(limit).all()
 
 
 # ──────────────────────────────────────────────

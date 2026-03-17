@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 class OrganizationCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     slug: str = Field(..., min_length=1, max_length=100, pattern=r"^[a-z0-9\-]+$")
-    description: str | None = None
+    description: str | None = Field(None, max_length=2000)
     settings: dict[str, Any] | None = None
 
 
@@ -32,11 +32,11 @@ class OrganizationRead(BaseModel):
 # ── Membership ──
 
 class OrganizationMembershipCreate(BaseModel):
-    user_id: str
-    org_id: str
-    unit_id: str | None = None
-    company_role: str | None = None
-    functional_role: str = "member"
+    user_id: str = Field(..., max_length=50)
+    org_id: str = Field(..., max_length=50)
+    unit_id: str | None = Field(None, max_length=50)
+    company_role: str | None = Field(None, max_length=100)
+    functional_role: str = Field("member", max_length=50)
 
 
 class OrganizationMembershipRead(BaseModel):
@@ -55,9 +55,9 @@ class OrganizationMembershipRead(BaseModel):
 # ── Document Participation ──
 
 class DocumentParticipationCreate(BaseModel):
-    user_id: str
-    document_id: str
-    role: str  # owner | reviewer | approver | observer | negotiator | signer | ai_supervisor
+    user_id: str = Field(..., max_length=50)
+    document_id: str = Field(..., max_length=50)
+    role: str = Field(..., max_length=50)  # owner | reviewer | approver | observer | negotiator | signer | ai_supervisor
 
 
 class DocumentParticipationRead(BaseModel):

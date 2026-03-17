@@ -328,7 +328,7 @@ def show_demo_links_tab(auth_service: AuthService, current_user: dict, db):
 
         # Get active tokens
         active_tokens = db.query(DemoToken).filter(
-            DemoToken.expires_at > datetime.utcnow()
+            DemoToken.expires_at > datetime.now(timezone.utc)
         ).order_by(DemoToken.created_at.desc()).limit(10).all()
 
         if active_tokens:
@@ -346,7 +346,7 @@ def show_demo_links_tab(auth_service: AuthService, current_user: dict, db):
 
                     # Revoke button
                     if not token.used and st.button("🚫 Отозвать токен", key=f"revoke_{token.id}", type="secondary"):
-                        token.expires_at = datetime.utcnow()
+                        token.expires_at = datetime.now(timezone.utc)
                         db.commit()
                         st.success("✅ Токен успешно отозван")
                         st.rerun()
@@ -504,7 +504,7 @@ def show_audit_logs_tab(db):
 
     # Get logs
     query = db.query(AuditLog).filter(
-        AuditLog.created_at >= datetime.utcnow() - timedelta(days=days_back)
+        AuditLog.created_at >= datetime.now(timezone.utc) - timedelta(days=days_back)
     )
 
     if action_filter != "Все":

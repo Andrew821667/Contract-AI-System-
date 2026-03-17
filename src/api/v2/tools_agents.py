@@ -6,7 +6,7 @@ API v2 — Tools & Agents
 """
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
@@ -29,11 +29,13 @@ router = APIRouter(tags=["Tools & Agents"])
     summary="Список инструментов",
 )
 async def list_tools(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Возвращает список всех зарегистрированных инструментов."""
-    return db.query(ToolDefinition).order_by(ToolDefinition.created_at.desc()).all()
+    return db.query(ToolDefinition).order_by(ToolDefinition.created_at.desc()).offset(offset).limit(limit).all()
 
 
 # ──────────────────────────────────────────────
@@ -68,11 +70,13 @@ async def get_tool(
     summary="Список агентов",
 )
 async def list_agents(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Возвращает список всех зарегистрированных агентов."""
-    return db.query(AgentDefinition).order_by(AgentDefinition.created_at.desc()).all()
+    return db.query(AgentDefinition).order_by(AgentDefinition.created_at.desc()).offset(offset).limit(limit).all()
 
 
 # ──────────────────────────────────────────────

@@ -231,7 +231,7 @@ class LLMProfile(BaseModel):
 class AuditEvent(BaseModel):
     """Событие аудита AI-действия."""
     event_id: str = Field(default_factory=lambda: str(uuid4()))
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     actor: str                # user_id | agent:<id> | orchestrator
     action: str               # explain_finding | suggest_clause | tool_call | ...
     target: str               # document_id | tool_id | ...

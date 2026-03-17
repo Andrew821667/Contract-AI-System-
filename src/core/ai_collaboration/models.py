@@ -49,8 +49,8 @@ class AISession(Base):
     total_actions = Column(Integer, default=0)
     total_tokens_used = Column(Integer, default=0)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     closed_at = Column(DateTime, nullable=True)
 
     # Relationships
@@ -91,7 +91,7 @@ class AIConversationTurn(Base):
     tokens_input = Column(Integer, default=0)
     tokens_output = Column(Integer, default=0)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     # Relationships
     session = relationship("AISession", back_populates="turns")
@@ -131,7 +131,7 @@ class AIAction(Base):
     approval_required = Column(Boolean, default=True)
     execution_status = Column(String(20), nullable=False, default="pending")
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     executed_at = Column(DateTime, nullable=True)
 
     # Relationships
@@ -164,7 +164,7 @@ class AIActionApproval(Base):
     comment = Column(Text, nullable=True)
     edited_payload = Column(JSON, nullable=True)  # Если edit_and_approve — отредактированные данные
 
-    decided_at = Column(DateTime, default=datetime.utcnow)
+    decided_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     action = relationship("AIAction", back_populates="approval")
@@ -198,7 +198,7 @@ class AIAuditRecord(Base):
     model_used = Column(String(100), nullable=True)
     context_sent = Column(JSON, nullable=True)  # Какой контекст отправлен в LLM (для воспроизводимости)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     # Relationships
     session = relationship("AISession", back_populates="audit_records")

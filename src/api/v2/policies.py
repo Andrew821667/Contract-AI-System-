@@ -43,7 +43,8 @@ async def list_policies(
     if active is not None:
         query = query.filter(Policy.active == active)
 
-    return query.order_by(Policy.priority.desc(), Policy.created_at.desc()).all()
+    limit_val = 50  # Default limit for policies
+    return query.order_by(Policy.priority.desc(), Policy.created_at.desc()).limit(limit_val).all()
 
 
 # ──────────────────────────────────────────────

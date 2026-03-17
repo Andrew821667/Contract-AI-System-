@@ -31,7 +31,7 @@ def generate_uuid():
 #     name = Column(String(255), nullable=False)
 #     role = Column(String(50), nullable=False)  # admin, senior_lawyer, lawyer, junior_lawyer
 #     active = Column(Boolean, default=True)
-#     created_at = Column(DateTime, default=datetime.utcnow)
+#     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 # 
 #     # Relationships
 #     templates = relationship("Template", back_populates="creator")
@@ -62,8 +62,8 @@ class Template(Base):
     version = Column(String(20), nullable=False)
     active = Column(Boolean, default=True, index=True)
     created_by = Column(String(36), ForeignKey('users.id'))
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     creator = relationship("User", back_populates="templates")
@@ -85,13 +85,13 @@ class Contract(Base):
     file_path = Column(Text, nullable=False)
     document_type = Column(String(50), nullable=False, index=True)
     contract_type = Column(String(50))
-    upload_date = Column(DateTime, default=datetime.utcnow, index=True)
+    upload_date = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     status = Column(String(50), default='pending', index=True)
     assigned_to = Column(String(36), ForeignKey('users.id'), index=True)
     risk_level = Column(String(20), index=True)
     meta_info = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     assignee = relationship("User", foreign_keys=[assigned_to])
@@ -129,7 +129,7 @@ class AnalysisResult(Base):
     legal_issues = Column(JSON, nullable=True)
     risks_by_category = Column(JSON, nullable=True)
     recommendations = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     version = Column(Integer, default=1)
 
     # Relationships
@@ -154,7 +154,7 @@ class ReviewTask(Base):
     comments = Column(Text)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     assigned_at = Column(DateTime)
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
@@ -208,8 +208,8 @@ class LegalDocument(Base):
     file_path = Column(String(512), nullable=True)
     chunks_count = Column(Integer, default=0)
     source = Column(String(50), default='manual')
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         CheckConstraint(
@@ -230,7 +230,7 @@ class ExportLog(Base):
     contract_id = Column(String(36), ForeignKey('contracts.id', ondelete='SET NULL'))
     exported_by = Column(String(36), ForeignKey('users.id'))
     export_type = Column(String(50))  # "full_review", "quick_export"
-    exported_at = Column(DateTime, default=datetime.utcnow, index=True)
+    exported_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     meta_info = Column(JSON, nullable=True)
 
     # Relationships
@@ -272,8 +272,8 @@ class ContractFeedback(Base):
     user_comment = Column(Text)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     contract = relationship("Contract")
@@ -315,7 +315,7 @@ class ScheduledTaskLog(Base):
     job_id = Column(String(100), nullable=False, index=True)
     job_name = Column(String(200), nullable=False)
     status = Column(String(20), nullable=False, default='running', index=True)
-    started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     finished_at = Column(DateTime, nullable=True)
     duration_sec = Column(Float, nullable=True)
     result = Column(Text, nullable=True)
@@ -351,8 +351,8 @@ class LLMCache(Base):
     output_tokens = Column(Integer)  # Использовано output токенов
     cost_usd = Column(Float)  # Стоимость запроса в USD
     hit_count = Column(Integer, default=0)  # Сколько раз использован из кэша
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    last_accessed = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    last_accessed = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     def __repr__(self):
         return f"<LLMCache(id={self.id}, model={self.model}, hits={self.hit_count})>"

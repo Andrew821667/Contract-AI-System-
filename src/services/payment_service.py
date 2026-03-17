@@ -376,7 +376,7 @@ class PaymentService:
             user.stripe_subscription_id = subscription_id
             user.subscription_tier = tier
             user.subscription_status = 'active'
-            user.subscription_expires = datetime.utcnow() + timedelta(days=30)  # Will be updated by subscription webhook
+            user.subscription_expires = datetime.now(timezone.utc) + timedelta(days=30)  # Will be updated by subscription webhook
 
             # Update limits
             user.max_contracts_per_day = tier_info['max_contracts_per_day']

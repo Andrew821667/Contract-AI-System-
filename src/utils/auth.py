@@ -145,7 +145,7 @@ def login_user(email: str, password: str = None) -> Optional[Dict[str, Any]]:
         st.session_state.authenticated = True
 
         # Обновляем last_login
-        user.last_login = datetime.utcnow()
+        user.last_login = datetime.now(timezone.utc)
         user.login_count = (user.login_count or 0) + 1
         db.commit()
 

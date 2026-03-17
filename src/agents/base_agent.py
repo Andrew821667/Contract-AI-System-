@@ -42,7 +42,7 @@ class AgentResult:
         self.error = error
         self.next_action = next_action
         self.metadata = metadata or {}
-        self.timestamp = datetime.utcnow()
+        self.timestamp = datetime.now(timezone.utc)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -172,7 +172,7 @@ class BaseAgent(ABC):
             "input": input_data,
             "output": output_data,
             "duration": duration,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
         self.execution_history.append(log_entry)

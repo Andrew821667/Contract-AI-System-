@@ -16,9 +16,9 @@ from pydantic import BaseModel, Field
 
 class NegotiationStartRequest(BaseModel):
     """Запрос на запуск процесса переговоров."""
-    document_id: str
-    analysis_id: str | None = None
-    goal: str
+    document_id: str = Field(..., max_length=50)
+    analysis_id: str | None = Field(None, max_length=50)
+    goal: str = Field(..., min_length=1, max_length=2000)
     auto_prioritize: bool = True
 
 
@@ -32,9 +32,9 @@ class NegotiationStartResponse(BaseModel):
 
 class ObjectionGenerateRequest(BaseModel):
     """Запрос на генерацию возражений."""
-    negotiation_id: str
-    risk_ids: list[str] | None = None
-    custom_instructions: str | None = None
+    negotiation_id: str = Field(..., max_length=50)
+    risk_ids: list[str] | None = Field(None, max_length=100)
+    custom_instructions: str | None = Field(None, max_length=5000)
 
 
 class ObjectionResponse(BaseModel):
@@ -52,9 +52,9 @@ class ObjectionResponse(BaseModel):
 
 class ObjectionSelectionRequest(BaseModel):
     """Запрос на выбор возражений для включения в протокол."""
-    negotiation_id: str
-    selected_objection_ids: list[str]
-    priority_order: list[str] | None = None
+    negotiation_id: str = Field(..., max_length=50)
+    selected_objection_ids: list[str] = Field(..., max_length=200)
+    priority_order: list[str] | None = Field(None, max_length=200)
 
 
 class ObjectionSelectionResponse(BaseModel):
@@ -70,9 +70,9 @@ class ObjectionSelectionResponse(BaseModel):
 
 class NegotiationPositionRequest(BaseModel):
     """Запрос на подготовку переговорной позиции."""
-    negotiation_id: str
-    strategy: str = "balanced"
-    focus_areas: list[str] | None = None
+    negotiation_id: str = Field(..., max_length=50)
+    strategy: str = Field("balanced", max_length=50)
+    focus_areas: list[str] | None = Field(None, max_length=50)
 
 
 class NegotiationPositionResponse(BaseModel):
@@ -90,9 +90,9 @@ class NegotiationPositionResponse(BaseModel):
 
 class VersionCompareRequest(BaseModel):
     """Запрос на сравнение версий документа."""
-    document_id: str
-    from_version_id: str
-    to_version_id: str
+    document_id: str = Field(..., max_length=50)
+    from_version_id: str = Field(..., max_length=50)
+    to_version_id: str = Field(..., max_length=50)
     deep_analysis: bool = True
 
 

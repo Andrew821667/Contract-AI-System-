@@ -126,7 +126,7 @@ class AnalyticsService:
             from datetime import datetime, timedelta
 
             # Load metrics from last 90 days
-            cutoff_date = datetime.utcnow() - timedelta(days=90)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=90)
 
             recent_metrics = self.db_session.query(AnalyticsMetricLog).filter(
                 AnalyticsMetricLog.timestamp >= cutoff_date

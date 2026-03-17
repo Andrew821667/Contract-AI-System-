@@ -37,8 +37,8 @@ class IntegrationConfig(Base):
     config = Column(JSON, nullable=False)  # URL, secret, credentials (зашифрованы)
 
     active = Column(Boolean, default=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         CheckConstraint(
@@ -72,7 +72,7 @@ class WebhookDelivery(Base):
     last_attempt_at = Column(DateTime, nullable=True)
     delivered_at = Column(DateTime, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     __table_args__ = (
         CheckConstraint(
@@ -104,7 +104,7 @@ class DomainEvent(Base):
     payload = Column(JSON, nullable=True)
     emitted_by = Column(String(100), nullable=True)  # user:<id> | system | agent:<id>
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     __table_args__ = (
         Index("idx_domain_event_entity", "entity_type", "entity_id"),

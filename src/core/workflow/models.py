@@ -52,8 +52,8 @@ class WorkflowDefinition(Base):
 
     active = Column(Boolean, default=True, index=True)
     version = Column(Integer, default=1)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     executions = relationship("WorkflowExecution", back_populates="definition")
@@ -78,7 +78,7 @@ class WorkflowExecution(Base):
     current_step = Column(Integer, default=0)  # Текущий шаг (0-based)
     status = Column(String(20), nullable=False, default="active")
 
-    started_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime, nullable=True)
 
     # Relationships
@@ -118,7 +118,7 @@ class WorkflowTask(Base):
     sla_deadline = Column(DateTime, nullable=True, index=True)
     sla_breached = Column(Boolean, default=False)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime, nullable=True)
 
     # Relationships
@@ -152,7 +152,7 @@ class WorkflowEvent(Base):
     payload = Column(JSON, nullable=True)
     triggered_by = Column(String(100), nullable=True)  # user:<id> | system | ai
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     # Relationships
     execution = relationship("WorkflowExecution", back_populates="events")

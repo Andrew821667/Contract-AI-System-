@@ -23,14 +23,14 @@ class ContractVersion(Base):
     file_path = Column(Text, nullable=False)
     file_hash = Column(String(64))  # SHA256
     uploaded_by = Column(String(36), ForeignKey('users.id'))
-    uploaded_at = Column(DateTime, default=datetime.utcnow)
+    uploaded_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     source = Column(String(50), default='unknown')
     description = Column(Text)
     parent_version_id = Column(Integer, ForeignKey('contract_versions.id'))
     is_current = Column(Boolean, default=True, index=True)
     version_metadata = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     contract = relationship("Contract", foreign_keys=[contract_id])
@@ -105,7 +105,7 @@ class ContractChange(Base):
     # Metadata
     detected_by = Column(String(50), default='ChangesAnalyzerAgent')
     confidence_score = Column(Float)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     # Relationships
     from_version = relationship("ContractVersion", foreign_keys=[from_version_id], back_populates="changes_from")
@@ -176,10 +176,10 @@ class ChangeAnalysisResult(Base):
     report_generated_at = Column(DateTime)
 
     # Metadata
-    analyzed_at = Column(DateTime, default=datetime.utcnow, index=True)
+    analyzed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     analyzed_by = Column(String(50), default='ChangesAnalyzerAgent')
     analysis_duration_ms = Column(Integer)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     from_version = relationship("ContractVersion", foreign_keys=[from_version_id], back_populates="analysis_from")
@@ -225,7 +225,7 @@ class ChangeReviewFeedback(Base):
     # ML training
     was_correct_recommendation = Column(Boolean)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     # Relationships
     change = relationship("ContractChange", back_populates="feedbacks")

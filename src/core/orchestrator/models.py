@@ -43,8 +43,8 @@ class OrchestratorRun(Base):
     completed_steps = Column(Integer, default=0)
     failed_steps = Column(Integer, default=0)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime, nullable=True)
 
     # Relationships
@@ -73,7 +73,7 @@ class ExecutionPlan(Base):
 
     plan_definition = Column(JSON, nullable=False)  # Полное определение плана
     version = Column(Integer, default=1)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     run = relationship("OrchestratorRun", back_populates="plans")
@@ -152,7 +152,7 @@ class OrchestratorCheckpoint(Base):
     resolved_at = Column(DateTime, nullable=True)
     comment = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     run = relationship("OrchestratorRun", back_populates="checkpoints")

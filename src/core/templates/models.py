@@ -38,7 +38,7 @@ class TemplateVersion(Base):
 
     status = Column(String(20), nullable=False, default="draft")  # draft|active|deprecated
     created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         CheckConstraint(
@@ -66,8 +66,8 @@ class ClausePolicy(Base):
     alternative_clause_id = Column(String(36), nullable=True)  # ID рекомендуемой альтернативной клаузы
     risk_explanation = Column(Text, nullable=True)  # Почему risky/prohibited
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         CheckConstraint(
@@ -95,7 +95,7 @@ class GeneratedDocumentTrace(Base):
     clauses_used = Column(JSON, nullable=True)    # Какие клаузы вошли в документ
     ai_session_id = Column(String(36), ForeignKey("ai_sessions.id", ondelete="SET NULL"), nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index("idx_gen_trace_doc", "document_id"),

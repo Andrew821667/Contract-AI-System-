@@ -55,11 +55,11 @@ class User(Base):
     # Usage metrics (for rate limiting)
     contracts_today = Column(Integer, default=0)
     llm_requests_today = Column(Integer, default=0)
-    last_reset_date = Column(DateTime, default=datetime.utcnow)
+    last_reset_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Audit and tracking
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     last_login = Column(DateTime, index=True)
     last_ip = Column(String(45))
     login_count = Column(Integer, default=0)
@@ -103,11 +103,11 @@ class User(Base):
         """Check if user account is active"""
         if not self.active:
             return False
-        if self.locked_until and self.locked_until > datetime.utcnow():
+        if self.locked_until and self.locked_until > datetime.now(timezone.utc):
             return False
-        if self.is_demo and self.demo_expires and self.demo_expires < datetime.utcnow():
+        if self.is_demo and self.demo_expires and self.demo_expires < datetime.now(timezone.utc):
             return False
-        if self.subscription_expires and self.subscription_expires < datetime.utcnow():
+        if self.subscription_expires and self.subscription_expires < datetime.now(timezone.utc):
             return False
         return True
 
@@ -129,11 +129,11 @@ class User(Base):
 
     def reset_daily_limits(self):
         """Reset daily usage limits"""
-        today = datetime.utcnow().date()
+        today = datetime.now(timezone.utc).date()
         if not self.last_reset_date or self.last_reset_date.date() < today:
             self.contracts_today = 0
             self.llm_requests_today = 0
-            self.last_reset_date = datetime.utcnow()
+            self.last_reset_date = datetime.now(timezone.utc)
 
 
 class UserSession(Base):
@@ -154,9 +154,9 @@ class UserSession(Base):
     device_info = Column(JSON)  # Browser, OS, device type
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     expires_at = Column(DateTime, nullable=False, index=True)
-    last_activity = Column(DateTime, default=datetime.utcnow)
+    last_activity = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Status
     revoked = Column(Boolean, default=False, index=True)
@@ -177,7 +177,7 @@ class UserSession(Base):
         """Check if session is still valid"""
         if self.revoked:
             return False
-        if self.expires_at < datetime.utcnow():
+        if self.expires_at < datetime.now(timezone.utc):
             return False
         return True
 
@@ -207,7 +207,7 @@ class DemoToken(Base):
 
     # Metadata
     created_by = Column(String(36), ForeignKey('users.id'), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     expires_at = Column(DateTime, nullable=False, index=True)
 
     # Marketing tracking
@@ -233,7 +233,7 @@ class DemoToken(Base):
 
     def is_valid(self) -> bool:
         """Check if demo token is still valid"""
-        if self.expires_at < datetime.utcnow():
+        if self.expires_at < datetime.now(timezone.utc):
             return False
         if self.used and self.uses_count >= self.max_uses:
             return False
@@ -270,7 +270,7 @@ class AuditLog(Base):
     request_path = Column(String(500))
 
     # Timing
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     duration_ms = Column(Integer)  # Action duration in milliseconds
 
     # Severity (for filtering critical events)
@@ -305,7 +305,7 @@ class PasswordResetRequest(Base):
     ip_address = Column(String(45))
     user_agent = Column(Text)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         Index('idx_reset_token_valid', 'token', 'used', 'expires_at'),
@@ -318,7 +318,7 @@ class PasswordResetRequest(Base):
         """Check if reset request is still valid"""
         if self.used:
             return False
-        if self.expires_at < datetime.utcnow():
+        if self.expires_at < datetime.now(timezone.utc):
             return False
         return True
 
@@ -340,7 +340,7 @@ class EmailVerification(Base):
     ip_address = Column(String(45))
     user_agent = Column(Text)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     resent_count = Column(Integer, default=0)  # Track how many times verification was resent
 
     __table_args__ = (
@@ -354,7 +354,7 @@ class EmailVerification(Base):
         """Check if verification is still valid"""
         if self.verified:
             return False
-        if self.expires_at < datetime.utcnow():
+        if self.expires_at < datetime.now(timezone.utc):
             return False
         return True
 
@@ -373,7 +373,7 @@ class LoginAttempt(Base):
 
     failure_reason = Column(String(255))  # wrong_password, account_locked, email_not_verified
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     __table_args__ = (
         Index('idx_login_email_time', 'email', 'created_at'),

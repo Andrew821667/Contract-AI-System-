@@ -86,7 +86,7 @@ class ClauseLibraryService:
                 risk_level=risk_level,
                 severity_score=severity_score,
                 tags=json.dumps(tags, ensure_ascii=False),
-                created_at=datetime.utcnow()
+                created_at=datetime.now(timezone.utc)
             )
             self.db.add(extracted)
             saved.append(extracted)

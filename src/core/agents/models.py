@@ -50,8 +50,8 @@ class AgentDefinition(Base):
     # Metadata
     active = Column(Boolean, default=True, index=True)
     version = Column(String(20), default="1.0.0")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         CheckConstraint(
@@ -91,7 +91,7 @@ class AgentInvocation(Base):
     duration_ms = Column(Integer, default=0)
     error = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     __table_args__ = (
         CheckConstraint(
@@ -119,7 +119,7 @@ class AgentDelegation(Base):
     result_data = Column(JSON, nullable=True)
     status = Column(String(20), nullable=False, default="pending")
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime, nullable=True)
 
     __table_args__ = (

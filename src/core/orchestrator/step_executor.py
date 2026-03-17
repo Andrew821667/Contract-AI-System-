@@ -56,7 +56,7 @@ class StepExecutor:
             True если шаг завершён успешно (или skipped).
         """
         step.status = "running"
-        step.started_at = datetime.utcnow()
+        step.started_at = datetime.now(timezone.utc)
         self.db.flush()
 
         try:
@@ -76,7 +76,7 @@ class StepExecutor:
         except Exception as exc:
             step.status = "failed"
             step.error = str(exc)
-            step.completed_at = datetime.utcnow()
+            step.completed_at = datetime.now(timezone.utc)
             self.db.flush()
             logger.error(f"Step {step.id} (order={step.order}) failed: {exc}")
             return False
@@ -84,12 +84,12 @@ class StepExecutor:
         if success:
             if step.status == "running":  # Не перезаписываем если уже blocked/skipped
                 step.status = "completed"
-            step.completed_at = datetime.utcnow()
+            step.completed_at = datetime.now(timezone.utc)
             run.completed_steps += 1
         else:
             if step.status == "running":
                 step.status = "failed"
-            step.completed_at = datetime.utcnow()
+            step.completed_at = datetime.now(timezone.utc)
             run.failed_steps += 1
 
         self.db.flush()

@@ -47,8 +47,8 @@ class ToolDefinition(Base):
     # Metadata
     active = Column(Boolean, default=True, index=True)
     version = Column(String(20), default="1.0.0")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         CheckConstraint(risk_level.in_(["low", "medium", "high", "critical"]), name="check_tool_risk_level"),
@@ -81,7 +81,7 @@ class ToolInvocation(Base):
     error = Column(Text, nullable=True)
     duration_ms = Column(Integer, default=0)
 
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
 
     __table_args__ = (
         CheckConstraint(

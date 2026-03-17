@@ -111,7 +111,7 @@ class KnowledgeBaseService:
         if new_title is not None:
             doc.title = new_title
         doc.is_vectorized = False
-        doc.updated_at = datetime.utcnow()
+        doc.updated_at = datetime.now(timezone.utc)
 
         self.db.commit()
         self.db.refresh(doc)
@@ -190,7 +190,7 @@ class KnowledgeBaseService:
 
         doc.is_vectorized = True
         doc.chunks_count = chunks_count
-        doc.updated_at = datetime.utcnow()
+        doc.updated_at = datetime.now(timezone.utc)
         self.db.commit()
 
         logger.info(f"Документ {doc.doc_id} переиндексирован: {chunks_count} чанков")

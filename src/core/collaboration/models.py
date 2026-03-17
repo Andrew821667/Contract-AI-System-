@@ -47,8 +47,8 @@ class Comment(Base):
     parent_comment_id = Column(String(36), ForeignKey("comments.id", ondelete="SET NULL"), nullable=True, index=True)
 
     status = Column(String(20), nullable=False, default="active")
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     replies = relationship("Comment", backref="parent", remote_side="Comment.id", cascade="all")
@@ -85,7 +85,7 @@ class CommentThread(Base):
     resolved_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     resolved_at = Column(DateTime, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         CheckConstraint(status.in_(["open", "resolved"]), name="check_thread_status"),
@@ -106,7 +106,7 @@ class Mention(Base):
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     notified = Column(Boolean, default=False)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     comment = relationship("Comment", back_populates="mentions")
@@ -129,7 +129,7 @@ class CommentAssignment(Base):
     assignee_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     status = Column(String(20), nullable=False, default="pending")  # pending | in_progress | done
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime, nullable=True)
 
     # Relationships

@@ -7,7 +7,7 @@ CRUD для AI-сессий: создание, список, отправка с
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
@@ -78,6 +78,8 @@ async def create_ai_session(
 )
 async def list_ai_sessions(
     document_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -92,7 +94,7 @@ async def list_ai_sessions(
     if current_user.role != "admin":
         query = query.filter(AISession.user_id == current_user.id)
 
-    sessions = query.order_by(AISession.created_at.desc()).all()
+    sessions = query.order_by(AISession.created_at.desc()).offset(offset).limit(limit).all()
     return sessions
 
 
@@ -150,11 +152,13 @@ async def send_message(
 )
 async def list_messages(
     session_id: str,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Возвращает все сообщения для указанной сессии.
+    Возвращает сообщения для указанной сессии.
     """
     # IDOR fix: проверяем ownership
     verify_ai_session_ownership(session_id, current_user, db)
@@ -163,6 +167,8 @@ async def list_messages(
         db.query(AIConversationTurn)
         .filter(AIConversationTurn.session_id == session_id)
         .order_by(AIConversationTurn.created_at.asc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return turns

@@ -165,7 +165,7 @@ References: Use RAG sources when available (precedents, similar cases, legal nor
                 'total_objections': len(objections),
                 'by_priority': self._count_by_priority(objections),
                 'generation_mode': mode,
-                'generation_timestamp': datetime.utcnow().isoformat()
+                'generation_timestamp': datetime.now(timezone.utc).isoformat()
             }
             self.db.commit()
             self.db.refresh(disagreement)
@@ -500,7 +500,7 @@ Return ONLY valid JSON, no additional text."""
             # Header
             header = etree.SubElement(root, "header")
             etree.SubElement(header, "contract_id").text = str(disagreement.contract_id)
-            etree.SubElement(header, "date").text = datetime.utcnow().strftime("%Y-%m-%d")
+            etree.SubElement(header, "date").text = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             etree.SubElement(header, "tone").text = disagreement.tone
 
             # Objections

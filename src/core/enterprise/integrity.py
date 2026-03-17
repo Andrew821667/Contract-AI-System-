@@ -7,7 +7,7 @@ Integrity Service — tracking hashes, verification, version linkage.
 from __future__ import annotations
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from loguru import logger
 from sqlalchemy.orm import Session
@@ -28,7 +28,7 @@ class IntegrityRecord:
         self.hash_value = hash_value
         self.algorithm = algorithm
         self.metadata = metadata or {}
-        self.created_at = datetime.utcnow()
+        self.created_at = datetime.now(timezone.utc)
 
 
 class IntegrityService:

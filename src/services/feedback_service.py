@@ -94,7 +94,7 @@ class FeedbackService:
         if user_comment is not None:
             feedback.user_comment = user_comment
 
-        feedback.updated_at = datetime.utcnow()
+        feedback.updated_at = datetime.now(timezone.utc)
 
         self.db_session.commit()
         self.db_session.refresh(feedback)

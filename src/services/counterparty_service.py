@@ -67,7 +67,7 @@ class CounterpartyService:
 
         result = {
             'inn': inn,
-            'checked_at': datetime.utcnow().isoformat(),
+            'checked_at': datetime.now(timezone.utc).isoformat(),
             'fns_data': {},
             'bankruptcy_data': {},
             'paid_sources_data': {},
@@ -343,7 +343,7 @@ class CounterpartyService:
         return {
             'risk_level': risk_level,
             'risk_factors': risk_factors,
-            'checked_at': datetime.utcnow().isoformat()
+            'checked_at': datetime.now(timezone.utc).isoformat()
         }
 
 

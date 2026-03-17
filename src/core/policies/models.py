@@ -56,8 +56,8 @@ class Policy(Base):
 
     priority = Column(Integer, default=0)  # При конфликте — выигрывает больший priority
     active = Column(Boolean, default=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     approval_rules = relationship("ApprovalRule", back_populates="policy", cascade="all, delete-orphan")
@@ -97,7 +97,7 @@ class ApprovalRule(Base):
     escalation_target = Column(String(100), nullable=True)  # "org_admin" | user_id
 
     active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     policy = relationship("Policy", back_populates="approval_rules")
@@ -123,7 +123,7 @@ class ActionPermission(Base):
     conditions = Column(JSON, nullable=True)  # {"risk_level_max": "medium", "document_role": ["owner", "reviewer"]}
 
     active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     policy = relationship("Policy", back_populates="action_permissions")

@@ -4,7 +4,7 @@ Workflow Engine — запуск и продвижение маршрутов с
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from loguru import logger
@@ -60,7 +60,13 @@ class WorkflowEngineService:
         comment: str | None = None,
     ) -> WorkflowTask:
         """Завершить задачу и продвинуть workflow."""
-        task = self.db.query(WorkflowTask).filter(WorkflowTask.id == task_id).first()
+        # with_for_update() — блокировка строки для предотвращения race condition
+        task = (
+            self.db.query(WorkflowTask)
+            .filter(WorkflowTask.id == task_id)
+            .with_for_update()
+            .first()
+        )
         if not task:
             raise ValueError(f"Задача {task_id} не найдена")
         if task.status == "completed":
@@ -69,7 +75,7 @@ class WorkflowEngineService:
         task.status = "completed"
         task.decision = decision
         task.comment = comment
-        task.completed_at = datetime.utcnow()
+        task.completed_at = datetime.now(timezone.utc)
 
         execution = task.execution
         self._emit_event(execution.id, "task_completed", {
@@ -81,7 +87,7 @@ class WorkflowEngineService:
         # Продвинуть workflow
         if decision == "reject":
             execution.status = "cancelled"
-            execution.completed_at = datetime.utcnow()
+            execution.completed_at = datetime.now(timezone.utc)
             self._emit_event(execution.id, "workflow_cancelled", {"reason": "rejected"})
         elif decision == "return_for_revision":
             # Вернуть на предыдущий шаг
@@ -159,7 +165,7 @@ class WorkflowEngineService:
         if next_step_idx >= len(steps):
             # Все шаги пройдены
             execution.status = "completed"
-            execution.completed_at = datetime.utcnow()
+            execution.completed_at = datetime.now(timezone.utc)
             self._emit_event(execution.id, "workflow_completed", {})
         else:
             execution.current_step = next_step_idx
@@ -174,7 +180,7 @@ class WorkflowEngineService:
     ) -> WorkflowTask:
         """Создать задачу для шага."""
         sla_hours = step_def.get("sla_hours")
-        sla_deadline = datetime.utcnow() + timedelta(hours=sla_hours) if sla_hours else None
+        sla_deadline = datetime.now(timezone.utc) + timedelta(hours=sla_hours) if sla_hours else None
 
         task = WorkflowTask(
             execution_id=execution.id,

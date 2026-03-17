@@ -118,8 +118,13 @@ class AIApprovalService:
         )
 
     def _get_pending_action(self, action_id: str) -> AIAction | None:
-        """Получить action в статусе pending."""
-        action = self.db.query(AIAction).filter(AIAction.id == action_id).first()
+        """Получить action в статусе pending с блокировкой строки (race condition fix)."""
+        action = (
+            self.db.query(AIAction)
+            .filter(AIAction.id == action_id)
+            .with_for_update()
+            .first()
+        )
         if not action:
             logger.warning(f"AIAction {action_id} not found")
             return None

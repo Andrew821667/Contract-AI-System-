@@ -51,8 +51,8 @@ class Negotiation(Base):
     position_text = Column(Text, nullable=True)
     position_metadata = Column(JSON, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     objections = relationship(
@@ -90,7 +90,7 @@ class NegotiationObjection(Base):
     selection_order = Column(Integer, nullable=True)
     risk_id = Column(String(36), nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # Relationships
     negotiation = relationship("Negotiation", back_populates="objections")

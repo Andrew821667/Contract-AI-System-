@@ -40,8 +40,8 @@ class Organization(Base):
     description = Column(Text, nullable=True)
     settings = Column(JSON, nullable=True)  # org-level настройки (LLM policy, defaults, etc.)
     active = Column(Boolean, default=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     units = relationship("OrganizationUnit", back_populates="organization", cascade="all, delete-orphan")
@@ -62,7 +62,7 @@ class OrganizationUnit(Base):
     name = Column(String(255), nullable=False)
     parent_unit_id = Column(String(36), ForeignKey("organization_units.id", ondelete="SET NULL"), nullable=True, index=True)
     level = Column(String(50), nullable=False, default="department")  # department, division, team
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     organization = relationship("Organization", back_populates="units")
@@ -91,7 +91,7 @@ class OrganizationMembership(Base):
     functional_role = Column(String(50), nullable=False, default="member")  # org_admin, manager, member, viewer
 
     active = Column(Boolean, default=True, index=True)
-    joined_at = Column(DateTime, default=datetime.utcnow)
+    joined_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         UniqueConstraint("user_id", "org_id", name="uq_user_org_membership"),
@@ -118,7 +118,7 @@ class DocumentParticipation(Base):
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     document_id = Column(String(36), ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String(50), nullable=False)  # owner, reviewer, approver, observer, negotiator, signer, ai_supervisor
-    assigned_at = Column(DateTime, default=datetime.utcnow)
+    assigned_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     assigned_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     __table_args__ = (
@@ -144,7 +144,7 @@ class TenantContext(Base):
     mode = Column(String(20), nullable=False, default="standalone")  # standalone | branch
     parent_tenant_id = Column(String(36), ForeignKey("tenant_contexts.id", ondelete="SET NULL"), nullable=True)
     config = Column(JSON, nullable=True)  # branch-specific overrides
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         CheckConstraint(mode.in_(["standalone", "branch"]), name="check_tenant_mode"),
@@ -174,8 +174,8 @@ class UserAgentPolicyProfile(Base):
     allowed_tools = Column(JSON, nullable=True)          # ["document_parser", "risk_scorer"]
     approval_required_for = Column(JSON, nullable=True)  # ["create_comment", "modify_clause"]
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         UniqueConstraint("user_id", "org_id", name="uq_user_org_agent_policy"),

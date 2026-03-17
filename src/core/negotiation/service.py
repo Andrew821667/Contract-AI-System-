@@ -233,17 +233,20 @@ class NegotiationService:
         user_id: str,
     ) -> ObjectionSelectionResponse:
         """Выбрать возражения для включения в протокол переговоров."""
-        # Сбросить предыдущий выбор
-        self.db.query(NegotiationObjection).filter(
-            NegotiationObjection.negotiation_id == request.negotiation_id,
-        ).update({"selected": False, "selection_order": None})
-
-        # Установить новый выбор
-        for idx, obj_id in enumerate(request.selected_objection_ids):
-            self.db.query(NegotiationObjection).filter(
-                NegotiationObjection.id == obj_id,
-                NegotiationObjection.negotiation_id == request.negotiation_id,
-            ).update({"selected": True, "selection_order": idx})
+        # N+1 fix: загружаем все возражения одним запросом и обновляем в памяти
+        objections = (
+            self.db.query(NegotiationObjection)
+            .filter(NegotiationObjection.negotiation_id == request.negotiation_id)
+            .all()
+        )
+        id_to_order = {oid: idx for idx, oid in enumerate(request.selected_objection_ids)}
+        for obj in objections:
+            if obj.id in id_to_order:
+                obj.selected = True
+                obj.selection_order = id_to_order[obj.id]
+            else:
+                obj.selected = False
+                obj.selection_order = None
 
         # Обновляем статус
         negotiation = (

@@ -56,7 +56,7 @@ Be precise and concise in your analysis."""
         - document_classification: str (contract/new_contract/disagreement/tracked_changes)
         - next_action: str (analyzer/generator/disagreement/changes)
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
 
         try:
             # Validate input
@@ -94,7 +94,7 @@ Be precise and concise in your analysis."""
                 'onboarding_complete': True
             }
 
-            duration = (datetime.utcnow() - start_time).total_seconds()
+            duration = (datetime.now(timezone.utc) - start_time).total_seconds()
             self.log_execution('onboarding', state, result_data, duration)
 
             return self.create_success_result(

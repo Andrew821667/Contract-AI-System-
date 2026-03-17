@@ -180,7 +180,7 @@ class ReviewTaskRepository(BaseRepository):
         """>;CG8BL ?@>A@>G5==K5 7040G8"""
         return self.db.query(ReviewTask).filter(
             ReviewTask.status != 'completed',
-            ReviewTask.deadline < datetime.utcnow()
+            ReviewTask.deadline < datetime.now(timezone.utc)
         ).all()
 
     def assign_task(self, task_id: str, user_id: str):
@@ -194,7 +194,7 @@ class ReviewTaskRepository(BaseRepository):
             status='completed',
             decision=decision,
             comments=comments,
-            completed_at=datetime.utcnow()
+            completed_at=datetime.now(timezone.utc)
         )
 
     def create_task(self, contract_id: str, priority: str = 'normal', deadline: Optional[datetime] = None):

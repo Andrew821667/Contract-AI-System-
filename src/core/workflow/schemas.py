@@ -10,12 +10,12 @@ from pydantic import BaseModel, Field
 
 class WorkflowDefinitionCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
-    description: str | None = None
-    document_type: str | None = None
-    jurisdiction: str | None = None
-    org_id: str | None = None
+    description: str | None = Field(None, max_length=2000)
+    document_type: str | None = Field(None, max_length=100)
+    jurisdiction: str | None = Field(None, max_length=100)
+    org_id: str | None = Field(None, max_length=50)
     conditions: dict[str, Any] | None = None
-    steps: list[dict[str, Any]]
+    steps: list[dict[str, Any]] = Field(..., max_length=50)
 
 
 class WorkflowDefinitionRead(BaseModel):

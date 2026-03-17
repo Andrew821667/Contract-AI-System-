@@ -70,7 +70,7 @@ Be precise, thorough, and legally accurate."""
         - generation_params: dict (for feedback)
         - review_required: bool
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
 
         try:
             # Validate input
@@ -117,7 +117,7 @@ Be precise, thorough, and legally accurate."""
                 'generation_complete': True
             }
 
-            duration = (datetime.utcnow() - start_time).total_seconds()
+            duration = (datetime.now(timezone.utc) - start_time).total_seconds()
             self.log_execution('contract_generation', state, result_data, duration)
 
             # Determine next action

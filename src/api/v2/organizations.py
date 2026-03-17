@@ -107,6 +107,7 @@ async def list_members(
             OrganizationMembership.active == True,  # noqa: E712
         )
         .order_by(OrganizationMembership.joined_at.asc())
+        .limit(500)
         .all()
     )
     return members

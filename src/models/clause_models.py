@@ -31,7 +31,7 @@ class ExtractedClause(Base):
     risk_level = Column(String(20), nullable=True)  # critical/high/medium/low/none
     severity_score = Column(Float, nullable=True)  # 0.0-1.0
     tags = Column(Text, nullable=True)  # JSON array of tags
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     contract = relationship("Contract", backref="extracted_clauses")

@@ -121,15 +121,15 @@ class ReviewQueueService:
         # Calculate deadline if not provided
         if not deadline:
             expected_duration = self.SLA_DURATIONS.get(priority, self.SLA_DURATIONS[self.PRIORITY_MEDIUM])
-            deadline = datetime.utcnow() + timedelta(minutes=expected_duration)
+            deadline = datetime.now(timezone.utc) + timedelta(minutes=expected_duration)
         else:
             # Calculate expected duration from deadline
-            expected_duration = int((deadline - datetime.utcnow()).total_seconds() / 60)
+            expected_duration = int((deadline - datetime.now(timezone.utc)).total_seconds() / 60)
 
         # Initialize history
         history = [{
             "status": self.STATUS_PENDING,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "user_id": assigned_by,
             "comment": "Task created"
         }]
@@ -144,7 +144,7 @@ class ReviewQueueService:
             deadline=deadline,
             comments=comments,
             expected_duration=expected_duration,
-            assigned_at=datetime.utcnow() if assigned_to else None,
+            assigned_at=datetime.now(timezone.utc) if assigned_to else None,
             history=json.dumps(history)
         )
 
@@ -188,7 +188,7 @@ class ReviewQueueService:
         # Update task
         task.assigned_to = user_id
         task.assigned_by = assigned_by
-        task.assigned_at = datetime.utcnow()
+        task.assigned_at = datetime.now(timezone.utc)
 
         # Add to history
         self._add_to_history(task, "assigned", assigned_by, f"Assigned to {user.name}")
@@ -253,7 +253,7 @@ class ReviewQueueService:
 
         # Update status
         task.status = self.STATUS_IN_REVIEW
-        task.started_at = datetime.utcnow()
+        task.started_at = datetime.now(timezone.utc)
 
         # Add to history
         self._add_to_history(task, self.STATUS_IN_REVIEW, user_id, "Review started")
@@ -306,18 +306,18 @@ class ReviewQueueService:
 
         task.status = new_status
         task.decision = decision
-        task.completed_at = datetime.utcnow()
+        task.completed_at = datetime.now(timezone.utc)
 
         if comments:
             task.comments = comments
 
         # Calculate actual duration
         if task.started_at:
-            duration = (datetime.utcnow() - task.started_at).total_seconds() / 60
+            duration = (datetime.now(timezone.utc) - task.started_at).total_seconds() / 60
             task.actual_duration = int(duration)
 
         # Check SLA breach
-        if datetime.utcnow() > task.deadline:
+        if datetime.now(timezone.utc) > task.deadline:
             task.sla_breached = True
             logger.warning(f"Task {task_id} breached SLA deadline")
 
@@ -479,7 +479,7 @@ class ReviewQueueService:
 
         query = self.db.query(ReviewTask).filter(
             and_(
-                ReviewTask.deadline < datetime.utcnow(),
+                ReviewTask.deadline < datetime.now(timezone.utc),
                 ReviewTask.status.in_([self.STATUS_PENDING, self.STATUS_IN_REVIEW])
             )
         )
@@ -593,7 +593,7 @@ class ReviewQueueService:
         # Overdue count
         stats["overdue"] = self.db.query(ReviewTask).filter(
             and_(
-                ReviewTask.deadline < datetime.utcnow(),
+                ReviewTask.deadline < datetime.now(timezone.utc),
                 ReviewTask.status.in_([self.STATUS_PENDING, self.STATUS_IN_REVIEW])
             )
         ).count()
@@ -637,7 +637,7 @@ class ReviewQueueService:
 
         history.append({
             "status": status,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "user_id": user_id,
             "comment": comment
         })

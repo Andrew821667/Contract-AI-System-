@@ -39,7 +39,7 @@ class RiskPredictionFeedback(Base):
     
     # Metadata
     model_version = Column(String(50), nullable=True)  # Which model made prediction
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     
     # Training flags
     used_for_training = Column(Boolean, default=False, nullable=False)  # Has this been used in retraining?
@@ -88,7 +88,7 @@ class ModelTrainingBatch(Base):
     deployed_at = Column(DateTime, nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     completed_at = Column(DateTime, nullable=True)
     
     # Errors

@@ -88,7 +88,7 @@ class CommentService:
             return None
 
         comment.status = "resolved"
-        comment.updated_at = datetime.utcnow()
+        comment.updated_at = datetime.now(timezone.utc)
 
         # Закрыть thread если есть
         thread = self.db.query(CommentThread).filter(
@@ -97,7 +97,7 @@ class CommentService:
         if thread:
             thread.status = "resolved"
             thread.resolved_by = user_id
-            thread.resolved_at = datetime.utcnow()
+            thread.resolved_at = datetime.now(timezone.utc)
 
         self.db.flush()
         return comment

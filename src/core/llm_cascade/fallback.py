@@ -9,7 +9,7 @@ Modes:
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any
 
@@ -45,16 +45,16 @@ class FallbackHandler:
         """Записать сбой модели."""
         if model not in self._failures:
             self._failures[model] = []
-        self._failures[model].append(datetime.utcnow())
+        self._failures[model].append(datetime.now(timezone.utc))
         # Trim old entries
-        cutoff = datetime.utcnow() - self._failure_window
+        cutoff = datetime.now(timezone.utc) - self._failure_window
         self._failures[model] = [t for t in self._failures[model] if t > cutoff]
 
     def is_healthy(self, model: str) -> bool:
         """Проверить здоровье модели (circuit breaker)."""
         if model not in self._failures:
             return True
-        cutoff = datetime.utcnow() - self._failure_window
+        cutoff = datetime.now(timezone.utc) - self._failure_window
         recent = [t for t in self._failures[model] if t > cutoff]
         return len(recent) < self._failure_threshold
 
@@ -84,7 +84,7 @@ class FallbackHandler:
             "cascade_level": cascade_level,
             "task_type": task_type,
             "requires_manual_review": True,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
     def get_status(self) -> dict[str, Any]:
@@ -96,7 +96,7 @@ class FallbackHandler:
                     "healthy": self.is_healthy(m),
                     "recent_failures": len([
                         t for t in self._failures.get(m, [])
-                        if t > datetime.utcnow() - self._failure_window
+                        if t > datetime.now(timezone.utc) - self._failure_window
                     ]),
                 }
                 for m in all_models

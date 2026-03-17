@@ -145,7 +145,7 @@ class OptimizedQueries:
         Returns:
             Contracts with risks eagerly loaded
         """
-        cutoff_date = datetime.utcnow() - timedelta(days=days_back)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
 
         query = self.db.query(Contract).options(
             selectinload(Contract.analysis_results).selectinload(
@@ -308,7 +308,7 @@ class OptimizedQueries:
         """
         from sqlalchemy import func
 
-        cutoff_date = datetime.utcnow() - timedelta(days=days_back)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_back)
 
         results = self.db.query(
             model_class.status,

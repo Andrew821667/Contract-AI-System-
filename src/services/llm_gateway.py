@@ -94,7 +94,7 @@ class LLMGateway:
             if cached:
                 # Update hit count and last accessed
                 cached.hit_count += 1
-                cached.last_accessed = datetime.utcnow()
+                cached.last_accessed = datetime.now(timezone.utc)
                 db_session.commit()
                 
                 logger.info(f"Cache HIT: {cache_key[:16]}... (hits: {cached.hit_count})")

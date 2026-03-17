@@ -7,7 +7,7 @@ AI Collaborator Service — основной сервис AI-сессий.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from loguru import logger
@@ -141,7 +141,7 @@ class AICollaboratorService:
         session.total_turns += 2  # user + assistant
         session.total_actions += len(actions)
         session.total_tokens_used += llm_response.get("tokens_input", 0) + llm_response.get("tokens_output", 0)
-        session.updated_at = datetime.utcnow()
+        session.updated_at = datetime.now(timezone.utc)
 
         self.db.flush()
 
@@ -165,7 +165,7 @@ class AICollaboratorService:
             return None
 
         session.status = "closed"
-        session.closed_at = datetime.utcnow()
+        session.closed_at = datetime.now(timezone.utc)
         self.db.flush()
 
         await self.audit_logger.log(

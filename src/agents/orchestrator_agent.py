@@ -183,7 +183,7 @@ class OrchestratorAgent:
         state['history'] = state.get('history', [])
         state['history'].append({
             'agent': 'onboarding',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'result': result.to_dict()
         })
 
@@ -205,7 +205,7 @@ class OrchestratorAgent:
         state['current_agent'] = 'generator'
         state['history'].append({
             'agent': 'generator',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'result': result.to_dict()
         })
 
@@ -226,7 +226,7 @@ class OrchestratorAgent:
         state['current_agent'] = 'analyzer'
         state['history'].append({
             'agent': 'analyzer',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'result': result.to_dict()
         })
 
@@ -247,7 +247,7 @@ class OrchestratorAgent:
         state['current_agent'] = 'disagreement'
         state['history'].append({
             'agent': 'disagreement',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'result': result.to_dict()
         })
 
@@ -280,7 +280,7 @@ class OrchestratorAgent:
             state['current_agent'] = 'review_queue'
             state['history'].append({
                 'agent': 'review_queue',
-                'timestamp': datetime.utcnow().isoformat(),
+                'timestamp': datetime.now(timezone.utc).isoformat(),
                 'action': 'task_created',
                 'task_id': task.id
             })
@@ -303,7 +303,7 @@ class OrchestratorAgent:
         state['current_agent'] = 'changes'
         state['history'].append({
             'agent': 'changes',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'result': result.to_dict()
         })
 
@@ -325,7 +325,7 @@ class OrchestratorAgent:
         state['completed'] = True
         state['history'].append({
             'agent': 'export',
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'result': result.to_dict()
         })
 
@@ -428,7 +428,7 @@ class OrchestratorAgent:
             'data': initial_data or {},
             'history': [],
             'completed': False,
-            'started_at': datetime.utcnow().isoformat()
+            'started_at': datetime.now(timezone.utc).isoformat()
         })
 
         try:

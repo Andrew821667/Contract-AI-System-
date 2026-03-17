@@ -6,7 +6,7 @@ API v2 — AI Actions
 """
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
@@ -56,11 +56,13 @@ def _verify_action_access(action_id: str, user: User, db: Session) -> AIAction:
 )
 async def list_session_actions(
     session_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Возвращает все AI-действия для указанной сессии.
+    Возвращает AI-действия для указанной сессии.
     """
     # IDOR fix: проверяем ownership сессии
     verify_ai_session_ownership(session_id, current_user, db)
@@ -69,6 +71,8 @@ async def list_session_actions(
         db.query(AIAction)
         .filter(AIAction.session_id == session_id)
         .order_by(AIAction.created_at.asc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     return actions

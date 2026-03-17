@@ -30,12 +30,12 @@ router = APIRouter(tags=["Workflow"])
 
 
 class TaskCompleteBody(BaseModel):
-    decision: str = Field(..., description="approve / reject / return_for_revision")
-    comment: str | None = None
+    decision: str = Field(..., max_length=30, description="approve / reject / return_for_revision")
+    comment: str | None = Field(None, max_length=5000)
 
 
 class TaskEscalateBody(BaseModel):
-    reason: str | None = None
+    reason: str | None = Field(None, max_length=2000)
 
 
 # ──────────────────────────────────────────────

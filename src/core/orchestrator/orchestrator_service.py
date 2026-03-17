@@ -101,7 +101,7 @@ class AgentOrchestratorService:
         )
         for step in blocked_steps:
             step.status = "completed"
-            step.completed_at = datetime.utcnow()
+            step.completed_at = datetime.now(timezone.utc)
             run.completed_steps += 1
 
         run.status = "executing"
@@ -125,7 +125,7 @@ class AgentOrchestratorService:
             return None
 
         run.status = "cancelled"
-        run.completed_at = datetime.utcnow()
+        run.completed_at = datetime.now(timezone.utc)
         self.db.flush()
 
         await self.audit_logger.log(
@@ -191,7 +191,7 @@ class AgentOrchestratorService:
             # Проверяем condition предыдущего шага
             if self._should_skip(step, plan.steps, previous_outputs):
                 step.status = "skipped"
-                step.completed_at = datetime.utcnow()
+                step.completed_at = datetime.now(timezone.utc)
                 self.db.flush()
                 continue
 
@@ -207,7 +207,7 @@ class AgentOrchestratorService:
             # Если шаг провалился — прерываем
             if not success and step.status == "failed":
                 run.status = "failed"
-                run.completed_at = datetime.utcnow()
+                run.completed_at = datetime.now(timezone.utc)
                 self.db.flush()
 
                 await self.audit_logger.log(
@@ -226,7 +226,7 @@ class AgentOrchestratorService:
         )
         if all_done:
             run.status = "completed"
-            run.completed_at = datetime.utcnow()
+            run.completed_at = datetime.now(timezone.utc)
             self.db.flush()
 
             await self.audit_logger.log(

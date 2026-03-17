@@ -140,7 +140,7 @@ class SchedulerService:
             return
         try:
             from ..models.database import ScheduledTaskLog
-            finished_at = datetime.utcnow()
+            finished_at = datetime.now(timezone.utc)
             duration = (finished_at - started_at).total_seconds()
 
             log_entry = ScheduledTaskLog(
@@ -164,7 +164,7 @@ class SchedulerService:
 
     def _job_reindex_pending(self):
         """Переиндексация документов с is_vectorized=False"""
-        started_at = datetime.utcnow()
+        started_at = datetime.now(timezone.utc)
         db = self._get_db()
         if not db:
             logger.warning("reindex_pending: нет DB session factory")
@@ -217,14 +217,14 @@ class SchedulerService:
 
     def _job_cleanup_sessions(self):
         """Очистка устаревших сессий (>7 дней)"""
-        started_at = datetime.utcnow()
+        started_at = datetime.now(timezone.utc)
         db = self._get_db()
         if not db:
             return
 
         try:
             from ..models.auth_models import UserSession
-            cutoff = datetime.utcnow() - timedelta(days=7)
+            cutoff = datetime.now(timezone.utc) - timedelta(days=7)
             expired = db.query(UserSession).filter(
                 UserSession.expires_at < cutoff
             ).all()
@@ -252,7 +252,7 @@ class SchedulerService:
 
     def _job_aggregate_analytics(self):
         """Агрегация аналитических метрик за последний час"""
-        started_at = datetime.utcnow()
+        started_at = datetime.now(timezone.utc)
         db = self._get_db()
         if not db:
             return
@@ -261,7 +261,7 @@ class SchedulerService:
             from sqlalchemy import func
             from ..models.analytics_models import AnalyticsMetricLog, AggregatedMetric
 
-            hour_ago = datetime.utcnow() - timedelta(hours=1)
+            hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
 
             # Подсчёт метрик за последний час
             metrics_count = db.query(AnalyticsMetricLog).filter(
