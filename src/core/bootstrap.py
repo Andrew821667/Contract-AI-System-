@@ -20,6 +20,9 @@ from src.core.ai_collaboration.audit_service import AIAuditService
 from src.core.ai_collaboration.context_builder import AIContextBuilderService
 from src.core.ai_collaboration.llm_adapter import LLMRouterAdapter
 from src.core.ai_collaboration.session_service import AICollaboratorService
+from src.core.llm_cascade.routing_policy import LLMRoutingPolicyService
+from src.core.llm_cascade.cascade_manager import CascadeManager
+from src.core.llm_cascade.fallback import FallbackHandler
 from src.core.agents.delegator import AgentDelegationService
 from src.core.agents.registry import AgentRegistryService
 from src.core.audit.service import AuditQueryService
@@ -93,6 +96,11 @@ class CoreServices:
         # Audit
         self.audit_query: AuditQueryService | None = None
 
+        # LLM Cascade (Phase 11)
+        self.llm_routing_policy: LLMRoutingPolicyService | None = None
+        self.cascade_manager: CascadeManager | None = None
+        self.fallback_handler: FallbackHandler | None = None
+
 
 def bootstrap(db: Session) -> CoreServices:
     """
@@ -135,6 +143,15 @@ def bootstrap(db: Session) -> CoreServices:
 
     # ── 6. AI Collaboration ──────────────────────────────────────────
     svc.llm_router = LLMRouterAdapter()
+
+    # ── 6a. LLM Cascade (Phase 11) ───────────────────────────────────
+    svc.llm_routing_policy = LLMRoutingPolicyService(db)
+    svc.fallback_handler = FallbackHandler()
+    svc.cascade_manager = CascadeManager(
+        routing_policy_service=svc.llm_routing_policy,
+        fallback_handler=svc.fallback_handler,
+    )
+
     svc.context_builder = AIContextBuilderService(db)
     svc.action_parser = AIActionParserService(db)
     svc.approval_service = AIApprovalService(db)

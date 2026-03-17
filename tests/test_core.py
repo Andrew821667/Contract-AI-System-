@@ -1096,3 +1096,155 @@ class TestEventDispatcher:
         dispatcher.set_webhook_filter({"contract.uploaded", "contract.approved"})
         assert dispatcher._webhook_event_filter is not None
         assert "contract.uploaded" in dispatcher._webhook_event_filter
+
+
+# ═══════════════════════════════════════════════
+# Phase 11: LLM Cascade Hardening
+# ═══════════════════════════════════════════════
+
+
+class TestLLMRoutingPolicy:
+    """Тесты LLM routing policy."""
+
+    def test_default_policy(self):
+        from src.core.llm_cascade.routing_policy import LLMRoutingPolicy
+
+        policy = LLMRoutingPolicy()
+        assert policy.local_first is False
+        assert policy.external_allowed is True
+        assert policy.max_cost_per_request_usd == 0.50
+        assert policy.fallback_mode == "cascade"
+        assert policy.confidentiality_level == "standard"
+
+    def test_restricted_policy(self):
+        from src.core.llm_cascade.routing_policy import LLMRoutingPolicy
+
+        policy = LLMRoutingPolicy(
+            confidentiality_level="restricted",
+            local_first=True,
+            external_allowed=False,
+            blocked_models=["gpt-4o", "claude-sonnet-4-20250514"],
+            local_models=["deepseek-v3"],
+        )
+        assert policy.local_first is True
+        assert policy.external_allowed is False
+        assert "gpt-4o" in policy.blocked_models
+
+    def test_apply_policy_blocked_model(self):
+        from src.core.llm_cascade.routing_policy import LLMRoutingPolicy, LLMRoutingPolicyService
+
+        policy = LLMRoutingPolicy(
+            blocked_models=["gpt-4o"],
+            default_model="deepseek-v3",
+        )
+        svc = LLMRoutingPolicyService(db=None)  # type: ignore[arg-type]
+        model, reason = svc.apply_policy("gpt-4o", policy)
+        assert model == "deepseek-v3"
+        assert "заблокирована" in reason
+
+    def test_apply_policy_sensitivity_override(self):
+        from src.core.llm_cascade.routing_policy import LLMRoutingPolicy, LLMRoutingPolicyService
+
+        policy = LLMRoutingPolicy(
+            high_sensitivity_model="claude-sonnet-4-20250514",
+        )
+        svc = LLMRoutingPolicyService(db=None)  # type: ignore[arg-type]
+        model, reason = svc.apply_policy("deepseek-v3", policy, sensitivity="high")
+        assert model == "claude-sonnet-4-20250514"
+        assert "чувствительность" in reason.lower()
+
+    def test_apply_policy_external_blocked(self):
+        from src.core.llm_cascade.routing_policy import LLMRoutingPolicy, LLMRoutingPolicyService
+
+        policy = LLMRoutingPolicy(
+            local_first=True,
+            external_allowed=False,
+            local_models=["deepseek-v3"],
+        )
+        svc = LLMRoutingPolicyService(db=None)  # type: ignore[arg-type]
+        model, reason = svc.apply_policy("gpt-4o", policy)
+        assert model == "deepseek-v3"
+        assert "External" in reason
+
+
+class TestCascadeManager:
+    """Тесты CascadeManager."""
+
+    def test_select_model_for_level(self, test_db):
+        from src.core.llm_cascade.routing_policy import LLMRoutingPolicyService
+        from src.core.llm_cascade.cascade_manager import CascadeManager
+        from src.core.llm_cascade.fallback import FallbackHandler
+
+        routing_svc = LLMRoutingPolicyService(db=test_db)
+        fallback = FallbackHandler()
+        manager = CascadeManager(routing_svc, fallback)
+
+        result = manager.select_model_for_level("orchestration")
+        assert "model" in result
+        assert "fallback_chain" in result
+        assert isinstance(result["fallback_chain"], list)
+        assert result["max_tokens"] == 2048  # orchestration level
+
+    def test_cascade_levels(self):
+        from src.core.llm_cascade.cascade_manager import CASCADE_LEVELS
+        assert "orchestration" in CASCADE_LEVELS
+        assert "agent" in CASCADE_LEVELS
+        assert "expert" in CASCADE_LEVELS
+
+
+class TestFallbackHandler:
+    """Тесты FallbackHandler."""
+
+    def test_circuit_breaker(self):
+        from src.core.llm_cascade.fallback import FallbackHandler
+
+        handler = FallbackHandler()
+        assert handler.is_healthy("deepseek-v3") is True
+
+        # Record failures
+        for _ in range(3):
+            handler.record_failure("deepseek-v3")
+
+        assert handler.is_healthy("deepseek-v3") is False
+        assert handler.is_healthy("gpt-4o") is True  # Other model unaffected
+
+    def test_get_healthy_models(self):
+        from src.core.llm_cascade.fallback import FallbackHandler
+
+        handler = FallbackHandler()
+        for _ in range(3):
+            handler.record_failure("gpt-4o")
+
+        healthy = handler.get_healthy_models(["deepseek-v3", "gpt-4o", "gpt-4o-mini"])
+        assert "deepseek-v3" in healthy
+        assert "gpt-4o" not in healthy
+        assert "gpt-4o-mini" in healthy
+
+    def test_clear_failures(self):
+        from src.core.llm_cascade.fallback import FallbackHandler
+
+        handler = FallbackHandler()
+        for _ in range(3):
+            handler.record_failure("deepseek-v3")
+        assert handler.is_healthy("deepseek-v3") is False
+
+        handler.clear_failures("deepseek-v3")
+        assert handler.is_healthy("deepseek-v3") is True
+
+    def test_get_status(self):
+        from src.core.llm_cascade.fallback import FallbackHandler
+
+        handler = FallbackHandler()
+        status = handler.get_status()
+        assert "models" in status
+        assert "deepseek-v3" in status["models"]
+        assert status["models"]["deepseek-v3"]["healthy"] is True
+
+    @pytest.mark.asyncio
+    async def test_handle_total_failure(self):
+        from src.core.llm_cascade.fallback import FallbackHandler
+
+        handler = FallbackHandler()
+        result = await handler.handle_total_failure("agent", "analysis")
+        assert result["status"] == "degraded"
+        assert result["requires_manual_review"] is True

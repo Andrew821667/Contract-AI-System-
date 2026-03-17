@@ -199,13 +199,18 @@ Contract-AI-System = hierarchical LLM cascade
 - [x] 10 новых тестов (49 total core tests)
 - [ ] **Frontend:** Integration settings UI
 
-### Phase 11: LLM Cascade Hardening
-**Статус:** ⏳ Ожидает Phase 10
+### Phase 11: LLM Cascade Hardening — ВЫПОЛНЕНО ✅
+**Статус:** ✅ Завершено (2026-03-17)
 
-Deliverables:
-- [ ] LLM routing policies (tenant, sensitivity, cost, latency, confidentiality)
-- [ ] Local-first / external toggle, 3-level cascade
-- [ ] Fallback modes (LLM unavailable → workflow continues)
+Результат:
+- [x] LLMRoutingPolicy — tenant/org-level: allowed/blocked models, cost budget, confidentiality level
+- [x] LLMRoutingPolicyService — cascade lookup (org → tenant → platform), policy application
+- [x] CascadeManager — 3-level cascade (orchestration/agent/expert) с policy enforcement
+- [x] FallbackHandler — circuit breaker (3 failures/5min), graceful degradation
+- [x] FallbackMode — 4 режима: cascade, local_only, fail_fast, queue
+- [x] Local-first / external toggle через policy
+- [x] Bootstrap: все Phase 11 сервисы зарегистрированы в CoreServices
+- [x] 12 новых тестов (61 total core tests)
 
 ### Phase 12: Branch Mode + Enterprise Hardening
 **Статус:** ⏳ Ожидает Phase 11
