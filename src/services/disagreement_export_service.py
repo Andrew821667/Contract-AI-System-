@@ -596,7 +596,7 @@ class DisagreementExportService:
 
         # Create realistic-looking ID based on file hash
         with open(file_path, 'rb') as f:
-            file_hash = hashlib.md5(f.read()).hexdigest()[:8]
+            file_hash = hashlib.sha256(f.read()).hexdigest()[:8]
 
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
         doc_id = f"{edo_system.upper()}-{timestamp}-{file_hash}"

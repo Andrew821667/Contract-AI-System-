@@ -270,6 +270,6 @@ def initialize_knowledge_base():
                     doc["content"]
                 )
             except Exception as e:
-                print(f"Error adding document: {e}")
+                logger.error(f"Error adding document: {e}")
 
     return kb_manager

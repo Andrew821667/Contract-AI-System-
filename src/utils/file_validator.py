@@ -227,7 +227,7 @@ def generate_safe_filepath(upload_dir: str, original_filename: str) -> Tuple[str
 
     # Add hash to avoid collisions and track versions
     name, ext = os.path.splitext(safe_name)
-    timestamp = hashlib.md5(str(os.urandom(16)).encode()).hexdigest()[:8]
+    timestamp = os.urandom(8).hex()[:8]
     safe_name = f"{name}_{timestamp}{ext}"
 
     # Ensure upload directory exists
@@ -324,7 +324,7 @@ def save_uploaded_file_securely(
     # If file exists, add hash to avoid collision
     if os.path.exists(full_path):
         name, ext = os.path.splitext(safe_filename)
-        timestamp = hashlib.md5(str(os.urandom(16)).encode()).hexdigest()[:8]
+        timestamp = os.urandom(8).hex()[:8]
         safe_filename = f"{name}_{timestamp}{ext}"
         full_path = os.path.join(upload_dir, safe_filename)
 

@@ -7,7 +7,9 @@ API v2 — Workflow
 """
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -79,7 +81,7 @@ async def create_workflow_definition(
     summary="Мои задачи",
 )
 async def get_my_tasks(
-    status_filter: str = "pending",
+    status_filter: Literal["pending", "in_progress", "completed", "cancelled"] = Query("pending"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> List[WorkflowTaskRead]:

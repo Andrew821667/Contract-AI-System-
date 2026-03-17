@@ -95,11 +95,13 @@ from src.api.dependencies import get_current_user, require_admin  # noqa: E402
 
 
 def get_client_ip(request: Request) -> Optional[str]:
-    """Extract client IP from request"""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else None
+    """Extract client IP, trusting X-Forwarded-For only from internal proxies."""
+    direct_ip = request.client.host if request.client else None
+    if direct_ip and direct_ip.startswith(("172.", "10.", "192.168.", "127.")):
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    return direct_ip
 
 
 # ==================== Router Setup ====================

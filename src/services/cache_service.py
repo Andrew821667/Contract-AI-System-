@@ -300,12 +300,12 @@ class CacheService:
                 # Add arguments to key
                 if args:
                     args_str = json.dumps(args, sort_keys=True, ensure_ascii=False)
-                    args_hash = hashlib.md5(args_str.encode()).hexdigest()[:8]
+                    args_hash = hashlib.sha256(args_str.encode()).hexdigest()[:8]
                     key_parts.append(args_hash)
 
                 if kwargs:
                     kwargs_str = json.dumps(kwargs, sort_keys=True, ensure_ascii=False)
-                    kwargs_hash = hashlib.md5(kwargs_str.encode()).hexdigest()[:8]
+                    kwargs_hash = hashlib.sha256(kwargs_str.encode()).hexdigest()[:8]
                     key_parts.append(kwargs_hash)
 
                 cache_key = ":".join(key_parts)

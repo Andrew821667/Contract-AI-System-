@@ -1,6 +1,7 @@
 """
 Database models and connection management
 """
+from loguru import logger
 from .database import Base, engine, SessionLocal, get_db, Template, Contract, AnalysisResult, ReviewTask, LegalDocument, ExportLog, ContractFeedback, ScheduledTaskLog
 from .auth_models import (
     User, UserSession, DemoToken, AuditLog,
@@ -18,7 +19,7 @@ from .clause_models import ExtractedClause
 def init_db():
     """Initialize database (create all tables)"""
     Base.metadata.create_all(bind=engine)
-    print("Database initialized")
+    logger.info("Database initialized")
 
 
 __all__ = [

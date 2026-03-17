@@ -7,6 +7,7 @@ import streamlit as st
 from enum import Enum
 from typing import Optional, Dict, Any
 from datetime import datetime, timezone
+from loguru import logger
 from src.models import SessionLocal, User
 
 
@@ -352,7 +353,7 @@ def create_demo_users():
 
         db.commit()
     except Exception as e:
-        print(f"Error creating seed users: {e}")
+        logger.error(f"Error creating seed users: {e}")
         db.rollback()
     finally:
         db.close()

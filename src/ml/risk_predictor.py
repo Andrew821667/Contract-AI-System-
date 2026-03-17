@@ -25,6 +25,7 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 from enum import Enum
+from loguru import logger
 
 try:
     from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
@@ -34,9 +35,7 @@ try:
     SKLEARN_AVAILABLE = True
 except ImportError:
     SKLEARN_AVAILABLE = False
-    print("⚠️  scikit-learn not installed. ML Risk Predictor will use fallback mode.")
-
-from loguru import logger
+    logger.warning("scikit-learn not installed. ML Risk Predictor will use fallback mode.")
 
 
 class RiskLevel(str, Enum):

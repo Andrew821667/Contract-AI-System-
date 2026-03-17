@@ -521,7 +521,7 @@ class EnhancedRAGSystem:
             Knowledge entry ID
         """
         # Generate unique ID
-        kb_id = hashlib.md5(f"{title}_{datetime.now().isoformat()}".encode()).hexdigest()[:12]
+        kb_id = hashlib.sha256(f"{title}_{datetime.now().isoformat()}".encode()).hexdigest()[:12]
 
         # Create KB entry
         kb_entry = CompanyKnowledge(
@@ -691,7 +691,7 @@ class EnhancedRAGSystem:
                 continue
 
             # Generate document ID
-            doc_id = hashlib.md5(f"{title}_{datetime.now().isoformat()}".encode()).hexdigest()[:12]
+            doc_id = hashlib.sha256(f"{title}_{datetime.now().isoformat()}".encode()).hexdigest()[:12]
 
             # Chunk document
             chunks = self.chunker.chunk_text(content, document_id=title)
@@ -881,7 +881,7 @@ class EnhancedRAGSystem:
     def _get_cache_key(self, query: str, top_k: int, *args) -> str:
         """Generate cache key for query"""
         key_data = f"{query}_{top_k}_{'_'.join(map(str, args))}"
-        return hashlib.md5(key_data.encode()).hexdigest()
+        return hashlib.sha256(key_data.encode()).hexdigest()
 
     def _get_from_cache(self, cache_key: str) -> Optional[List[SearchResult]]:
         """Get results from cache if not expired"""
