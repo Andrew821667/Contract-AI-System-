@@ -7,8 +7,7 @@ PlanStep — шаг плана (tool_call, agent_delegation, approval_checkpoint
 OrchestratorCheckpoint — approval/review checkpoint.
 """
 
-from datetime import datetime
-
+from datetime import datetime, timezone
 from sqlalchemy import (
     CheckConstraint,
     Column,

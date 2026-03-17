@@ -6,8 +6,7 @@ ClausePolicy — политика использования клауз (approve
 GeneratedDocumentTrace — traceability генерации (какой шаблон, какие переменные, какой AI).
 """
 
-from datetime import datetime
-
+from datetime import datetime, timezone
 from sqlalchemy import (
     CheckConstraint,
     Column,

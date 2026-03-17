@@ -4,7 +4,7 @@ Changes Analyzer Agent - Analyze changes between contract versions
 """
 import json
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from loguru import logger
 
 from .base_agent import BaseAgent, AgentResult

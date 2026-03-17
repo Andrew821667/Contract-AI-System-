@@ -265,7 +265,7 @@ async def websocket_notifications(
 
             # Check demo expiration
             if user.is_demo and user.demo_expires:
-                from datetime import datetime, timedelta
+                from datetime import datetime, timedelta, timezone
                 time_left = user.demo_expires - datetime.now(timezone.utc)
                 if timedelta(0) < time_left < timedelta(hours=1):
                     await websocket.send_json({

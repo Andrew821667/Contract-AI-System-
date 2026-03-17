@@ -11,7 +11,7 @@ Provides common functionality:
 """
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 from loguru import logger
 from sqlalchemy.orm import Session
 

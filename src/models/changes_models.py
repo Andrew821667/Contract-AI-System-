@@ -3,7 +3,7 @@
 SQLAlchemy Models for Changes Analyzer
 Models for contract versioning, change tracking, and analysis
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     Boolean, Column, String, Text, Integer, Float,
     DateTime, ForeignKey, CheckConstraint, JSON, UniqueConstraint

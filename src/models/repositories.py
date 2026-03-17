@@ -4,7 +4,7 @@ Repository pattern 4;O @01>BK A 107>9 40==KE
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, and_
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 
 from .database import (

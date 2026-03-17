@@ -2,7 +2,7 @@
 Clause Library Models
 Stores extracted clauses from contract analysis for the Clause Library feature.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     Column, String, Text, Integer, Float,
     DateTime, ForeignKey, Index, UniqueConstraint

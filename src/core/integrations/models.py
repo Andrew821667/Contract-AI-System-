@@ -6,8 +6,7 @@ WebhookDelivery — лог доставки webhook.
 DomainEvent — внутренние события системы.
 """
 
-from datetime import datetime
-
+from datetime import datetime, timezone
 from sqlalchemy import (
     CheckConstraint,
     Column,

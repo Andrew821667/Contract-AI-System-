@@ -4,8 +4,7 @@ Analytics Models - Database models for storing analytics metrics
 """
 from sqlalchemy import Column, String, Float, Integer, DateTime, Text, JSON, ForeignKey, Index
 from sqlalchemy.orm import relationship
-from datetime import datetime
-
+from datetime import datetime, timezone
 from .database import Base
 
 

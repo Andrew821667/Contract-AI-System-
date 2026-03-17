@@ -7,7 +7,7 @@ Contract AI System — Base Types
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 from uuid import uuid4

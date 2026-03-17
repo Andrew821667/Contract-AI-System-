@@ -7,8 +7,7 @@ WorkflowTask — задача на конкретного участника.
 WorkflowEvent — событие workflow (для audit trail).
 """
 
-from datetime import datetime
-
+from datetime import datetime, timezone
 from sqlalchemy import (
     Boolean,
     CheckConstraint,

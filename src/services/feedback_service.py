@@ -4,7 +4,7 @@ Feedback Service - Collect and export training data for ML fine-tuning
 """
 import json
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from loguru import logger
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func

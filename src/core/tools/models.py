@@ -5,8 +5,7 @@ ToolDefinition — регистрация инструмента в систем
 ToolInvocation — лог каждого вызова инструмента.
 """
 
-from datetime import datetime
-
+from datetime import datetime, timezone
 from sqlalchemy import (
     Boolean,
     CheckConstraint,

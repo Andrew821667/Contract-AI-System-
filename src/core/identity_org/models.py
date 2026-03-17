@@ -10,8 +10,7 @@ Identity & Organization — SQLAlchemy модели.
 - user_agent_policy_profiles — AI-policy на уровне пользователя
 """
 
-from datetime import datetime
-
+from datetime import datetime, timezone
 from sqlalchemy import (
     Boolean,
     CheckConstraint,

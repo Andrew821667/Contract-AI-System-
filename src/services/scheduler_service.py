@@ -8,7 +8,7 @@ Scheduler Service — фоновые задачи системы Contract AI
 - Агрегация аналитических метрик
 """
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List
 
 from loguru import logger

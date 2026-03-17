@@ -7,8 +7,7 @@ import hashlib
 from typing import Dict, Any, Literal, Optional, Union
 from tenacity import retry, stop_after_attempt, wait_exponential
 from loguru import logger
-from datetime import datetime
-
+from datetime import datetime, timezone
 from config.settings import settings
 from ..utils.rate_limiter import get_global_rate_limiter, RateLimitExceeded
 

@@ -5,8 +5,7 @@ Policy Engine — SQLAlchemy модели.
 Более специфичный уровень переопределяет более общий.
 """
 
-from datetime import datetime
-
+from datetime import datetime, timezone
 from sqlalchemy import (
     Boolean,
     CheckConstraint,

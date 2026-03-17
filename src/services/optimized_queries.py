@@ -9,7 +9,7 @@ Optimized Queries - Performance-optimized database queries
 - Query result caching
 """
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session, joinedload, selectinload
 from loguru import logger
 

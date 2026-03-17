@@ -6,8 +6,7 @@ Integrates with ClauseExtractor for extraction and stores results in DB.
 """
 import json
 from typing import Dict, List, Optional, Any
-from datetime import datetime
-
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from loguru import logger

@@ -3,7 +3,7 @@
 SQLAlchemy Models for Contract Analyzer
 Models for risks, recommendations, annotations, suggested changes, and feedback
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     Boolean, Column, String, Text, Integer, Float,
     DateTime, ForeignKey, CheckConstraint, JSON

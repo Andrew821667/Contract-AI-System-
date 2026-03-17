@@ -6,8 +6,7 @@ Negotiation — процесс переговоров по документу.
 NegotiationObjection — сгенерированное возражение.
 """
 
-from datetime import datetime
-
+from datetime import datetime, timezone
 from sqlalchemy import (
     Boolean,
     Column,

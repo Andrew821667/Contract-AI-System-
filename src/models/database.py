@@ -2,7 +2,7 @@
 SQLAlchemy <>45;8 4;O Contract AI System
 >445@6:0 PostgreSQL 8 SQLite
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import (
     Boolean, Column, String, Text, Integer, Float,

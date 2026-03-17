@@ -8,8 +8,7 @@ AIActionApproval — решение человека по действию.
 AIAuditRecord — детальный аудит AI-взаимодействий.
 """
 
-from datetime import datetime
-
+from datetime import datetime, timezone
 from sqlalchemy import (
     Boolean,
     CheckConstraint,

@@ -6,8 +6,7 @@ AgentInvocation — лог вызова агента.
 AgentDelegation — делегация задачи от одного агента другому.
 """
 
-from datetime import datetime
-
+from datetime import datetime, timezone
 from sqlalchemy import (
     Boolean,
     CheckConstraint,

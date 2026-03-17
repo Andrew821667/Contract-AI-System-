@@ -4,7 +4,7 @@ Disagreement Processor Agent - Generate objections to external contracts
 """
 import json
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from lxml import etree
 from loguru import logger
 

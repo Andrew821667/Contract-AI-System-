@@ -21,7 +21,7 @@ Author: AI Contract System
 
 import os
 from typing import Dict, List, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, asdict
 from collections import defaultdict
 from enum import Enum
@@ -123,8 +123,7 @@ class AnalyticsService:
         """Load historical metrics from database"""
         try:
             from ..models import AnalyticsMetricLog
-            from datetime import datetime, timedelta
-
+            from datetime import datetime, timedelta, timezone
             # Load metrics from last 90 days
             cutoff_date = datetime.now(timezone.utc) - timedelta(days=90)
 

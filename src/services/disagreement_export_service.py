@@ -4,7 +4,7 @@ Disagreement Export Service - Export disagreements to various formats
 Supports: DOCX, PDF, Email, EDO
 """
 from typing import Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import hashlib
 from loguru import logger
@@ -591,7 +591,7 @@ class DisagreementExportService:
         time.sleep(0.5)
 
         # Generate simulated document ID
-        from datetime import datetime
+        from datetime import datetime, timezone
         import hashlib
 
         # Create realistic-looking ID based on file hash

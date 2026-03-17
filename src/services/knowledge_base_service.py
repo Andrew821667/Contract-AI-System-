@@ -8,7 +8,7 @@ Knowledge Base Service — управление RAG базой знаний
 import hashlib
 import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Callable
 

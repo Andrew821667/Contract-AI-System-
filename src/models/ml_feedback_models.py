@@ -3,8 +3,7 @@
 ML Feedback Models - Store user feedback for model retraining
 """
 from sqlalchemy import Column, String, Integer, DateTime, Text, JSON, Float, Boolean, Index
-from datetime import datetime
-
+from datetime import datetime, timezone
 from .database import Base
 
 

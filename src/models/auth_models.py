@@ -8,7 +8,7 @@ Includes:
 - AuditLog for compliance and security tracking
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from sqlalchemy import (
     Boolean, Column, String, Text, Integer, Float,
