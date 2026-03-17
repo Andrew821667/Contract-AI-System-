@@ -153,8 +153,9 @@ class RBACService:
                 ).first()
                 if membership:
                     roles.append(membership.functional_role or "viewer")
-            except Exception:
-                pass
+            except Exception as exc:
+                from loguru import logger
+                logger.error(f"RBAC: failed to load org membership for user={user_id}, org={org_id}: {exc}")
         # 2. Check User.role
         try:
             from src.models.auth_models import User
@@ -163,6 +164,7 @@ class RBACService:
                 role_name = getattr(user, "role", None)
                 if role_name and role_name not in roles:
                     roles.append(role_name)
-        except Exception:
-            pass
+        except Exception as exc:
+            from loguru import logger
+            logger.error(f"RBAC: failed to load user role for user={user_id}: {exc}")
         return roles or ["viewer"]  # Default to viewer

@@ -25,7 +25,37 @@ from .schemas import (
 )
 
 # In-memory кеш сравнений (per-process). В production → Redis.
-_comparison_cache: dict[str, dict[str, Any]] = {}
+# Bounded: максимум 256 записей, LRU-вытеснение.
+from functools import lru_cache as _lru_cache
+from collections import OrderedDict
+
+_COMPARISON_CACHE_MAX = 256
+
+
+class _BoundedCache:
+    """Простой LRU-кеш с ограничением по размеру."""
+    def __init__(self, maxsize: int = _COMPARISON_CACHE_MAX):
+        self._data: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self._maxsize = maxsize
+
+    def get(self, key: str) -> dict[str, Any] | None:
+        if key in self._data:
+            self._data.move_to_end(key)
+            return self._data[key]
+        return None
+
+    def __setitem__(self, key: str, value: dict[str, Any]) -> None:
+        if key in self._data:
+            self._data.move_to_end(key)
+        self._data[key] = value
+        if len(self._data) > self._maxsize:
+            self._data.popitem(last=False)
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._data
+
+
+_comparison_cache = _BoundedCache()
 
 
 class VersionIntelligenceService:

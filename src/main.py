@@ -63,8 +63,24 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"❌ Error creating database tables: {e}")
 
-    # Initialize services
-    logger.info("🔧 Initializing services...")
+    # Initialize core services (Phase 0-12)
+    logger.info("🔧 Initializing core services...")
+    try:
+        from src.core.bootstrap import bootstrap
+
+        startup_db = SessionLocal()
+        try:
+            core_services = bootstrap(startup_db)
+            app.state.core_services = core_services
+            logger.info("✅ Core services bootstrapped successfully")
+        except Exception as e:
+            logger.warning(f"⚠️ Core services bootstrap skipped: {e}")
+            app.state.core_services = None
+        finally:
+            startup_db.close()
+    except Exception as e:
+        logger.warning(f"⚠️ Core services import failed: {e}")
+        app.state.core_services = None
 
     yield
 

@@ -7,11 +7,16 @@ API v2 — Negotiations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from loguru import logger
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
+from src.api.v2.dependencies import (
+    get_core_services,
+    verify_document_access,
+    verify_negotiation_ownership,
+)
 from src.models.database import get_db
 from src.models.auth_models import User
 from src.core.negotiation.models import Negotiation
@@ -30,11 +35,17 @@ from src.core.negotiation.service import NegotiationService
 router = APIRouter(prefix="/negotiations", tags=["Negotiations"])
 
 
-def _get_negotiation_service(db: Session) -> NegotiationService:
-    """Создать NegotiationService с минимальными зависимостями.
-
-    В production зависимости придут из CoreServices bootstrap.
-    """
+def _get_negotiation_service(db: Session, request: Request) -> NegotiationService:
+    """Создать NegotiationService с реальными зависимостями из CoreServices."""
+    core = getattr(request.app.state, "core_services", None)
+    if core:
+        return NegotiationService(
+            db=db,
+            tool_invoker=core.tool_invoker,
+            audit_logger=core.audit_service,
+            policy_resolver=core.policy_resolver,
+        )
+    # Graceful fallback для dev-среды без bootstrap
     return NegotiationService(
         db=db,
         tool_invoker=None,  # type: ignore[arg-type]
@@ -53,24 +64,17 @@ def _get_negotiation_service(db: Session) -> NegotiationService:
 )
 async def start_negotiation(
     body: NegotiationStartRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Создаёт новый процесс переговоров по документу.
-    Привязывает к текущему пользователю и указанному документу.
     """
-    # Проверяем существование документа
-    from src.models.database import Contract
+    # IDOR fix: проверяем доступ к документу
+    verify_document_access(body.document_id, current_user, db)
 
-    contract = db.query(Contract).filter(Contract.id == body.document_id).first()
-    if not contract:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Документ с id={body.document_id} не найден",
-        )
-
-    svc = _get_negotiation_service(db)
+    svc = _get_negotiation_service(db, request)
 
     try:
         result = await svc.start_negotiation(body, user_id=current_user.id)
@@ -90,25 +94,17 @@ async def start_negotiation(
 )
 async def generate_objections(
     body: ObjectionGenerateRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Генерирует AI-возражения для указанного процесса переговоров.
-    Использует анализ рисков и LLM для формулировки возражений.
     """
-    negotiation = (
-        db.query(Negotiation)
-        .filter(Negotiation.id == body.negotiation_id)
-        .first()
-    )
-    if not negotiation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Переговоры с id={body.negotiation_id} не найдены",
-        )
+    # IDOR fix: проверяем ownership переговоров
+    verify_negotiation_ownership(body.negotiation_id, current_user, db)
 
-    svc = _get_negotiation_service(db)
+    svc = _get_negotiation_service(db, request)
 
     try:
         result = await svc.generate_objections(body, user_id=current_user.id)
@@ -128,25 +124,17 @@ async def generate_objections(
 )
 async def select_objections(
     body: ObjectionSelectionRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Выбирает возражения для включения в протокол переговоров.
-    Позволяет задать приоритетный порядок возражений.
     """
-    negotiation = (
-        db.query(Negotiation)
-        .filter(Negotiation.id == body.negotiation_id)
-        .first()
-    )
-    if not negotiation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Переговоры с id={body.negotiation_id} не найдены",
-        )
+    # IDOR fix: проверяем ownership
+    verify_negotiation_ownership(body.negotiation_id, current_user, db)
 
-    svc = _get_negotiation_service(db)
+    svc = _get_negotiation_service(db, request)
     result = await svc.select_objections(body, user_id=current_user.id)
     return result
 
@@ -161,25 +149,17 @@ async def select_objections(
 )
 async def prepare_position(
     body: NegotiationPositionRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Подготавливает переговорную позицию на основе выбранных возражений,
-    стратегии и фокус-областей. Использует LLM для генерации.
+    Подготавливает переговорную позицию на основе выбранных возражений.
     """
-    negotiation = (
-        db.query(Negotiation)
-        .filter(Negotiation.id == body.negotiation_id)
-        .first()
-    )
-    if not negotiation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Переговоры с id={body.negotiation_id} не найдены",
-        )
+    # IDOR fix: проверяем ownership
+    verify_negotiation_ownership(body.negotiation_id, current_user, db)
 
-    svc = _get_negotiation_service(db)
+    svc = _get_negotiation_service(db, request)
 
     try:
         result = await svc.prepare_position(body, user_id=current_user.id)
@@ -202,19 +182,10 @@ async def get_negotiation(
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
-    Возвращает полную информацию о процессе переговоров,
-    включая статус, количество возражений и приоритеты.
+    Возвращает полную информацию о процессе переговоров.
     """
-    negotiation = (
-        db.query(Negotiation)
-        .filter(Negotiation.id == negotiation_id)
-        .first()
-    )
-    if not negotiation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Переговоры с id={negotiation_id} не найдены",
-        )
+    # IDOR fix: проверяем ownership
+    negotiation = verify_negotiation_ownership(negotiation_id, current_user, db)
 
     return {
         "id": negotiation.id,

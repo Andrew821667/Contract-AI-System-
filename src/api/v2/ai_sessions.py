@@ -4,13 +4,17 @@ API v2 — AI Sessions
 
 CRUD для AI-сессий: создание, список, отправка сообщений, история.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
+from src.api.v2.dependencies import (
+    verify_ai_session_ownership,
+    verify_document_access,
+)
 from src.models.database import get_db, generate_uuid
 from src.models.auth_models import User
 from src.core.ai_collaboration.models import (
@@ -48,15 +52,8 @@ async def create_ai_session(
     Создаёт новую AI-сессию для указанного документа.
     Привязывает сессию к текущему пользователю.
     """
-    # Проверяем существование документа
-    from src.models.database import Contract
-
-    contract = db.query(Contract).filter(Contract.id == document_id).first()
-    if not contract:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Документ с id={document_id} не найден",
-        )
+    # IDOR fix: проверяем доступ к документу
+    verify_document_access(document_id, current_user, db)
 
     session = AISession(
         id=generate_uuid(),
@@ -85,15 +82,17 @@ async def list_ai_sessions(
     db: Session = Depends(get_db),
 ):
     """
-    Возвращает все AI-сессии для указанного документа,
-    отсортированные по дате создания (новые первыми).
+    Возвращает AI-сессии текущего пользователя для указанного документа.
     """
-    sessions = (
-        db.query(AISession)
-        .filter(AISession.document_id == document_id)
-        .order_by(AISession.created_at.desc())
-        .all()
-    )
+    # IDOR fix: проверяем доступ к документу
+    verify_document_access(document_id, current_user, db)
+
+    # Пользователь видит только свои сессии (admin видит все)
+    query = db.query(AISession).filter(AISession.document_id == document_id)
+    if current_user.role != "admin":
+        query = query.filter(AISession.user_id == current_user.id)
+
+    sessions = query.order_by(AISession.created_at.desc()).all()
     return sessions
 
 
@@ -114,15 +113,9 @@ async def send_message(
 ):
     """
     Добавляет сообщение пользователя в AI-сессию.
-    В будущем здесь будет вызов LLM и генерация ответа ассистента.
-    Сейчас — только сохранение user-сообщения.
     """
-    ai_session = db.query(AISession).filter(AISession.id == session_id).first()
-    if not ai_session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"AI-сессия с id={session_id} не найдена",
-        )
+    # IDOR fix: проверяем ownership AI-сессии
+    ai_session = verify_ai_session_ownership(session_id, current_user, db)
 
     if ai_session.status == "closed":
         raise HTTPException(
@@ -140,7 +133,7 @@ async def send_message(
 
     # Обновляем счётчик сообщений
     ai_session.total_turns = (ai_session.total_turns or 0) + 1
-    ai_session.updated_at = datetime.utcnow()
+    ai_session.updated_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(turn)
@@ -161,15 +154,10 @@ async def list_messages(
     db: Session = Depends(get_db),
 ):
     """
-    Возвращает все сообщения (user + assistant + system) для указанной сессии,
-    отсортированные по дате создания (хронологический порядок).
+    Возвращает все сообщения для указанной сессии.
     """
-    ai_session = db.query(AISession).filter(AISession.id == session_id).first()
-    if not ai_session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"AI-сессия с id={session_id} не найдена",
-        )
+    # IDOR fix: проверяем ownership
+    verify_ai_session_ownership(session_id, current_user, db)
 
     turns = (
         db.query(AIConversationTurn)
@@ -194,15 +182,10 @@ async def get_session_context(
     db: Session = Depends(get_db),
 ):
     """
-    Собирает и возвращает полный контекст AI-сессии:
-    документ, findings, комментарии, workflow state, предыдущие действия.
+    Собирает и возвращает полный контекст AI-сессии.
     """
-    ai_session = db.query(AISession).filter(AISession.id == session_id).first()
-    if not ai_session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"AI-сессия с id={session_id} не найдена",
-        )
+    # IDOR fix: проверяем ownership
+    ai_session = verify_ai_session_ownership(session_id, current_user, db)
 
     builder = AIContextBuilderService(db)
     context = await builder.build(

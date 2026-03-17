@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
+from src.api.v2.dependencies import verify_org_membership
 from src.models.database import get_db, generate_uuid
 from src.models.auth_models import User
 from src.core.integrations.models import IntegrationConfig, WebhookDelivery, DomainEvent
@@ -48,6 +49,11 @@ class WebhookConfigRead(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    def model_post_init(self, __context: object) -> None:
+        """Скрываем webhook secret из API-ответов."""
+        if isinstance(self.config, dict) and "secret" in self.config:
+            self.config = {**self.config, "secret": "***"}
+
 
 class RetryResult(BaseModel):
     retried: int
@@ -70,6 +76,12 @@ async def list_events(
     db: Session = Depends(get_db),
 ):
     """Возвращает историю domain events с возможностью фильтрации."""
+    # AuthZ: только admin видит все events
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Просмотр domain events доступен только администраторам",
+        )
     query = db.query(DomainEvent)
     if entity_type:
         query = query.filter(DomainEvent.entity_type == entity_type)
@@ -118,6 +130,25 @@ async def create_webhook(
     db: Session = Depends(get_db),
 ):
     """Создаёт новую webhook конфигурацию для получения событий."""
+    # AuthZ: только admin или org_admin может создавать webhooks
+    if current_user.role != "admin":
+        if not body.org_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Требуется указать org_id или быть администратором платформы",
+            )
+        verify_org_membership(body.org_id, current_user, db)
+
+    # SSRF protection: валидация URL при создании
+    from src.core.integrations.webhook_service import _validate_webhook_url
+    try:
+        _validate_webhook_url(body.url)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Недопустимый URL: {e}",
+        )
+
     config = IntegrationConfig(
         id=generate_uuid(),
         integration_type="webhook",
@@ -150,11 +181,18 @@ async def list_webhooks(
     db: Session = Depends(get_db),
 ):
     """Возвращает список webhook конфигураций."""
+    # AuthZ: non-admin видит только webhooks своих организаций
+    if current_user.role != "admin" and org_id:
+        verify_org_membership(org_id, current_user, db)
+
     query = db.query(IntegrationConfig).filter(
         IntegrationConfig.integration_type == "webhook",
     )
     if org_id:
         query = query.filter(IntegrationConfig.org_id == org_id)
+    elif current_user.role != "admin":
+        # Non-admin без org_id — пустой список (нельзя видеть все webhooks)
+        return []
     return query.order_by(IntegrationConfig.created_at.desc()).all()
 
 
@@ -172,6 +210,19 @@ async def deactivate_webhook(
     db: Session = Depends(get_db),
 ):
     """Деактивирует webhook конфигурацию (soft delete)."""
+    # AuthZ: проверяем, что пользователь имеет доступ
+    if current_user.role != "admin":
+        existing = db.query(IntegrationConfig).filter(
+            IntegrationConfig.id == config_id,
+        ).first()
+        if existing and existing.org_id:
+            verify_org_membership(existing.org_id, current_user, db)
+        elif existing:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Только администратор может деактивировать глобальные webhooks",
+            )
+
     config = db.query(IntegrationConfig).filter(
         IntegrationConfig.id == config_id,
         IntegrationConfig.integration_type == "webhook",
@@ -232,6 +283,13 @@ async def retry_failed_deliveries(
     db: Session = Depends(get_db),
 ):
     """Повторяет отправку неудавшихся webhook доставок."""
+    # AuthZ: только admin может повторять доставки
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Повтор доставок доступен только администраторам",
+        )
+
     from src.core.integrations.webhook_service import WebhookService
 
     webhook_service = WebhookService(db)

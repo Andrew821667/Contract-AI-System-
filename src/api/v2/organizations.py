@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
+from src.api.v2.dependencies import verify_org_membership
 from src.models.database import get_db, generate_uuid
 from src.models.auth_models import User
 from src.core.identity_org.models import (
@@ -96,12 +97,8 @@ async def list_members(
     """
     Возвращает список активных участников организации.
     """
-    org = db.query(Organization).filter(Organization.id == org_id).first()
-    if not org:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Организация с id={org_id} не найдена",
-        )
+    # IDOR fix: проверяем, что пользователь — участник организации
+    verify_org_membership(org_id, current_user, db)
 
     members = (
         db.query(OrganizationMembership)

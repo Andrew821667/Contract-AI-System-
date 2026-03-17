@@ -27,7 +27,6 @@ from src.ml.risk_predictor import RiskPredictor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import numpy as np
-import pickle
 from datetime import datetime
 from loguru import logger
 
@@ -134,8 +133,8 @@ def main():
         model_path = project_root / 'models' / f'risk_predictor_{batch.model_version}.pkl'
         model_path.parent.mkdir(exist_ok=True)
 
-        with open(model_path, 'wb') as f:
-            pickle.dump(predictor.model, f)
+        import joblib
+        joblib.dump(predictor.model, model_path)
 
         logger.info(f"💾 Model saved: {model_path}")
 

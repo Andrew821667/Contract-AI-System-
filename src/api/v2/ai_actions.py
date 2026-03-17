@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
+from src.api.v2.dependencies import verify_ai_session_ownership
 from src.models.database import get_db
 from src.models.auth_models import User
 from src.core.ai_collaboration.models import AIAction, AISession
@@ -20,6 +21,29 @@ from src.core.ai_collaboration.schemas import (
 from src.core.ai_collaboration.approval_service import AIApprovalService
 
 router = APIRouter(tags=["AI Actions"])
+
+
+def _verify_action_access(action_id: str, user: User, db: Session) -> AIAction:
+    """
+    Проверить доступ к AI-действию через ownership сессии.
+    Также запрещает self-approval (нельзя одобрять собственные действия).
+    """
+    action = db.query(AIAction).filter(AIAction.id == action_id).first()
+    if not action:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Действие с id={action_id} не найдено",
+        )
+    # Проверяем ownership через сессию
+    ai_session = db.query(AISession).filter(AISession.id == action.session_id).first()
+    if not ai_session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="AI-сессия для данного действия не найдена",
+        )
+    # Для просмотра — проверяем ownership сессии
+    # Для approve/reject — проверяем, что это НЕ owner (anti self-approval)
+    return action, ai_session
 
 
 # ──────────────────────────────────────────────
@@ -36,15 +60,10 @@ async def list_session_actions(
     db: Session = Depends(get_db),
 ):
     """
-    Возвращает все AI-действия для указанной сессии,
-    отсортированные по дате создания (хронологический порядок).
+    Возвращает все AI-действия для указанной сессии.
     """
-    ai_session = db.query(AISession).filter(AISession.id == session_id).first()
-    if not ai_session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"AI-сессия с id={session_id} не найдена",
-        )
+    # IDOR fix: проверяем ownership сессии
+    verify_ai_session_ownership(session_id, current_user, db)
 
     actions = (
         db.query(AIAction)
@@ -70,24 +89,32 @@ async def approve_action(
     db: Session = Depends(get_db),
 ):
     """
-    Одобряет AI-действие. После одобрения действие автоматически
-    выполняется через AIActionExecutionService.
+    Одобряет AI-действие. Запрещено одобрять собственные действия (self-approval).
     """
+    action, ai_session = _verify_action_access(action_id, current_user, db)
+
+    # Anti self-approval: владелец сессии не может одобрять действия своей сессии
+    if ai_session.user_id == current_user.id and current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Нельзя одобрять действия собственной AI-сессии",
+        )
+
     approval_service = AIApprovalService(db)
-    action = approval_service.approve(
+    result = approval_service.approve(
         action_id=action_id,
         approver_id=current_user.id,
         comment=body.comment,
     )
-    if not action:
+    if not result:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Действие с id={action_id} не найдено или не в статусе 'pending'",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Действие с id={action_id} не в статусе 'pending'",
         )
 
     db.commit()
-    db.refresh(action)
-    return action
+    db.refresh(result)
+    return result
 
 
 # ──────────────────────────────────────────────
@@ -105,23 +132,32 @@ async def reject_action(
     db: Session = Depends(get_db),
 ):
     """
-    Отклоняет AI-действие. Действие переходит в статус 'rejected'.
+    Отклоняет AI-действие.
     """
+    action, ai_session = _verify_action_access(action_id, current_user, db)
+
+    # Anti self-approval
+    if ai_session.user_id == current_user.id and current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Нельзя отклонять действия собственной AI-сессии",
+        )
+
     approval_service = AIApprovalService(db)
-    action = approval_service.reject(
+    result = approval_service.reject(
         action_id=action_id,
         approver_id=current_user.id,
         comment=body.comment,
     )
-    if not action:
+    if not result:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Действие с id={action_id} не найдено или не в статусе 'pending'",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Действие с id={action_id} не в статусе 'pending'",
         )
 
     db.commit()
-    db.refresh(action)
-    return action
+    db.refresh(result)
+    return result
 
 
 # ──────────────────────────────────────────────
@@ -140,8 +176,7 @@ async def edit_and_approve_action(
 ):
     """
     Редактирует payload AI-действия и одобряет его.
-    Требуется передать edited_payload в теле запроса.
-    После одобрения действие автоматически выполняется.
+    Запрещено для владельца сессии (self-approval).
     """
     if not body.edited_payload:
         raise HTTPException(
@@ -149,19 +184,28 @@ async def edit_and_approve_action(
             detail="Поле edited_payload обязательно для edit-and-approve",
         )
 
+    action, ai_session = _verify_action_access(action_id, current_user, db)
+
+    # Anti self-approval
+    if ai_session.user_id == current_user.id and current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Нельзя одобрять действия собственной AI-сессии",
+        )
+
     approval_service = AIApprovalService(db)
-    action = approval_service.edit_and_approve(
+    result = approval_service.edit_and_approve(
         action_id=action_id,
         approver_id=current_user.id,
         edited_payload=body.edited_payload,
         comment=body.comment,
     )
-    if not action:
+    if not result:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Действие с id={action_id} не найдено или не в статусе 'pending'",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Действие с id={action_id} не в статусе 'pending'",
         )
 
     db.commit()
-    db.refresh(action)
-    return action
+    db.refresh(result)
+    return result

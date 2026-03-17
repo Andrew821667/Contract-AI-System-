@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
+from src.api.v2.dependencies import verify_document_access
 from src.models.database import get_db
 from src.models.auth_models import User
 from src.core.collaboration.service import CommentService
@@ -46,6 +47,9 @@ async def create_comment(
     current_user: User = Depends(get_current_user),
 ) -> CommentRead:
     """Создать комментарий к документу."""
+    # IDOR fix: проверяем доступ к документу
+    verify_document_access(document_id, current_user, db)
+
     svc = CommentService(db)
     comment = svc.create_comment(
         document_id=document_id,
@@ -76,6 +80,9 @@ async def list_comments(
     current_user: User = Depends(get_current_user),
 ) -> List[CommentRead]:
     """Получить комментарии к документу с опциональной фильтрацией."""
+    # IDOR fix: проверяем доступ к документу
+    verify_document_access(document_id, current_user, db)
+
     svc = CommentService(db)
     comments = svc.get_document_comments(
         document_id=document_id,

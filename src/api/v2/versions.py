@@ -7,11 +7,12 @@ API v2 — Version Intelligence
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from loguru import logger
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
+from src.api.v2.dependencies import get_core_services, verify_document_access
 from src.models.database import get_db
 from src.models.auth_models import User
 from src.models.changes_models import ContractVersion
@@ -36,29 +37,30 @@ router = APIRouter(prefix="/versions", tags=["Version Intelligence"])
 )
 async def compare_versions(
     body: VersionCompareRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Запускает интеллектуальное сравнение двух версий документа.
-    При deep_analysis=True выполняет семантический анализ изменений.
     """
-    from src.models.database import Contract
+    # IDOR fix: проверяем доступ к документу
+    verify_document_access(body.document_id, current_user, db)
 
-    contract = db.query(Contract).filter(Contract.id == body.document_id).first()
-    if not contract:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Документ с id={body.document_id} не найден",
+    # CoreServices injection
+    core = getattr(request.app.state, "core_services", None)
+    if core:
+        svc = VersionIntelligenceService(
+            db=db,
+            tool_invoker=core.tool_invoker,
+            audit_logger=core.audit_service,
         )
-
-    # Lightweight instantiation — tool_invoker/audit/policy будут из bootstrap
-    # когда lifespan подключит CoreServices. Пока создаём минимально.
-    svc = VersionIntelligenceService(
-        db=db,
-        tool_invoker=None,  # type: ignore[arg-type]
-        audit_logger=None,  # type: ignore[arg-type]
-    )
+    else:
+        svc = VersionIntelligenceService(
+            db=db,
+            tool_invoker=None,  # type: ignore[arg-type]
+            audit_logger=None,  # type: ignore[arg-type]
+        )
 
     try:
         result = await svc.compare_versions(body, user_id=current_user.id)
@@ -80,17 +82,22 @@ async def compare_versions(
 )
 async def get_material_changes(
     comparison_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
     Возвращает список существенных изменений для указанного сравнения.
     """
-    svc = VersionIntelligenceService(
-        db=db,
-        tool_invoker=None,  # type: ignore[arg-type]
-        audit_logger=None,  # type: ignore[arg-type]
-    )
+    core = getattr(request.app.state, "core_services", None)
+    if core:
+        svc = VersionIntelligenceService(
+            db=db, tool_invoker=core.tool_invoker, audit_logger=core.audit_service,
+        )
+    else:
+        svc = VersionIntelligenceService(
+            db=db, tool_invoker=None, audit_logger=None,  # type: ignore[arg-type]
+        )
 
     try:
         return await svc.detect_material_changes(comparison_id, user_id=current_user.id)
@@ -107,17 +114,22 @@ async def get_material_changes(
 )
 async def get_recommendations(
     comparison_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """
     Возвращает рекомендации: принять / отклонить / обсудить каждое изменение.
     """
-    svc = VersionIntelligenceService(
-        db=db,
-        tool_invoker=None,  # type: ignore[arg-type]
-        audit_logger=None,  # type: ignore[arg-type]
-    )
+    core = getattr(request.app.state, "core_services", None)
+    if core:
+        svc = VersionIntelligenceService(
+            db=db, tool_invoker=core.tool_invoker, audit_logger=core.audit_service,
+        )
+    else:
+        svc = VersionIntelligenceService(
+            db=db, tool_invoker=None, audit_logger=None,  # type: ignore[arg-type]
+        )
 
     try:
         return await svc.get_change_recommendations(comparison_id, user_id=current_user.id)
@@ -138,16 +150,10 @@ async def get_version_history(
     db: Session = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """
-    Возвращает историю версий документа (из существующей таблицы contract_versions).
+    Возвращает историю версий документа.
     """
-    from src.models.database import Contract
-
-    contract = db.query(Contract).filter(Contract.id == document_id).first()
-    if not contract:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Документ с id={document_id} не найден",
-        )
+    # IDOR fix: проверяем доступ к документу
+    verify_document_access(document_id, current_user, db)
 
     versions = (
         db.query(ContractVersion)

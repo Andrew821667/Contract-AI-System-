@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
+from src.api.v2.dependencies import verify_workflow_task_ownership
 from src.models.database import get_db
 from src.models.auth_models import User
 from src.core.workflow.engine import WorkflowEngineService
@@ -136,12 +137,9 @@ async def escalate_task(
     current_user: User = Depends(get_current_user),
 ) -> WorkflowTaskRead:
     """Эскалировать задачу на следующий уровень."""
-    task = db.query(WorkflowTask).filter(WorkflowTask.id == task_id).first()
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Задача {task_id} не найдена",
-        )
+    # IDOR fix: проверяем, что задача назначена текущему пользователю
+    task = verify_workflow_task_ownership(task_id, current_user, db)
+
     if task.status in ("completed", "escalated"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

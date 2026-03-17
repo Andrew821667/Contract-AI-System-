@@ -4,13 +4,17 @@ API v2 — Orchestrator
 
 Управление OrchestratorRun: запуск, статус, продолжение, отмена.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
+from src.api.v2.dependencies import (
+    verify_document_access,
+    verify_orchestrator_run_ownership,
+)
 from src.models.database import get_db, generate_uuid
 from src.models.auth_models import User
 from src.core.orchestrator.models import (
@@ -45,9 +49,11 @@ async def create_run(
 ):
     """
     Создаёт OrchestratorRun с указанной целью.
-    В будущем — автоматически создаёт ExecutionPlan через Planner.
-    Сейчас — только создание записи в статусе 'planning'.
     """
+    # IDOR fix: проверяем доступ к документу (если указан)
+    if body.document_id:
+        verify_document_access(body.document_id, current_user, db)
+
     run = OrchestratorRun(
         id=generate_uuid(),
         goal=body.goal,
@@ -75,12 +81,8 @@ async def get_run(
     db: Session = Depends(get_db),
 ):
     """Возвращает текущий статус OrchestratorRun."""
-    run = db.query(OrchestratorRun).filter(OrchestratorRun.id == run_id).first()
-    if not run:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Оркестрация с id={run_id} не найдена",
-        )
+    # IDOR fix: проверяем ownership
+    run = verify_orchestrator_run_ownership(run_id, current_user, db)
     return run
 
 
@@ -98,15 +100,10 @@ async def continue_run(
     db: Session = Depends(get_db),
 ):
     """
-    Продолжает выполнение оркестрации после того, как человек
-    одобрил checkpoint. Переводит статус из 'paused' в 'executing'.
+    Продолжает выполнение оркестрации после одобрения checkpoint.
     """
-    run = db.query(OrchestratorRun).filter(OrchestratorRun.id == run_id).first()
-    if not run:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Оркестрация с id={run_id} не найдена",
-        )
+    # IDOR fix: проверяем ownership
+    run = verify_orchestrator_run_ownership(run_id, current_user, db)
 
     if run.status != "paused":
         raise HTTPException(
@@ -115,7 +112,7 @@ async def continue_run(
                    f"Допустимый статус: 'paused'",
         )
 
-    # Одобряем все pending checkpoints текущего пользователя
+    # Одобряем все pending checkpoints
     pending_checkpoints = (
         db.query(OrchestratorCheckpoint)
         .filter(
@@ -127,10 +124,10 @@ async def continue_run(
     for cp in pending_checkpoints:
         cp.status = "approved"
         cp.resolved_by = current_user.id
-        cp.resolved_at = datetime.utcnow()
+        cp.resolved_at = datetime.now(timezone.utc)
 
     run.status = "executing"
-    run.updated_at = datetime.utcnow()
+    run.updated_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(run)
@@ -151,15 +148,10 @@ async def cancel_run(
     db: Session = Depends(get_db),
 ):
     """
-    Отменяет выполнение оркестрации. Допустимо из статусов:
-    'planning', 'executing', 'paused'.
+    Отменяет выполнение оркестрации.
     """
-    run = db.query(OrchestratorRun).filter(OrchestratorRun.id == run_id).first()
-    if not run:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Оркестрация с id={run_id} не найдена",
-        )
+    # IDOR fix: проверяем ownership
+    run = verify_orchestrator_run_ownership(run_id, current_user, db)
 
     terminal_statuses = {"completed", "failed", "cancelled"}
     if run.status in terminal_statuses:
@@ -169,8 +161,8 @@ async def cancel_run(
         )
 
     run.status = "cancelled"
-    run.updated_at = datetime.utcnow()
-    run.completed_at = datetime.utcnow()
+    run.updated_at = datetime.now(timezone.utc)
+    run.completed_at = datetime.now(timezone.utc)
 
     db.commit()
     db.refresh(run)
@@ -191,15 +183,10 @@ async def get_run_plan(
     db: Session = Depends(get_db),
 ):
     """
-    Возвращает текущий (последний по версии) план выполнения
-    для указанной оркестрации вместе со списком шагов.
+    Возвращает текущий (последний по версии) план выполнения.
     """
-    run = db.query(OrchestratorRun).filter(OrchestratorRun.id == run_id).first()
-    if not run:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Оркестрация с id={run_id} не найдена",
-        )
+    # IDOR fix: проверяем ownership
+    verify_orchestrator_run_ownership(run_id, current_user, db)
 
     plan = (
         db.query(ExecutionPlan)
@@ -230,17 +217,11 @@ async def list_run_steps(
     db: Session = Depends(get_db),
 ):
     """
-    Возвращает все шаги текущего плана выполнения для указанной оркестрации,
-    отсортированные по порядку выполнения.
+    Возвращает все шаги текущего плана выполнения.
     """
-    run = db.query(OrchestratorRun).filter(OrchestratorRun.id == run_id).first()
-    if not run:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Оркестрация с id={run_id} не найдена",
-        )
+    # IDOR fix: проверяем ownership
+    verify_orchestrator_run_ownership(run_id, current_user, db)
 
-    # Берём текущий (последний) план
     plan = (
         db.query(ExecutionPlan)
         .filter(ExecutionPlan.run_id == run_id)

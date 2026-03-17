@@ -49,9 +49,12 @@ class LLMRoutingPolicyService:
     # Default policy (platform-level)
     _DEFAULT_POLICY = LLMRoutingPolicy()
 
+    _CACHE_MAX = 128
+
     def __init__(self, db: Session) -> None:
         self.db = db
-        self._policy_cache: dict[str, LLMRoutingPolicy] = {}
+        from collections import OrderedDict
+        self._policy_cache: OrderedDict[str, LLMRoutingPolicy] = OrderedDict()
 
     def get_policy(
         self,
@@ -63,6 +66,7 @@ class LLMRoutingPolicyService:
         """
         cache_key = f"{tenant_id or ''}:{org_id or ''}"
         if cache_key in self._policy_cache:
+            self._policy_cache.move_to_end(cache_key)
             return self._policy_cache[cache_key]
 
         # Try to load from DB (Policy table with policy_type="llm_routing")
@@ -112,6 +116,8 @@ class LLMRoutingPolicyService:
             policy = self._DEFAULT_POLICY
 
         self._policy_cache[cache_key] = policy
+        if len(self._policy_cache) > self._CACHE_MAX:
+            self._policy_cache.popitem(last=False)
         return policy
 
     def apply_policy(

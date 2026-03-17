@@ -94,7 +94,8 @@ class AgentDelegationService:
 
             delegation.status = "completed" if result.success else "failed"
             delegation.result_data = result.model_dump()
-            delegation.completed_at = __import__("datetime").datetime.utcnow()
+            from datetime import datetime, timezone
+            delegation.completed_at = datetime.now(timezone.utc)
             result.duration_ms = duration_ms
 
         except Exception as exc:

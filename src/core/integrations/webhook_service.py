@@ -6,14 +6,64 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 from loguru import logger
 from sqlalchemy.orm import Session
 
 from .models import IntegrationConfig, WebhookDelivery
+
+# Запрещённые диапазоны для SSRF-защиты
+_BLOCKED_NETWORKS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),  # link-local
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fc00::/7"),  # unique-local
+    ipaddress.ip_network("fe80::/10"),  # link-local v6
+]
+
+
+def _validate_webhook_url(url: str) -> None:
+    """
+    Валидация URL для защиты от SSRF.
+
+    Запрещает:
+    - Не-http(s) схемы
+    - Приватные/локальные IP-адреса
+    - localhost
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Недопустимая схема URL: {parsed.scheme}")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("URL не содержит hostname")
+
+    # Проверяем известные локальные имена
+    if hostname.lower() in ("localhost", "0.0.0.0", "[::]"):
+        raise ValueError(f"Недопустимый hostname: {hostname}")
+
+    # Пробуем разрешить как IP
+    try:
+        addr = ipaddress.ip_address(hostname)
+        for network in _BLOCKED_NETWORKS:
+            if addr in network:
+                raise ValueError(
+                    f"Webhook URL указывает на приватный/локальный адрес: {hostname}"
+                )
+    except ValueError as e:
+        if "приватный" in str(e) or "Недопустимый" in str(e) or "Недопустимая" in str(e):
+            raise
+        # Не IP-адрес — это доменное имя, пропускаем проверку IP
+        pass
 
 
 class WebhookService:
@@ -91,8 +141,17 @@ class WebhookService:
             delivery.response_body = "No URL configured"
             return False
 
+        # SSRF protection: валидация URL
+        try:
+            _validate_webhook_url(url)
+        except ValueError as e:
+            delivery.status = "failed"
+            delivery.response_body = f"URL validation failed: {e}"
+            logger.warning(f"Webhook SSRF blocked: {url} — {e}")
+            return False
+
         delivery.attempts += 1
-        delivery.last_attempt_at = datetime.utcnow()
+        delivery.last_attempt_at = datetime.now(timezone.utc)
 
         try:
             import httpx
@@ -117,7 +176,7 @@ class WebhookService:
 
             if 200 <= response.status_code < 300:
                 delivery.status = "delivered"
-                delivery.delivered_at = datetime.utcnow()
+                delivery.delivered_at = datetime.now(timezone.utc)
                 return True
             else:
                 delivery.status = "failed"
