@@ -1248,3 +1248,147 @@ class TestFallbackHandler:
         result = await handler.handle_total_failure("agent", "analysis")
         assert result["status"] == "degraded"
         assert result["requires_manual_review"] is True
+
+
+# ═══════════════════════════════════════════════
+# Phase 12: Branch Mode + Enterprise Hardening
+# ═══════════════════════════════════════════════
+
+
+class TestBranchMode:
+    """Тесты Branch Mode."""
+
+    def test_standalone_mode(self):
+        from src.core.enterprise.branch_mode import BranchMode, BranchModeService, BranchConfig
+
+        config = BranchConfig(mode=BranchMode.STANDALONE)
+        svc = BranchModeService(db=None, config=config)  # type: ignore[arg-type]
+        assert svc.is_standalone is True
+        assert svc.is_embedded is False
+        assert svc.should_use_local("identity") is True
+        assert svc.should_use_local("tools") is True
+
+    def test_embedded_mode(self):
+        from src.core.enterprise.branch_mode import BranchMode, BranchModeService, BranchConfig
+
+        config = BranchConfig(
+            mode=BranchMode.EMBEDDED,
+            parent_system_url="https://parent.example.com",
+            shared_tool_registry=True,
+            shared_policy_bindings=True,
+        )
+        svc = BranchModeService(db=None, config=config)  # type: ignore[arg-type]
+        assert svc.is_embedded is True
+        assert svc.should_use_local("identity") is True  # No identity provider set
+        assert svc.should_use_local("tools") is False  # Shared
+        assert svc.should_use_local("policies") is False  # Shared
+
+
+class TestRBAC:
+    """Тесты RBAC."""
+
+    def test_permissions_catalog(self):
+        from src.core.enterprise.rbac import PERMISSIONS
+        assert len(PERMISSIONS) >= 20
+        assert "contract.read" in PERMISSIONS
+        assert "admin.full" in PERMISSIONS
+
+    def test_role_permissions(self):
+        from src.core.enterprise.rbac import ROLE_PERMISSIONS
+        assert "viewer" in ROLE_PERMISSIONS
+        assert "platform_admin" in ROLE_PERMISSIONS
+        # Viewer has limited perms
+        assert len(ROLE_PERMISSIONS["viewer"]) < len(ROLE_PERMISSIONS["editor"])
+        # org_admin has more than reviewer
+        assert len(ROLE_PERMISSIONS["org_admin"]) > len(ROLE_PERMISSIONS["reviewer"])
+
+    def test_rbac_service_role_permissions(self):
+        from src.core.enterprise.rbac import RBACService
+
+        svc = RBACService(db=None)  # type: ignore[arg-type]
+        viewer_perms = svc.get_role_permissions("viewer")
+        assert "contract.read" in viewer_perms
+        assert "contract.delete" not in viewer_perms
+
+        admin_perms = svc.get_role_permissions("platform_admin")
+        # admin.full → all permissions
+        assert "contract.delete" in admin_perms
+        assert "admin.full" in admin_perms
+
+
+class TestTenantIsolation:
+    """Тесты Tenant Isolation."""
+
+    def test_mask_standard(self):
+        from src.core.enterprise.tenant_isolation import TenantIsolationService
+
+        svc = TenantIsolationService(db=None)  # type: ignore[arg-type]
+        data = {"counterparty_inn": "1234567890", "name": "Test"}
+        result = svc.mask_sensitive_fields(data, "standard")
+        assert result["counterparty_inn"] == "1234567890"  # Not masked
+
+    def test_mask_confidential(self):
+        from src.core.enterprise.tenant_isolation import TenantIsolationService
+
+        svc = TenantIsolationService(db=None)  # type: ignore[arg-type]
+        data = {"counterparty_inn": "1234567890", "name": "Test"}
+        result = svc.mask_sensitive_fields(data, "confidential")
+        assert result["counterparty_inn"] != "1234567890"  # Masked
+        assert result["name"] == "Test"  # Not masked
+
+    def test_mask_restricted(self):
+        from src.core.enterprise.tenant_isolation import TenantIsolationService, SENSITIVE_FIELDS
+
+        svc = TenantIsolationService(db=None)  # type: ignore[arg-type]
+        # restricted masks more fields than confidential
+        assert len(SENSITIVE_FIELDS["restricted"]) > len(SENSITIVE_FIELDS["confidential"])
+
+    def test_cross_tenant_access(self):
+        from src.core.enterprise.tenant_isolation import TenantIsolationService
+
+        svc = TenantIsolationService(db=None)  # type: ignore[arg-type]
+        assert svc.check_cross_tenant_access("org-1", "org-1") is True
+        assert svc.check_cross_tenant_access("org-1", "org-2") is False
+
+
+class TestIntegrityService:
+    """Тесты IntegrityService."""
+
+    def test_compute_hash(self):
+        from src.core.enterprise.integrity import IntegrityService
+
+        svc = IntegrityService(db=None)  # type: ignore[arg-type]
+        h1 = svc.compute_hash("hello")
+        h2 = svc.compute_hash("hello")
+        h3 = svc.compute_hash("world")
+        assert h1 == h2  # Deterministic
+        assert h1 != h3
+
+    def test_document_hash_stable(self):
+        from src.core.enterprise.integrity import IntegrityService
+
+        svc = IntegrityService(db=None)  # type: ignore[arg-type]
+        doc1 = {"b": 2, "a": 1}
+        doc2 = {"a": 1, "b": 2}
+        assert svc.compute_document_hash(doc1) == svc.compute_document_hash(doc2)
+
+    def test_register_and_verify(self):
+        from src.core.enterprise.integrity import IntegrityService
+
+        svc = IntegrityService(db=None)  # type: ignore[arg-type]
+        svc.register_integrity("contract", "doc-1", "original content")
+
+        valid, msg = svc.verify_integrity("contract", "doc-1", "original content")
+        assert valid is True
+
+        valid, msg = svc.verify_integrity("contract", "doc-1", "tampered content")
+        assert valid is False
+        assert "Нарушение" in msg
+
+    def test_verify_not_found(self):
+        from src.core.enterprise.integrity import IntegrityService
+
+        svc = IntegrityService(db=None)  # type: ignore[arg-type]
+        valid, msg = svc.verify_integrity("contract", "nonexistent", "content")
+        assert valid is False
+        assert "не найдена" in msg

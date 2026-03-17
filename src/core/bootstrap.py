@@ -42,6 +42,11 @@ from src.core.tools.invoker import ToolInvocationService
 from src.core.tools.registry import ToolRegistryService
 from src.core.workflow.engine import WorkflowEngineService
 
+from src.core.enterprise.branch_mode import BranchModeService, BranchConfig
+from src.core.enterprise.rbac import RBACService
+from src.core.enterprise.tenant_isolation import TenantIsolationService
+from src.core.enterprise.integrity import IntegrityService
+
 
 class CoreServices:
     """Контейнер всех core-сервисов. Создаётся через bootstrap()."""
@@ -100,6 +105,12 @@ class CoreServices:
         self.llm_routing_policy: LLMRoutingPolicyService | None = None
         self.cascade_manager: CascadeManager | None = None
         self.fallback_handler: FallbackHandler | None = None
+
+        # Enterprise Hardening (Phase 12)
+        self.branch_mode: BranchModeService | None = None
+        self.rbac: RBACService | None = None
+        self.tenant_isolation: TenantIsolationService | None = None
+        self.integrity: IntegrityService | None = None
 
 
 def bootstrap(db: Session) -> CoreServices:
@@ -223,7 +234,13 @@ def bootstrap(db: Session) -> CoreServices:
     )
     svc.event_dispatcher.setup()
 
-    # ── 13. Bootstrap tools & agents ─────────────────────────────────
+    # ── 13. Enterprise Hardening (Phase 12) ─────────────────────────
+    svc.branch_mode = BranchModeService(db)
+    svc.rbac = RBACService(db)
+    svc.tenant_isolation = TenantIsolationService(db)
+    svc.integrity = IntegrityService(db)
+
+    # ── 14. Bootstrap tools & agents ─────────────────────────────────
     _register_tools(svc.tool_registry)
     _bootstrap_agents(svc.agent_registry, db)
 

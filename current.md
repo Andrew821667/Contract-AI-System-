@@ -212,14 +212,16 @@ Contract-AI-System = hierarchical LLM cascade
 - [x] Bootstrap: все Phase 11 сервисы зарегистрированы в CoreServices
 - [x] 12 новых тестов (61 total core tests)
 
-### Phase 12: Branch Mode + Enterprise Hardening
-**Статус:** ⏳ Ожидает Phase 11
+### Phase 12: Branch Mode + Enterprise Hardening — ВЫПОЛНЕНО ✅
+**Статус:** ✅ Завершено (2026-03-17)
 
-Deliverables:
-- [ ] Standalone + embedded branch mode
-- [ ] Shared identity/tools/policy bindings
-- [ ] Full RBAC, tenant isolation, sensitive field masking
-- [ ] Integrity tracking (hashes, verification, version linkage)
+Результат:
+- [x] BranchModeService — standalone / embedded mode с shared resource routing
+- [x] RBACService — 22 permissions, 5 ролей (viewer→platform_admin), role→permission resolution
+- [x] TenantIsolationService — query-level фильтрация, sensitive field masking (3 уровня)
+- [x] IntegrityService — SHA-256 hashing, document integrity registration/verification, version chain validation
+- [x] Bootstrap: все 4 enterprise сервиса зарегистрированы в CoreServices
+- [x] 13 новых тестов (74 total core tests)
 
 ---
 
