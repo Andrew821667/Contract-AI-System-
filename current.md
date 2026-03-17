@@ -379,55 +379,30 @@ DEEPSEEK_API_KEY=<ключ>
 
 ---
 
-## SECURITY AUDIT — WAVE 5 (Active, 2026-03-17)
+## SECURITY AUDIT — WAVE 5 (Completed, 2026-03-17)
 
-### CRITICAL (3)
+### CRITICAL (3) — ВСЕ ЗАКРЫТЫ ✅
 
-- [ ] **C1. IDOR в comments: reply_to_comment, resolve_comment, assign_comment**
-  - `src/api/v2/comments.py` строки 104, 136, 165
-  - Нет verify_document_access перед операцией
-  - Fix: загрузить parent comment → получить document_id → verify_document_access
+- [x] **C1. IDOR в comments** — добавлен _get_comment_with_access() + verify_document_access
+- [x] **C2. IDOR в list_deliveries** — verify_org_membership для webhook config
+- [x] **C3. DNS Rebinding SSRF** — socket.getaddrinfo + follow_redirects=False
 
-- [ ] **C2. IDOR в integrations: list_deliveries**
-  - `src/api/v2/integrations.py` строка 248
-  - Нет проверки org_membership для webhook config
-  - Fix: verify_org_membership(config.org_id, current_user, db)
+### HIGH (5) — 4 из 5 ЗАКРЫТЫ
 
-- [ ] **C3. DNS Rebinding bypass SSRF + redirect следование**
-  - `src/core/integrations/webhook_service.py`
-  - _validate_webhook_url() не резолвит домены в IP перед проверкой
-  - httpx следует редиректам → можно редиректнуть на 127.0.0.1
-  - Fix: socket.getaddrinfo + проверка resolved IP; follow_redirects=False
+- [x] **H1. Literal типизация** — decision, anchor_type, level, policy_type
+- [x] **H2. CSP hardened** — убран data:, ws:; добавлены form-action, frame-ancestors, base-uri
+- [x] **H3. CORS** — убран Streamlit 8502
+- [x] **H4. Webhook secret encrypted в БД** — Fernet (HKDF от SECRET_KEY), префикс `enc:`
+- [x] **H5. Bare except:pass** — заменены на logger.warning()
 
-### HIGH (5)
+### MEDIUM (6) — 4 из 6 ЗАКРЫТЫ
 
-- [ ] **H1. Enum-поля без Literal типизации**
-  - `src/api/v2/workflow.py` — decision в TaskCompleteBody
-  - `src/core/ai_collaboration/schemas.py` — decision в AIActionApprovalCreate
-  - `src/api/v2/comments.py` — anchor_type Query param
-  - `src/api/v2/integrations.py` — entity_type, event_type Query params
-  - `src/api/v2/policies.py` — level, policy_type Query params
-
-- [ ] **H2. CSP слишком открытый**
-  - `src/middleware/security.py` — img-src data: https:, ws: без домена, нет form-action/frame-ancestors/base-uri
-
-- [ ] **H3. CORS включает Streamlit 8502 — убрать для production**
-  - `src/middleware/security.py`
-
-- [ ] **H4. Webhook secret plaintext в БД**
-  - `src/core/integrations/models.py`
-
-- [ ] **H5. Bare except: pass — silent failures**
-  - `src/services/document_parser.py:640`, `src/agents/quick_export_agent.py:237`, `src/api/contracts/routes.py:316`
-
-### MEDIUM (6)
-
-- [ ] **M1. analytics_service.metrics_cache — unbounded**
-- [ ] **M2. Rate limit demo-activate = 50 → 10**
-- [ ] **M3. HSTS без preload**
-- [ ] **M4. Webhook payload без лимита размера**
-- [ ] **M5. Оставшиеся print() в production коде** (model_router, llm_config, smart_composer, system_config_service, rag_service)
-- [ ] **M6. Webhooks разрешают HTTP (должен быть HTTPS-only в prod)**
+- [x] **M1. analytics metrics_cache bounded** — 500 per key
+- [x] **M2. Rate limit demo-activate** — 50 → 10
+- [x] **M3. HSTS preload** — добавлен
+- [x] **M4. Webhook payload limit** — 1MB max
+- [x] **M5. print()** — остались только в __main__ блоках (допустимо)
+- [x] **M6. HTTPS-only webhooks** — в production (debug=False) только HTTPS
 
 ---
 

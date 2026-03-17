@@ -44,6 +44,14 @@ def _validate_webhook_url(url: str) -> None:
     if parsed.scheme not in ("http", "https"):
         raise ValueError(f"Недопустимая схема URL: {parsed.scheme}")
 
+    # В production разрешаем только HTTPS
+    try:
+        from config.settings import settings
+        if not getattr(settings, "debug", True) and parsed.scheme != "https":
+            raise ValueError("В production разрешён только HTTPS для webhooks")
+    except ImportError:
+        pass
+
     hostname = parsed.hostname
     if not hostname:
         raise ValueError("URL не содержит hostname")
@@ -145,7 +153,13 @@ class WebhookService:
     async def _send(self, config: IntegrationConfig, delivery: WebhookDelivery) -> bool:
         """Отправить один webhook."""
         url = (config.config or {}).get("url")
-        secret = (config.config or {}).get("secret")
+        raw_secret = (config.config or {}).get("secret")
+        # Расшифровываем secret если зашифрован
+        if raw_secret:
+            from .crypto import decrypt_secret
+            secret = decrypt_secret(raw_secret)
+        else:
+            secret = None
 
         if not url:
             delivery.status = "failed"

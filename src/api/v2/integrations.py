@@ -150,13 +150,19 @@ async def create_webhook(
             detail=f"Недопустимый URL: {e}",
         )
 
+    # Шифруем secret перед сохранением в БД
+    encrypted_secret = body.secret
+    if body.secret:
+        from src.core.integrations.crypto import encrypt_secret
+        encrypted_secret = encrypt_secret(body.secret)
+
     config = IntegrationConfig(
         id=generate_uuid(),
         integration_type="webhook",
         name=body.name,
         config={
             "url": body.url,
-            "secret": body.secret,
+            "secret": encrypted_secret,
             "event_filter": body.event_filter,
         },
         org_id=body.org_id,
