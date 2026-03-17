@@ -14,6 +14,8 @@ from src.api.v2.policies import router as policies_router
 from src.api.v2.tools_agents import router as tools_agents_router
 from src.api.v2.workflow import router as workflow_router
 from src.api.v2.comments import router as comments_router
+from src.api.v2.negotiations import router as negotiations_router
+from src.api.v2.versions import router as versions_router
 
 v2_router = APIRouter()
 
@@ -25,3 +27,5 @@ v2_router.include_router(policies_router)
 v2_router.include_router(tools_agents_router)
 v2_router.include_router(workflow_router)
 v2_router.include_router(comments_router)
+v2_router.include_router(negotiations_router)
+v2_router.include_router(versions_router)

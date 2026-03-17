@@ -175,16 +175,21 @@ Contract-AI-System = hierarchical LLM cascade
 - [x] Все сервисы связаны через bootstrap() функцию
 - [x] Auto-registration: 16 tools + 7 agents
 
-### Phase 9: Negotiation & Version Intelligence ← СЛЕДУЮЩИЙ
-**Статус:** ⏳
+### Phase 9: Negotiation & Version Intelligence — ВЫПОЛНЕНО ✅
+**Статус:** ✅ Завершено (2026-03-17)
 
-Deliverables:
-- [ ] AI-assisted disagreement flow, draft возражений
-- [ ] Version comparison, material change detection
+Результат:
+- [x] NegotiationService — AI-assisted disagreement flow через tool pipeline (risk_scorer → clause_extractor → objections)
+- [x] VersionIntelligenceService — сравнение версий через document_diff + deep analysis через risk_scorer
+- [x] SQLAlchemy модели: Negotiation, NegotiationObjection (src/core/negotiation/models.py)
+- [x] 12 Pydantic v2 схем (src/core/negotiation/schemas.py)
+- [x] API v2 endpoints: 5 negotiation + 4 version intelligence (src/api/v2/negotiations.py, versions.py)
+- [x] Bootstrap: NegotiationService + VersionIntelligenceService зарегистрированы в CoreServices
+- [x] 12 новых тестов (39 total core tests)
 - [ ] **Frontend:** Negotiation workspace
 
-### Phase 10: Integration Core + Event Model
-**Статус:** ⏳ Ожидает Phase 9
+### Phase 10: Integration Core + Event Model ← СЛЕДУЮЩИЙ
+**Статус:** ⏳
 
 Deliverables:
 - [ ] Event model (15+ domain events)

@@ -729,3 +729,235 @@ class TestCommentService:
         assert thread.status == "resolved"
         assert thread.resolved_by == "user-c5"
         assert thread.resolved_at is not None
+
+
+# ═══════════════════════════════════════════════
+# Phase 9: Negotiation & Version Intelligence
+# ═══════════════════════════════════════════════
+
+
+class TestNegotiationSchemas:
+    """Тесты Pydantic-схем переговоров."""
+
+    def test_negotiation_start_request(self):
+        from src.core.negotiation.schemas import NegotiationStartRequest
+
+        req = NegotiationStartRequest(
+            document_id="doc-1",
+            goal="Подготовить возражения по рискам",
+        )
+        assert req.document_id == "doc-1"
+        assert req.auto_prioritize is True
+        assert req.analysis_id is None
+
+    def test_objection_response(self):
+        from src.core.negotiation.schemas import ObjectionResponse
+
+        obj = ObjectionResponse(
+            objection_id="obj-1",
+            issue_description="Неопределённость сроков",
+            legal_basis="ГК РФ ст. 314",
+            risk_explanation="Контрагент может затягивать исполнение",
+            alternative_formulation="Срок — 30 календарных дней",
+            alternative_reasoning="Фиксированный срок снижает неопределённость",
+            priority="high",
+            auto_priority=85,
+            confidence=0.9,
+        )
+        assert obj.priority == "high"
+        assert obj.auto_priority == 85
+
+    def test_version_compare_request(self):
+        from src.core.negotiation.schemas import VersionCompareRequest
+
+        req = VersionCompareRequest(
+            document_id="doc-2",
+            from_version_id="v1",
+            to_version_id="v2",
+        )
+        assert req.deep_analysis is True  # default
+
+    def test_material_change_response(self):
+        from src.core.negotiation.schemas import MaterialChangeResponse
+
+        mc = MaterialChangeResponse(
+            change_id="ch-1",
+            change_type="modification",
+            change_category="legal",
+            section_name="Ответственность сторон",
+            clause_number="5.2",
+            old_content="Штраф 0.1%",
+            new_content="Штраф 0.5%",
+            requires_review=True,
+        )
+        assert mc.requires_review is True
+        assert mc.change_category == "legal"
+
+    def test_negotiation_position_response(self):
+        from src.core.negotiation.schemas import NegotiationPositionResponse
+
+        pos = NegotiationPositionResponse(
+            position_text="Позиция по контракту...",
+            key_arguments=["Аргумент 1", "Аргумент 2"],
+            concession_candidates=["Уступка 1"],
+            red_lines=["Красная линия 1"],
+        )
+        assert len(pos.key_arguments) == 2
+        assert len(pos.red_lines) == 1
+
+
+class TestNegotiationModels:
+    """Тесты SQLAlchemy-моделей переговоров."""
+
+    def test_negotiation_model(self, test_db):
+        from src.core.negotiation.models import Negotiation
+
+        neg = Negotiation(
+            id="neg-test-1",
+            document_id="doc-test-1",
+            user_id="user-test-1",
+            goal="Снизить штрафные санкции",
+            status="active",
+        )
+        test_db.add(neg)
+        test_db.flush()
+
+        loaded = test_db.query(Negotiation).filter(Negotiation.id == "neg-test-1").first()
+        assert loaded is not None
+        assert loaded.goal == "Снизить штрафные санкции"
+        assert loaded.status == "active"
+        assert loaded.objections_count == 0
+
+    def test_negotiation_objection_model(self, test_db):
+        from src.core.negotiation.models import Negotiation, NegotiationObjection
+
+        neg = Negotiation(
+            id="neg-test-2",
+            document_id="doc-test-2",
+            user_id="user-test-2",
+            goal="Тест",
+            status="active",
+        )
+        test_db.add(neg)
+        test_db.flush()
+
+        obj = NegotiationObjection(
+            id="obj-test-1",
+            negotiation_id="neg-test-2",
+            issue_description="Штраф завышен",
+            priority="high",
+            auto_priority=80,
+            confidence=0.85,
+        )
+        test_db.add(obj)
+        test_db.flush()
+
+        loaded = test_db.query(NegotiationObjection).filter(
+            NegotiationObjection.id == "obj-test-1"
+        ).first()
+        assert loaded is not None
+        assert loaded.priority == "high"
+        assert loaded.selected is False
+        assert loaded.negotiation_id == "neg-test-2"
+
+    def test_negotiation_relationship(self, test_db):
+        from src.core.negotiation.models import Negotiation, NegotiationObjection
+
+        neg = Negotiation(
+            id="neg-test-3",
+            document_id="doc-test-3",
+            user_id="user-test-3",
+            goal="Тест связей",
+            status="active",
+        )
+        test_db.add(neg)
+        test_db.flush()
+
+        for i in range(3):
+            obj = NegotiationObjection(
+                id=f"obj-rel-{i}",
+                negotiation_id="neg-test-3",
+                issue_description=f"Возражение {i}",
+                priority="medium",
+                auto_priority=50,
+                confidence=0.7,
+            )
+            test_db.add(obj)
+
+        test_db.flush()
+        test_db.refresh(neg)
+
+        assert len(neg.objections) == 3
+
+
+class TestNegotiationServiceHelpers:
+    """Тесты вспомогательных методов NegotiationService."""
+
+    def test_risk_to_priority(self):
+        from src.core.negotiation.service import NegotiationService
+
+        assert NegotiationService._risk_to_priority("critical") == "critical"
+        assert NegotiationService._risk_to_priority("significant") == "high"
+        assert NegotiationService._risk_to_priority("moderate") == "medium"
+        assert NegotiationService._risk_to_priority("minor") == "low"
+        assert NegotiationService._risk_to_priority("unknown") == "medium"
+
+    def test_calculate_auto_priority(self):
+        from src.core.negotiation.service import NegotiationService
+
+        # Critical risk, high probability
+        score = NegotiationService._calculate_auto_priority(
+            {"severity": "critical", "probability": 0.9}
+        )
+        assert 80 <= score <= 100
+
+        # Low risk, low probability
+        score = NegotiationService._calculate_auto_priority(
+            {"severity": "low", "probability": 0.1}
+        )
+        assert score < 50
+
+
+class TestVersionIntelligenceService:
+    """Тесты VersionIntelligenceService."""
+
+    def test_load_comparison_not_found(self):
+        from src.core.negotiation.version_service import VersionIntelligenceService
+
+        svc = VersionIntelligenceService(
+            db=None,  # type: ignore[arg-type]
+            tool_invoker=None,  # type: ignore[arg-type]
+            audit_logger=None,  # type: ignore[arg-type]
+        )
+
+        import pytest
+        with pytest.raises(ValueError, match="не найден"):
+            svc._load_comparison("nonexistent-id")
+
+    def test_comparison_cache(self):
+        from src.core.negotiation.version_service import (
+            VersionIntelligenceService,
+            _comparison_cache,
+        )
+
+        # Store in cache
+        _comparison_cache["test-comp-1"] = {
+            "comparison_id": "test-comp-1",
+            "changes": [
+                {"change_id": "c1", "change_category": "legal", "requires_review": True},
+                {"change_id": "c2", "change_category": "textual", "requires_review": False},
+            ],
+        }
+
+        svc = VersionIntelligenceService(
+            db=None,  # type: ignore[arg-type]
+            tool_invoker=None,  # type: ignore[arg-type]
+            audit_logger=None,  # type: ignore[arg-type]
+        )
+
+        result = svc._load_comparison("test-comp-1")
+        assert result["comparison_id"] == "test-comp-1"
+        assert len(result["changes"]) == 2
+
+        # Cleanup
+        del _comparison_cache["test-comp-1"]

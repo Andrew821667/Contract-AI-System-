@@ -25,6 +25,8 @@ from src.core.agents.registry import AgentRegistryService
 from src.core.audit.service import AuditQueryService
 from src.core.collaboration.service import CommentService
 from src.core.integrations.event_bus import EventBusService
+from src.core.negotiation.service import NegotiationService
+from src.core.negotiation.version_service import VersionIntelligenceService
 from src.core.orchestrator.orchestrator_service import AgentOrchestratorService
 from src.core.orchestrator.planner import ExecutionPlannerService
 from src.core.orchestrator.step_executor import StepExecutor
@@ -79,6 +81,10 @@ class CoreServices:
 
         # Integrations
         self.event_bus: EventBusService | None = None
+
+        # Negotiation & Version Intelligence (Phase 9)
+        self.negotiation_service: NegotiationService | None = None
+        self.version_intelligence: VersionIntelligenceService | None = None
 
         # Audit
         self.audit_query: AuditQueryService | None = None
@@ -172,7 +178,21 @@ def bootstrap(db: Session) -> CoreServices:
     svc.template_governance = TemplateGovernanceService(db)
     svc.clause_policy = ClausePolicyService(db)
 
-    # ── 11. Event Bus ────────────────────────────────────────────────
+    # ── 11. Negotiation & Version Intelligence (Phase 9) ─────────────
+    svc.negotiation_service = NegotiationService(
+        db=db,
+        tool_invoker=svc.tool_invoker,
+        audit_logger=svc.audit_service,
+        policy_resolver=svc.policy_resolver,
+    )
+    svc.version_intelligence = VersionIntelligenceService(
+        db=db,
+        tool_invoker=svc.tool_invoker,
+        audit_logger=svc.audit_service,
+        policy_resolver=svc.policy_resolver,
+    )
+
+    # ── 12. Event Bus ────────────────────────────────────────────────
     svc.event_bus = EventBusService(db)
 
     # ── 12. Bootstrap tools & agents ─────────────────────────────────
