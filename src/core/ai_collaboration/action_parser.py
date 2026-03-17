@@ -14,6 +14,7 @@ from typing import Any
 from loguru import logger
 from sqlalchemy.orm import Session
 
+from .action_policy import AIActionPolicyService
 from .models import AIAction
 
 
@@ -30,6 +31,7 @@ class AIActionParserService:
 
     def __init__(self, db: Session) -> None:
         self.db = db
+        self.action_policy = AIActionPolicyService(db)
 
     def parse_actions(self, session_id: str, llm_response: str) -> list[AIAction]:
         """
@@ -97,16 +99,8 @@ class AIActionParserService:
             return None
 
         confidence = float(data.get("confidence", 0.0))
-        # Определяем, нужно ли одобрение
-        always_approve_types = {
-            "modify_clause", "generate_contract", "assign_reviewer",
-            "change_workflow_status", "send_notification",
-        }
-        if action_type in always_approve_types:
-            approval_required = True
-        else:
-            # Auto-approve если confidence >= 0.9
-            approval_required = confidence < 0.9
+        # Определяем, нужно ли одобрение — через policy service
+        approval_required = self.action_policy.is_approval_required(action_type, confidence)
 
         action = AIAction(
             session_id=session_id,

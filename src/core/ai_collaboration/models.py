@@ -209,3 +209,42 @@ class AIAuditRecord(Base):
 
     def __repr__(self) -> str:
         return f"<AIAuditRecord(id={self.id}, event={self.event_type}, actor={self.actor})>"
+
+
+class AIActionPolicy(Base):
+    """
+    Политика AI-действий — правила approval, risk level, tool mapping.
+
+    Заменяет хардкод-константы в action_executor/action_parser.
+    Позволяет управлять правилами через БД (admin UI, API).
+    """
+
+    __tablename__ = "ai_action_policies"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    action_type = Column(String(50), nullable=False, unique=True, index=True)
+
+    # Risk level для policy checks
+    risk_level = Column(String(20), nullable=False, default="medium")  # low|medium|high|critical
+
+    # Approval requirements
+    approval_required = Column(Boolean, default=True)
+    auto_approve_threshold = Column(Float, default=0.9)  # confidence >= порога → auto-approve
+
+    # Execution mapping
+    tool_id = Column(String(100), nullable=True)  # если None → direct execution
+    direct_execution = Column(Boolean, default=False)
+
+    # Scope ограничения
+    allowed_roles = Column(JSON, nullable=True)  # ["admin", "senior_lawyer"] или null = все
+    org_id = Column(String(36), nullable=True, index=True)  # null = глобальная
+
+    # Описание для UI
+    description = Column(Text, nullable=True)
+
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    def __repr__(self) -> str:
+        return f"<AIActionPolicy(action_type={self.action_type}, risk={self.risk_level}, approval={self.approval_required})>"

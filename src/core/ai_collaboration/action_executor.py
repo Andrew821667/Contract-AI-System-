@@ -20,63 +20,8 @@ from src.core.base import ToolContext
 from src.core.interfaces import IAuditLogger
 from src.core.policies.resolver import MultiLevelPolicyResolver
 from src.core.tools.invoker import ToolInvocationService
+from .action_policy import AIActionPolicyService
 from .models import AIAction, AIAuditRecord
-
-
-# ── Маппинг action_type → tool_id ────────────────────────────────────────────
-# Действия, выполняемые через зарегистрированные tools
-_ACTION_TOOL_MAP: dict[str, str] = {
-    "analyze_risks": "risk_scorer",
-    "extract_clauses": "clause_extractor",
-    "search_knowledge": "rag_search",
-    "parse_document": "document_parser",
-    "generate_contract": "contract_generator",
-}
-
-# Действия, выполняемые напрямую (результат уже в payload)
-_DIRECT_ACTION_TYPES: set[str] = {
-    "explain_finding",
-    "suggest_clause",
-    "modify_clause",
-    "create_comment_draft",
-    "suggest_risk_mitigation",
-    "create_summary",
-    "compare_versions",
-    "translate_clause",
-    "answer_question",
-    "draft_negotiation_response",
-}
-
-# Действия, требующие обязательного approval (независимо от confidence)
-_ALWAYS_REQUIRE_APPROVAL: set[str] = {
-    "modify_clause",
-    "generate_contract",
-    "assign_reviewer",
-    "change_workflow_status",
-    "send_notification",
-}
-
-# Risk level по типу действия (для policy checks)
-_ACTION_RISK_LEVELS: dict[str, str] = {
-    "explain_finding": "low",
-    "suggest_clause": "medium",
-    "modify_clause": "high",
-    "create_comment_draft": "low",
-    "suggest_risk_mitigation": "medium",
-    "create_summary": "low",
-    "compare_versions": "low",
-    "translate_clause": "low",
-    "answer_question": "low",
-    "draft_negotiation_response": "medium",
-    "analyze_risks": "medium",
-    "extract_clauses": "low",
-    "search_knowledge": "low",
-    "parse_document": "low",
-    "generate_contract": "high",
-    "assign_reviewer": "medium",
-    "change_workflow_status": "high",
-    "send_notification": "medium",
-}
 
 
 class AIActionExecutionService:
@@ -93,6 +38,7 @@ class AIActionExecutionService:
         self.tool_invoker = tool_invoker
         self.audit_logger = audit_logger
         self.policy_resolver = policy_resolver
+        self.action_policy = AIActionPolicyService(db)
 
     async def execute_action(self, action: AIAction, user_id: str) -> bool:
         """
@@ -111,7 +57,7 @@ class AIActionExecutionService:
 
         # Pending actions: проверяем, можно ли auto-execute
         if action.execution_status == "pending":
-            if action.approval_required or action.action_type in _ALWAYS_REQUIRE_APPROVAL:
+            if self.action_policy.is_approval_required(action.action_type, action.confidence):
                 logger.info(f"Action {action.id} requires approval — skipping auto-execute")
                 return False
 
@@ -127,12 +73,12 @@ class AIActionExecutionService:
                 })
                 return False
 
-        # Execute
-        tool_id = _ACTION_TOOL_MAP.get(action.action_type)
+        # Execute — определяем способ выполнения через policy
+        tool_id = self.action_policy.get_tool_id(action.action_type)
         if tool_id:
             return await self._execute_via_tool(action, tool_id, user_id)
 
-        if action.action_type in _DIRECT_ACTION_TYPES:
+        if self.action_policy.is_direct_execution(action.action_type):
             return await self._execute_direct(action, user_id)
 
         logger.warning(f"Unknown action_type: {action.action_type}")
@@ -143,7 +89,7 @@ class AIActionExecutionService:
 
     async def _check_policy(self, action: AIAction, user_id: str) -> bool:
         """Проверить policy для действия."""
-        risk_level = _ACTION_RISK_LEVELS.get(action.action_type, "medium")
+        risk_level = self.action_policy.get_risk_level(action.action_type)
         action_name = f"ai_action.{action.action_type}"
 
         # Получаем document_id через session

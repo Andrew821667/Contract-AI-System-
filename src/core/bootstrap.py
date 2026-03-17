@@ -163,6 +163,10 @@ def bootstrap(db: Session) -> CoreServices:
         fallback_handler=svc.fallback_handler,
     )
 
+    from src.core.ai_collaboration.action_policy import AIActionPolicyService
+    svc.action_policy = AIActionPolicyService(db)
+    svc.action_policy.seed_defaults()  # заполнить БД дефолтными политиками
+
     svc.context_builder = AIContextBuilderService(db)
     svc.action_parser = AIActionParserService(db)
     svc.approval_service = AIApprovalService(db)

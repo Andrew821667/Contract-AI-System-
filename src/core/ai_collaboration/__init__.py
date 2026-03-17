@@ -1,6 +1,7 @@
 """AI Collaboration — сессии, действия, контекст, approval, аудит."""
 
-from .models import AISession, AIConversationTurn, AIAction, AIActionApproval, AIAuditRecord
+from .models import AISession, AIConversationTurn, AIAction, AIActionApproval, AIAuditRecord, AIActionPolicy
+from .action_policy import AIActionPolicyService
 from .session_service import AICollaboratorService
 from .context_builder import AIContextBuilderService
 from .action_parser import AIActionParserService
@@ -22,6 +23,8 @@ __all__ = [
     "AIAction",
     "AIActionApproval",
     "AIAuditRecord",
+    "AIActionPolicy",
+    "AIActionPolicyService",
     "AICollaboratorService",
     "AIContextBuilderService",
     "AIActionParserService",

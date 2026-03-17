@@ -108,7 +108,7 @@ Contract-AI-System = hierarchical LLM cascade
 - [x] AIContextBuilder — connected to real Comments + WorkflowExecution models
 - [x] AIAction с 15 типами (explain_finding, suggest_clause, modify_clause, create_comment_draft, suggest_risk_mitigation, create_summary, compare_versions, translate_clause, answer_question, draft_negotiation_response, analyze_risks, extract_clauses, search_knowledge, generate_contract, assign_reviewer)
 - [x] AI Action lifecycle: parse → policy check → threshold → execute/approval/block → audit
-- [ ] AIActionPolicy, AIApprovalService, AIAuditService
+- [x] AIActionPolicy, AIApprovalService, AIAuditService
 - [x] LLMRouterAdapter — async bridge к LLMGateway/ModelRouter
 - [x] System prompt builder с findings, workflow state, action format
 - [ ] **Frontend:** AI Panel (Ask/Explain/Draft/Route/Compare/Negotiate/Summarize/Actions)
