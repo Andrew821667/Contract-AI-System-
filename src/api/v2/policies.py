@@ -4,7 +4,7 @@ API v2 — Policies
 
 Управление политиками: список, создание, обновление.
 """
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -27,8 +27,8 @@ router = APIRouter(tags=["Policies"])
     summary="Список политик",
 )
 async def list_policies(
-    level: Optional[str] = Query(None, description="Фильтр по уровню каскада"),
-    policy_type: Optional[str] = Query(None, description="Фильтр по типу политики"),
+    level: Optional[Literal["platform", "tenant", "organization", "branch", "document", "user"]] = Query(None, description="Фильтр по уровню каскада"),
+    policy_type: Optional[Literal["llm_routing", "tool_access", "approval_rule", "action_permission", "data_sensitivity"]] = Query(None, description="Фильтр по типу политики"),
     active: Optional[bool] = Query(None, description="Фильтр по активности"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

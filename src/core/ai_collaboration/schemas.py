@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -64,6 +64,6 @@ class AIActionRead(BaseModel):
 
 
 class AIActionApprovalCreate(BaseModel):
-    decision: str = Field(..., max_length=30)  # approve | reject | edit_and_approve
+    decision: Literal["approve", "reject", "edit_and_approve"] = Field(...)
     comment: str | None = Field(None, max_length=5000)
     edited_payload: dict[str, Any] | None = None

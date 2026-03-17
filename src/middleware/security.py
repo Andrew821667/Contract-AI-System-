@@ -8,6 +8,8 @@ Features:
 - IP blocking/whitelisting
 """
 
+import ipaddress
+
 from fastapi import Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -45,7 +47,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.endpoint_limits = {
             '/api/v1/auth/login': 10,
             '/api/v1/auth/register': 5,
-            '/api/v1/auth/demo-activate': 50,
+            '/api/v1/auth/demo-activate': 10,
         }
 
     async def dispatch(self, request: Request, call_next):
@@ -70,18 +72,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         return response
 
-    # Trusted proxy CIDRs — only trust X-Forwarded-For from these
-    _TRUSTED_PROXIES = {"127.0.0.1", "::1", "172.16.0.0/12", "10.0.0.0/8", "192.168.0.0/16"}
-
     def _get_client_ip(self, request: Request) -> str:
-        """Extract client IP, trusting X-Forwarded-For only behind nginx/docker proxy."""
+        """Extract client IP, trusting X-Forwarded-For only from internal proxies."""
         direct_ip = request.client.host if request.client else "unknown"
-        # In Docker, the direct client is nginx (172.x.x.x / 127.0.0.1)
-        # Trust X-Forwarded-For only from internal network
-        if direct_ip.startswith(("172.", "10.", "192.168.", "127.")):
-            forwarded = request.headers.get("X-Forwarded-For")
-            if forwarded:
-                return forwarded.split(",")[0].strip()
+        try:
+            addr = ipaddress.ip_address(direct_ip)
+            if addr.is_private or addr.is_loopback:
+                forwarded = request.headers.get("X-Forwarded-For")
+                if forwarded:
+                    return forwarded.split(",")[0].strip()
+        except ValueError:
+            pass
         return direct_ip
 
     def _allow_request(self, client_ip: str, limit: int) -> bool:
@@ -192,14 +193,17 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
             "script-src 'self' https://cdn.jsdelivr.net; "
             "style-src 'self' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
-            "img-src 'self' data: https:; "
-            "connect-src 'self' ws: wss: https://api.openai.com https://api.anthropic.com"
+            "img-src 'self' https:; "
+            "connect-src 'self' https://api.openai.com https://api.anthropic.com; "
+            "form-action 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'"
         )
 
         # Remove server header (security through obscurity)
@@ -224,7 +228,6 @@ def setup_cors(app):
     allowed_origins = [
         "http://localhost:3000",  # Next.js frontend (dev)
         "http://localhost:8090",  # Nginx proxy (Docker)
-        "http://localhost:8502",  # Streamlit admin panel
     ]
 
     # Add production origins from settings if available

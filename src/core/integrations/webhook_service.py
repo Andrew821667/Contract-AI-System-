@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import ipaddress
 import json
+import socket
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
@@ -51,7 +52,7 @@ def _validate_webhook_url(url: str) -> None:
     if hostname.lower() in ("localhost", "0.0.0.0", "[::]"):
         raise ValueError(f"Недопустимый hostname: {hostname}")
 
-    # Пробуем разрешить как IP
+    # Пробуем разрешить как IP напрямую
     try:
         addr = ipaddress.ip_address(hostname)
         for network in _BLOCKED_NETWORKS:
@@ -62,8 +63,18 @@ def _validate_webhook_url(url: str) -> None:
     except ValueError as e:
         if "приватный" in str(e) or "Недопустимый" in str(e) or "Недопустимая" in str(e):
             raise
-        # Не IP-адрес — это доменное имя, пропускаем проверку IP
-        pass
+        # Не IP-адрес — это доменное имя, резолвим через DNS
+        try:
+            results = socket.getaddrinfo(hostname, parsed.port or 443)
+            for _, _, _, _, sockaddr in results:
+                resolved_ip = ipaddress.ip_address(sockaddr[0])
+                for network in _BLOCKED_NETWORKS:
+                    if resolved_ip in network:
+                        raise ValueError(
+                            f"DNS резолвится в приватный адрес: {hostname} → {sockaddr[0]}"
+                        )
+        except socket.gaierror:
+            raise ValueError(f"Не удалось разрешить hostname: {hostname}")
 
 
 class WebhookService:
@@ -168,7 +179,16 @@ class WebhookService:
                 ).hexdigest()
                 headers["X-Webhook-Signature"] = f"sha256={signature}"
 
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            # Лимит payload: 1 MB
+            if len(body.encode()) > 1_000_000:
+                delivery.status = "failed"
+                delivery.response_body = "Payload too large (max 1MB)"
+                return False
+
+            async with httpx.AsyncClient(
+                timeout=10.0,
+                follow_redirects=False,
+            ) as client:
                 response = await client.post(url, content=body, headers=headers)
 
             delivery.response_code = response.status_code

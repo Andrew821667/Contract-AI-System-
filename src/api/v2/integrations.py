@@ -68,9 +68,9 @@ class RetryResult(BaseModel):
     summary="Список domain events с фильтрами",
 )
 async def list_events(
-    entity_type: str | None = Query(None, description="Тип сущности"),
-    entity_id: str | None = Query(None, description="ID сущности"),
-    event_type: str | None = Query(None, description="Тип события"),
+    entity_type: str | None = Query(None, max_length=50, description="Тип сущности"),
+    entity_id: str | None = Query(None, max_length=50, description="ID сущности"),
+    event_type: str | None = Query(None, max_length=100, description="Тип события"),
     limit: int = Query(50, ge=1, le=500, description="Лимит записей"),
     offset: int = Query(0, ge=0, description="Смещение"),
     current_user: User = Depends(get_current_user),
@@ -261,6 +261,15 @@ async def list_deliveries(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Webhook конфигурация с id={config_id} не найдена",
         )
+    # AuthZ: проверяем доступ к организации webhook'а
+    if current_user.role != "admin":
+        if config.org_id:
+            verify_org_membership(config.org_id, current_user, db)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Только администратор может просматривать глобальные webhook'и",
+            )
     return (
         db.query(WebhookDelivery)
         .filter(WebhookDelivery.config_id == config_id)

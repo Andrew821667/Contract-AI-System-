@@ -113,8 +113,9 @@ class AnalyticsService:
     def __init__(self, db_session=None):
         self.db_session = db_session
 
-        # Metrics storage (in-memory cache)
+        # Metrics storage (in-memory cache, bounded per key)
         self.metrics_cache: Dict[str, List[AnalyticsMetric]] = defaultdict(list)
+        self._max_metrics_per_key = 500
 
         # Load historical data
         self._load_historical_metrics()
@@ -963,6 +964,9 @@ class AnalyticsService:
         )
 
         self.metrics_cache[name].append(metric)
+        # Trim oldest entries if over limit
+        if len(self.metrics_cache[name]) > self._max_metrics_per_key:
+            self.metrics_cache[name] = self.metrics_cache[name][-self._max_metrics_per_key:]
 
         # Persist to database
         try:

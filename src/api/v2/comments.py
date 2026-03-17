@@ -4,7 +4,7 @@ API v2 — Comments
 
 Комментарии к документам: создание, список, ответы, резолв, назначение.
 """
-from typing import List
+from typing import List, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -14,10 +14,25 @@ from src.api.dependencies import get_current_user
 from src.api.v2.dependencies import verify_document_access
 from src.models.database import get_db
 from src.models.auth_models import User
+from src.core.collaboration.models import Comment
 from src.core.collaboration.service import CommentService
 from src.core.collaboration.schemas import CommentCreate, CommentRead
 
 router = APIRouter(tags=["Comments"])
+
+
+def _get_comment_with_access(
+    comment_id: str, user: User, db: Session,
+) -> Comment:
+    """Загрузить комментарий и проверить доступ к его документу."""
+    comment = db.query(Comment).filter(Comment.id == comment_id).first()
+    if not comment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Комментарий {comment_id} не найден",
+        )
+    verify_document_access(comment.document_id, user, db)
+    return comment
 
 
 # ── Request bodies ──────────────────────────────
@@ -74,7 +89,7 @@ async def create_comment(
 )
 async def list_comments(
     document_id: str,
-    anchor_type: str | None = Query(None, description="Фильтр по типу якоря"),
+    anchor_type: Literal["document", "section", "clause", "finding"] | None = Query(None, description="Фильтр по типу якоря"),
     include_resolved: bool = Query(False, description="Включить закрытые комментарии"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -108,6 +123,7 @@ async def reply_to_comment(
     current_user: User = Depends(get_current_user),
 ) -> CommentRead:
     """Ответить на существующий комментарий."""
+    _get_comment_with_access(comment_id, current_user, db)
     svc = CommentService(db)
     try:
         comment = svc.reply(
@@ -139,6 +155,7 @@ async def resolve_comment(
     current_user: User = Depends(get_current_user),
 ) -> CommentRead:
     """Закрыть (resolve) комментарий."""
+    _get_comment_with_access(comment_id, current_user, db)
     svc = CommentService(db)
     comment = svc.resolve_comment(
         comment_id=comment_id,
@@ -169,6 +186,7 @@ async def assign_comment(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Назначить ответственного за комментарий."""
+    _get_comment_with_access(comment_id, current_user, db)
     svc = CommentService(db)
     try:
         assignment = svc.assign_comment(

@@ -637,8 +637,8 @@ class DocumentParser:
             try:
                 terms["financial"]["total_amount"] = amount_str
                 terms["financial"]["currency"] = "RUB"
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to parse financial amount: {e}")
 
         # Ищем даты (формат ДД.ММ.ГГГГ)
         date_pattern = r'(\d{2}\.\d{2}\.\d{4})'

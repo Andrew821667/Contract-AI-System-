@@ -234,8 +234,8 @@ class QuickExportAgent(BaseAgent):
                     shutil.copy(contract.file_path, output_path)
                     logger.info(f"DOCX export fallback: copied original file")
                     return output_path
-                except:
-                    pass
+                except Exception as e:
+                    logger.warning(f"DOCX export fallback copy failed: {e}")
 
             # Last resort: create placeholder
             with open(output_path.replace('.docx', '.txt'), 'w', encoding='utf-8') as f:
