@@ -715,7 +715,9 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
 
 ЗАДАЧА: Проанализируй {len(batch)} пунктов договора как профессиональный юрист.
 
+<user_document>
 {clauses_text}
+</user_document>
 
 Для КАЖДОГО пункта проведи детальную юридическую экспертизу и верни JSON в массиве:
 [
@@ -1244,9 +1246,9 @@ JSON формат:
     ) -> str:
         """Build prompt for risk identification"""
         prompt = "Analyze this contract and identify ALL risks.\n\n"
-        prompt += "CONTRACT XML:\n"
+        prompt += "<user_document>\n"
         prompt += xml_content[:5000]
-        prompt += "\n\n"
+        prompt += "\n</user_document>\n\n"
 
         prompt += "CONTRACT STRUCTURE:\n"
         prompt += json.dumps(structure, ensure_ascii=False, indent=2)

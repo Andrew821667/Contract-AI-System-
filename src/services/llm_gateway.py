@@ -3,6 +3,7 @@ LLM Gateway - Единая точка доступа ко всем LLM пров�
 Поддержка: Claude, GPT-4, Perplexity, YandexGPT, DeepSeek, Qwen
 """
 import json
+import asyncio
 import hashlib
 from typing import Dict, Any, Literal, Optional, Union
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -118,9 +119,9 @@ class LLMGateway:
                 prompt_hash=cache_key,
                 provider=self.provider,
                 model=self.model or "gpt-4o-mini",
-                prompt=prompt[:5000],  # Limit to 5000 chars
+                prompt=prompt[:5000],  # Truncate prompt for storage (cache key uses full hash)
                 system_prompt=system_prompt[:2000] if system_prompt else None,
-                response=response[:10000] if isinstance(response, str) else json.dumps(response)[:10000],
+                response=response if isinstance(response, str) else json.dumps(response),  # Store full response
                 response_format=response_format,
                 temperature=temperature,
                 max_tokens=max_tokens,
@@ -185,8 +186,22 @@ class LLMGateway:
                         pass
                 return cached_response
 
+        # Token limit check — warn/truncate if prompt exceeds model context
+        estimated_input_tokens = len(prompt) // 4 + (len(system_prompt) // 4 if system_prompt else 0)
+        MODEL_CONTEXT_LIMITS = {
+            "deepseek-chat": 128000, "gpt-4o-mini": 128000, "gpt-4o": 128000,
+            "gpt-4": 8192, "claude-sonnet-4-20250514": 200000, "qwen-max": 32000,
+        }
+        context_limit = MODEL_CONTEXT_LIMITS.get(self.model or "", 128000)
+        if estimated_input_tokens + max_tokens > context_limit:
+            logger.warning(
+                f"Token estimate ({estimated_input_tokens}+{max_tokens}={estimated_input_tokens+max_tokens}) "
+                f"exceeds model context ({context_limit}). Truncating max_tokens."
+            )
+            max_tokens = min(max_tokens, max(1000, context_limit - estimated_input_tokens))
+
         # Rate limiting check
-        estimated_tokens = len(prompt) // 4 + (len(system_prompt) // 4 if system_prompt else 0) + max_tokens
+        estimated_tokens = estimated_input_tokens + max_tokens
         estimated_cost = self._estimate_cost(estimated_tokens)
 
         if self.use_rate_limiter and self.rate_limiter:
@@ -235,6 +250,33 @@ class LLMGateway:
                 raise ValueError("LLM returned invalid JSON")
 
         return response
+
+    async def acall(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        response_format: Literal["text", "json"] = "text",
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        use_cache: bool = True,
+        db_session=None,
+        **kwargs
+    ) -> Union[str, Dict[str, Any]]:
+        """Async wrapper for call() — runs sync LLM call in thread pool to avoid blocking event loop."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: self.call(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                response_format=response_format,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                use_cache=use_cache,
+                db_session=db_session,
+                **kwargs,
+            ),
+        )
 
     def _make_api_call(self, prompt: str, system_prompt: Optional[str], temperature: float, max_tokens: int, **kwargs) -> str:
         """Execute actual API call to LLM provider"""

@@ -3,6 +3,7 @@
 Payment API Routes
 Stripe integration for subscriptions
 """
+import os
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Header
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, field_validator
@@ -35,8 +36,11 @@ class CheckoutRequest(BaseModel):
     def validate_redirect_url(cls, v: str) -> str:
         """Prevent open redirect — only allow same-origin URLs."""
         parsed = urlparse(v)
+        # Allow relative URLs, localhost, and configured production domain
         allowed_hosts = {"localhost", "127.0.0.1", ""}
-        # Allow relative URLs and localhost variants
+        prod_domain = os.environ.get("APP_DOMAIN", "")
+        if prod_domain:
+            allowed_hosts.add(prod_domain)
         if parsed.hostname and parsed.hostname not in allowed_hosts:
             raise ValueError(f"Redirect URL host not allowed: {parsed.hostname}")
         if parsed.scheme and parsed.scheme not in ("http", "https", ""):

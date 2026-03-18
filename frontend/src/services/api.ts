@@ -552,6 +552,7 @@ class APIClient {
     page?: number;
     limit?: number;
     status?: string;
+    search?: string;
   }): Promise<any> {
     const response = await this.client.get('/api/v1/contracts', { params });
     return response.data;

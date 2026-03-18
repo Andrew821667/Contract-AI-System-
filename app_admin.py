@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+DEPRECATED: This legacy Streamlit admin panel duplicates the FastAPI admin endpoints
+at /api/v1/auth/admin/*. Use the Next.js frontend or API directly.
+Will be removed in a future release.
+
 Contract AI System - Admin Panel (Streamlit)
 
 Simplified admin interface for:

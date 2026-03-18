@@ -55,13 +55,16 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     logger.info("🚀 Starting Contract AI System Backend...")
 
-    # Create tables
-    logger.info("📊 Creating database tables...")
-    try:
-        Base.metadata.create_all(bind=engine)
-        logger.info("✅ Database tables created successfully")
-    except Exception as e:
-        logger.error(f"❌ Error creating database tables: {e}")
+    # Create tables (dev/testing only — in production use `alembic upgrade head`)
+    if settings.app_env in ("development", "testing"):
+        logger.info("📊 Creating database tables (dev mode)...")
+        try:
+            Base.metadata.create_all(bind=engine)
+            logger.info("✅ Database tables created successfully")
+        except Exception as e:
+            logger.error(f"❌ Error creating database tables: {e}")
+    else:
+        logger.info("📊 Skipping create_all in production — use alembic migrations")
 
     # Initialize core services (Phase 0-12)
     logger.info("🔧 Initializing core services...")

@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 """
 Authentication and User Management System
+
+DEPRECATED: This is the legacy Streamlit-based auth system.
+For FastAPI/JWT auth, use src/api/dependencies.py (get_current_user).
+For RBAC, use src/core/enterprise/rbac.py.
+This module is only used by Streamlit pages and will be removed.
 """
 import os
 import streamlit as st

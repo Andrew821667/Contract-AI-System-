@@ -1,6 +1,10 @@
 """
 LLM Configuration for Multi-Model Routing
 Supports: DeepSeek-V3, Claude 4.5 Sonnet, GPT-4o, GPT-4o-mini
+
+DEPRECATED: This config duplicates settings from config/settings.py.
+New code should use `from config.settings import settings` for LLM configuration.
+This module is kept for backward compatibility with model_router.py.
 """
 from pydantic_settings import BaseSettings
 from pydantic import Field

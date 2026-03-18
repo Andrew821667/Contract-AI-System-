@@ -30,8 +30,13 @@ export default function ContractsListPage() {
   const pageSize = 20
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['contracts', page, pageSize],
-    queryFn: () => api.listContracts({ page, limit: pageSize }),
+    queryKey: ['contracts', page, pageSize, searchQuery, filterType, filterStatus],
+    queryFn: () => api.listContracts({
+      page,
+      limit: pageSize,
+      status: filterStatus !== 'all' ? filterStatus : undefined,
+      search: searchQuery || undefined,
+    }),
   })
 
   const contracts: Contract[] = data?.contracts ?? []
@@ -64,11 +69,10 @@ export default function ContractsListPage() {
 
   if (!isReady) return null
 
+  // Filtering is now server-side; client-side filter only for contract_type (not yet in API)
   const filteredContracts = contracts.filter(contract => {
-    const matchesSearch = contract.file_name.toLowerCase().includes(searchQuery.toLowerCase())
     const matchesType = filterType === 'all' || contract.contract_type === filterType
-    const matchesStatus = filterStatus === 'all' || contract.status === filterStatus
-    return matchesSearch && matchesType && matchesStatus
+    return matchesType
   })
 
   return (
