@@ -43,20 +43,17 @@ class RecommendationTool(BaseToolAdapter):
         self._recommendation_service = recommendation_service
 
     async def _do_execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
-        try:
-            findings = input_data["findings"]
-            contract_type = input_data["contract_type"]
+        findings = input_data["findings"]
+        contract_type = input_data["contract_type"]
 
-            result = self._recommendation_service.generate(
-                findings=findings,
-                contract_type=contract_type,
-            )
+        result = self._recommendation_service.generate(
+            findings=findings,
+            contract_type=contract_type,
+        )
 
-            return ToolResult(
-                success=True,
-                data={
-                    "recommendations": result.get("recommendations", []),
-                },
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+        return ToolResult(
+            success=True,
+            data={
+                "recommendations": result.get("recommendations", []),
+            },
+        )

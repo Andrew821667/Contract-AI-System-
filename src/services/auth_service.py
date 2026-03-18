@@ -77,7 +77,7 @@ class AuthService:
                 password.encode('utf-8'),
                 password_hash.encode('utf-8')
             )
-        except Exception:
+        except (ValueError, TypeError):
             return False
 
     @staticmethod

@@ -44,18 +44,15 @@ class CounterpartyTool(BaseToolAdapter):
         self._counterparty_service = counterparty_service
 
     async def _do_execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
-        try:
-            inn = input_data["inn"]
+        inn = input_data["inn"]
 
-            result = self._counterparty_service.lookup(inn=inn)
+        result = self._counterparty_service.lookup(inn=inn)
 
-            return ToolResult(
-                success=True,
-                data={
-                    "company_name": result.get("company_name", ""),
-                    "address": result.get("address", ""),
-                    "status": result.get("status", "unknown"),
-                },
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+        return ToolResult(
+            success=True,
+            data={
+                "company_name": result.get("company_name", ""),
+                "address": result.get("address", ""),
+                "status": result.get("status", "unknown"),
+            },
+        )

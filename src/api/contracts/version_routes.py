@@ -208,7 +208,7 @@ async def compare_versions(
         # Use text mode if XML parsing might fail (non-XML content)
         try:
             changes_raw = diff_service.compare_documents(old_xml, new_xml, mode='combined')
-        except Exception:
+        except (ValueError, KeyError, AttributeError):
             changes_raw = diff_service.compare_documents(old_xml, new_xml, mode='text')
 
         # Build statistics

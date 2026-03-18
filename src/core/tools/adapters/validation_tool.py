@@ -44,21 +44,18 @@ class ValidationTool(BaseToolAdapter):
         self._validation_service = validation_service
 
     async def _do_execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
-        try:
-            contract_text = input_data["contract_text"]
-            contract_type = input_data["contract_type"]
+        contract_text = input_data["contract_text"]
+        contract_type = input_data["contract_type"]
 
-            result = self._validation_service.analyze(
-                text=contract_text,
-                contract_type=contract_type,
-            )
+        result = self._validation_service.analyze(
+            text=contract_text,
+            contract_type=contract_type,
+        )
 
-            return ToolResult(
-                success=True,
-                data={
-                    "valid": result.get("valid", False),
-                    "issues": result.get("issues", []),
-                },
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+        return ToolResult(
+            success=True,
+            data={
+                "valid": result.get("valid", False),
+                "issues": result.get("issues", []),
+            },
+        )

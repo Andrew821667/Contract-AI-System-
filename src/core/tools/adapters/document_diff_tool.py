@@ -44,18 +44,15 @@ class DocumentDiffTool(BaseToolAdapter):
         self._diff_service = diff_service
 
     async def _do_execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
-        try:
-            text_a = input_data["text_a"]
-            text_b = input_data["text_b"]
+        text_a = input_data["text_a"]
+        text_b = input_data["text_b"]
 
-            result = self._diff_service.compare(text_a=text_a, text_b=text_b)
+        result = self._diff_service.compare(text_a=text_a, text_b=text_b)
 
-            return ToolResult(
-                success=True,
-                data={
-                    "diff_html": result.get("diff_html", ""),
-                    "changes_count": result.get("changes_count", 0),
-                },
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+        return ToolResult(
+            success=True,
+            data={
+                "diff_html": result.get("diff_html", ""),
+                "changes_count": result.get("changes_count", 0),
+            },
+        )

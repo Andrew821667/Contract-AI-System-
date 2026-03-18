@@ -451,7 +451,8 @@ class AnalyticsService:
             if user_id:
                 query = query.filter(Contract.assigned_to == user_id)
             contracts_analyzed = query.count() or 0
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to count contracts_analyzed: {e}")
             contracts_analyzed = 0
 
         # Average time savings per contract

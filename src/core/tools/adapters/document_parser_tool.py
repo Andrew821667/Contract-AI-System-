@@ -49,16 +49,13 @@ class DocumentParserTool(BaseToolAdapter):
         self._parser = parser_service
 
     async def _do_execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
-        try:
-            file_path = input_data["file_path"]
-            result = self._parser.parse(file_path)
-            return ToolResult(
-                success=True,
-                data={
-                    "text": result.get("text", ""),
-                    "sections": result.get("sections", []),
-                    "metadata": result.get("metadata", {}),
-                },
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+        file_path = input_data["file_path"]
+        result = self._parser.parse(file_path)
+        return ToolResult(
+            success=True,
+            data={
+                "text": result.get("text", ""),
+                "sections": result.get("sections", []),
+                "metadata": result.get("metadata", {}),
+            },
+        )

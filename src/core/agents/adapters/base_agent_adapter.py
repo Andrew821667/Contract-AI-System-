@@ -53,7 +53,7 @@ class BaseAgentAdapter:
     def name(self) -> str:
         try:
             return self._agent.get_name()
-        except Exception:
+        except AttributeError:
             return self._agent_id
 
     @property

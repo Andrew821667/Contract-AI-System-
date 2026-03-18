@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 import jsonschema
+from loguru import logger
 
 from src.core.base import ToolContext, ToolResult, ValidationResult
 
@@ -82,8 +83,12 @@ class BaseToolAdapter:
             return ValidationResult(valid=False, errors=[e.message])
 
     async def execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
-        """Точка входа — делегирует в _do_execute."""
-        return await self._do_execute(input_data, context)
+        """Точка входа — делегирует в _do_execute с логированием ошибок."""
+        try:
+            return await self._do_execute(input_data, context)
+        except Exception as e:
+            logger.error(f"Tool {self._tool_id} failed: {e}", exc_info=True)
+            return ToolResult(success=False, error=str(e))
 
     async def _do_execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
         """Подклассы реализуют этот метод."""

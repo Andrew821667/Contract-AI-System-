@@ -26,11 +26,14 @@ def _get_redis_client():
     """Try to connect to Redis. Returns client or None."""
     try:
         import redis
+    except ImportError:
+        return None
+    try:
         from config.settings import settings
         client = redis.Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=1)
         client.ping()
         return client
-    except Exception:
+    except (redis.RedisError, ConnectionError, OSError):
         return None
 
 
@@ -128,8 +131,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
             count = results[2]
             return count <= limit
-        except Exception:
+        except (ConnectionError, OSError, TimeoutError) as e:
             # Redis error — fallback to memory
+            logger.warning(f"Rate limiter Redis error, falling back to memory: {e}")
             return self._allow_request_memory(client_ip, limit)
 
     def _allow_request_memory(self, client_ip: str, limit: int) -> bool:

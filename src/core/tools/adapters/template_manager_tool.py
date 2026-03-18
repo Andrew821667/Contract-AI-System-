@@ -43,20 +43,17 @@ class TemplateManagerTool(BaseToolAdapter):
         self._template_service = template_service
 
     async def _do_execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
-        try:
-            template_type = input_data["template_type"]
-            variables = input_data["variables"]
+        template_type = input_data["template_type"]
+        variables = input_data["variables"]
 
-            result = self._template_service.generate(
-                template_type=template_type,
-                variables=variables,
-            )
+        result = self._template_service.generate(
+            template_type=template_type,
+            variables=variables,
+        )
 
-            return ToolResult(
-                success=True,
-                data={
-                    "rendered_text": result.get("rendered_text", ""),
-                },
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+        return ToolResult(
+            success=True,
+            data={
+                "rendered_text": result.get("rendered_text", ""),
+            },
+        )

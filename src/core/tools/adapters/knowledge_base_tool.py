@@ -43,17 +43,14 @@ class KnowledgeBaseTool(BaseToolAdapter):
         self._knowledge_service = knowledge_service
 
     async def _do_execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
-        try:
-            query = input_data["query"]
-            limit = input_data.get("limit", 10)
+        query = input_data["query"]
+        limit = input_data.get("limit", 10)
 
-            result = self._knowledge_service.search(query=query, limit=limit)
+        result = self._knowledge_service.search(query=query, limit=limit)
 
-            return ToolResult(
-                success=True,
-                data={
-                    "results": result.get("results", []),
-                },
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+        return ToolResult(
+            success=True,
+            data={
+                "results": result.get("results", []),
+            },
+        )

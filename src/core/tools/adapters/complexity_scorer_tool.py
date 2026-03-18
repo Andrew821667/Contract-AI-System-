@@ -43,17 +43,14 @@ class ComplexityScorerTool(BaseToolAdapter):
         self._complexity_service = complexity_service
 
     async def _do_execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
-        try:
-            contract_text = input_data["contract_text"]
+        contract_text = input_data["contract_text"]
 
-            result = self._complexity_service.analyze(text=contract_text)
+        result = self._complexity_service.analyze(text=contract_text)
 
-            return ToolResult(
-                success=True,
-                data={
-                    "complexity_score": result.get("complexity_score", 0),
-                    "complexity_level": result.get("complexity_level", "LOW"),
-                },
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+        return ToolResult(
+            success=True,
+            data={
+                "complexity_score": result.get("complexity_score", 0),
+                "complexity_level": result.get("complexity_level", "LOW"),
+            },
+        )

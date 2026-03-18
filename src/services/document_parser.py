@@ -28,7 +28,7 @@ def _get_redis():
         import redis as redis_lib
         from config.settings import settings
         return redis_lib.from_url(settings.redis_url, decode_responses=True)
-    except Exception:
+    except (ImportError, ConnectionError, OSError):
         return None
 
 
@@ -61,7 +61,7 @@ class DocumentParser:
                 for chunk in iter(lambda: f.read(8192), b''):
                     h.update(chunk)
             return f"xml_cache:{h.hexdigest()}"
-        except Exception:
+        except (OSError, IOError):
             return None
 
     def parse(self, file_path: str) -> str:

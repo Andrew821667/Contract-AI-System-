@@ -21,6 +21,7 @@
     "axios": "^1.6.2",
     "clsx": "^2.0.0",
     "date-fns": "^3.0.6",
+    "dompurify": "^3.3.3",
     "framer-motion": "^10.16.16",
     "next": "^14.0.4",
     "postcss": "^8.4.32",
@@ -39,6 +40,7 @@
   "devDependencies": {
     "@testing-library/jest-dom": "^6.1.5",
     "@testing-library/react": "^14.1.2",
+    "@types/dompurify": "^3.0.5",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.10.6",
     "@types/react": "^18.2.46",

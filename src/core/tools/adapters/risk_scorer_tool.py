@@ -46,22 +46,19 @@ class RiskScorerTool(BaseToolAdapter):
         self._risk_service = risk_service
 
     async def _do_execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
-        try:
-            contract_text = input_data["contract_text"]
-            contract_type = input_data.get("contract_type", "general")
+        contract_text = input_data["contract_text"]
+        contract_type = input_data.get("contract_type", "general")
 
-            result = self._risk_service.analyze_risks(
-                text=contract_text,
-                contract_type=contract_type,
-            )
+        result = self._risk_service.analyze_risks(
+            text=contract_text,
+            contract_type=contract_type,
+        )
 
-            return ToolResult(
-                success=True,
-                data={
-                    "overall_score": result.get("overall_score", 0),
-                    "risk_level": result.get("risk_level", "LOW"),
-                    "risks": result.get("risks", []),
-                },
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+        return ToolResult(
+            success=True,
+            data={
+                "overall_score": result.get("overall_score", 0),
+                "risk_level": result.get("risk_level", "LOW"),
+                "risks": result.get("risks", []),
+            },
+        )

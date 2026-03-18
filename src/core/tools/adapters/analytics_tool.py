@@ -44,22 +44,19 @@ class AnalyticsTool(BaseToolAdapter):
         self._analytics_service = analytics_service
 
     async def _do_execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
-        try:
-            metric_type = input_data["metric_type"]
-            date_from = input_data["date_from"]
-            date_to = input_data["date_to"]
+        metric_type = input_data["metric_type"]
+        date_from = input_data["date_from"]
+        date_to = input_data["date_to"]
 
-            result = self._analytics_service.analyze(
-                metric_type=metric_type,
-                date_from=date_from,
-                date_to=date_to,
-            )
+        result = self._analytics_service.analyze(
+            metric_type=metric_type,
+            date_from=date_from,
+            date_to=date_to,
+        )
 
-            return ToolResult(
-                success=True,
-                data={
-                    "metrics": result.get("metrics", {}),
-                },
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+        return ToolResult(
+            success=True,
+            data={
+                "metrics": result.get("metrics", {}),
+            },
+        )

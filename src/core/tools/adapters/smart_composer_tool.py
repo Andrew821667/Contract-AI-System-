@@ -43,20 +43,17 @@ class SmartComposerTool(BaseToolAdapter):
         self._composer_service = composer_service
 
     async def _do_execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
-        try:
-            ctx = input_data["context"]
-            instruction = input_data["instruction"]
+        ctx = input_data["context"]
+        instruction = input_data["instruction"]
 
-            result = self._composer_service.generate(
-                context=ctx,
-                instruction=instruction,
-            )
+        result = self._composer_service.generate(
+            context=ctx,
+            instruction=instruction,
+        )
 
-            return ToolResult(
-                success=True,
-                data={
-                    "composed_text": result.get("composed_text", ""),
-                },
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+        return ToolResult(
+            success=True,
+            data={
+                "composed_text": result.get("composed_text", ""),
+            },
+        )

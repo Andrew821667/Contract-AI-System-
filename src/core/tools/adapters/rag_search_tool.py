@@ -45,18 +45,15 @@ class RAGSearchTool(BaseToolAdapter):
         self._rag = rag_service
 
     async def _do_execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
-        try:
-            query = input_data["query"]
-            top_k = input_data.get("top_k", 5)
+        query = input_data["query"]
+        top_k = input_data.get("top_k", 5)
 
-            results = self._rag.search(query=query, top_k=top_k)
+        results = self._rag.search(query=query, top_k=top_k)
 
-            return ToolResult(
-                success=True,
-                data={
-                    "results": results if isinstance(results, list) else [],
-                    "count": len(results) if isinstance(results, list) else 0,
-                },
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+        return ToolResult(
+            success=True,
+            data={
+                "results": results if isinstance(results, list) else [],
+                "count": len(results) if isinstance(results, list) else 0,
+            },
+        )

@@ -43,20 +43,17 @@ class ClauseLibraryTool(BaseToolAdapter):
         self._clause_library_service = clause_library_service
 
     async def _do_execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
-        try:
-            query = input_data["query"]
-            clause_type = input_data.get("clause_type")
+        query = input_data["query"]
+        clause_type = input_data.get("clause_type")
 
-            result = self._clause_library_service.search(
-                query=query,
-                clause_type=clause_type,
-            )
+        result = self._clause_library_service.search(
+            query=query,
+            clause_type=clause_type,
+        )
 
-            return ToolResult(
-                success=True,
-                data={
-                    "clauses": result.get("clauses", []),
-                },
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+        return ToolResult(
+            success=True,
+            data={
+                "clauses": result.get("clauses", []),
+            },
+        )

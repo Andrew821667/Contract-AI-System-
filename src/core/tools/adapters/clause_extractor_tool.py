@@ -44,16 +44,13 @@ class ClauseExtractorTool(BaseToolAdapter):
         self._extractor = extractor_service
 
     async def _do_execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
-        try:
-            text = input_data["contract_text"]
-            clauses = self._extractor.extract_clauses(text)
+        text = input_data["contract_text"]
+        clauses = self._extractor.extract_clauses(text)
 
-            return ToolResult(
-                success=True,
-                data={
-                    "clauses": clauses if isinstance(clauses, list) else [],
-                    "count": len(clauses) if isinstance(clauses, list) else 0,
-                },
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+        return ToolResult(
+            success=True,
+            data={
+                "clauses": clauses if isinstance(clauses, list) else [],
+                "count": len(clauses) if isinstance(clauses, list) else 0,
+            },
+        )

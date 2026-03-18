@@ -31,6 +31,37 @@ REFRESH_COOKIE_SAMESITE = "lax"
 REFRESH_COOKIE_SECURE = os.getenv("ENVIRONMENT", "development") == "production"
 REFRESH_COOKIE_MAX_AGE = 30 * 24 * 3600  # 30 days
 
+# CSRF: allowed origins for cookie-based endpoints (M1)
+_ALLOWED_ORIGINS = {
+    "http://localhost:3000",
+    "http://localhost:8090",
+}
+# Extend from settings if available
+try:
+    from config.settings import settings as _settings
+    if hasattr(_settings, 'allowed_origins'):
+        _ALLOWED_ORIGINS.update(_settings.allowed_origins)
+except Exception:
+    pass
+
+
+def _check_csrf(request: Request) -> None:
+    """
+    CSRF protection for cookie-based auth endpoints (M1).
+
+    Validates Origin header to prevent cross-site request forgery
+    when refresh_token is sent via httpOnly cookie.
+    """
+    origin = request.headers.get("origin")
+    if not origin:
+        # No Origin header = same-origin or non-browser client (curl, etc.)
+        return
+    if origin not in _ALLOWED_ORIGINS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF: origin not allowed",
+        )
+
 
 def _set_refresh_cookie(response: JSONResponse, refresh_token: str) -> None:
     """Set refresh_token as httpOnly cookie on the response."""
@@ -485,6 +516,8 @@ async def refresh_token(
     }
     ```
     """
+    _check_csrf(request)
+
     # Get refresh token: prefer httpOnly cookie, fallback to body
     token = request.cookies.get(REFRESH_COOKIE_NAME)
     if not token and request_data:
@@ -519,6 +552,7 @@ async def refresh_token(
 
 @router.post("/logout")
 async def logout(
+    request: Request,
     current_user: User = Depends(get_current_user),
     authorization: str = Header(None),
     db: Session = Depends(get_db)

@@ -42,16 +42,13 @@ class OCRTool(BaseToolAdapter):
         self._ocr_service = ocr_service
 
     async def _do_execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
-        try:
-            file_path = input_data["file_path"]
+        file_path = input_data["file_path"]
 
-            result = self._ocr_service.extract(file_path=file_path)
+        result = self._ocr_service.extract(file_path=file_path)
 
-            return ToolResult(
-                success=True,
-                data={
-                    "extracted_text": result.get("extracted_text", ""),
-                },
-            )
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+        return ToolResult(
+            success=True,
+            data={
+                "extracted_text": result.get("extracted_text", ""),
+            },
+        )
