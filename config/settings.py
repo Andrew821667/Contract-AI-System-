@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     llm_timeout: int = 120
 
     # Test Mode - экономия токенов
-    llm_test_mode: bool = True  # Переключатель: True = тестовый режим, False = продакшн
+    llm_test_mode: bool = False  # Переключатель: True = тестовый режим, False = продакшн
 
     # Two-level analysis system
     llm_quick_model: str = "gpt-4o-mini"  # Быстрый анализ (Уровень 1)
@@ -84,6 +84,8 @@ class Settings(BaseSettings):
 
     # Security — REQUIRED! Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
     secret_key: str = ""
+    # Separate key for HMAC document signatures (isolate from JWT secret)
+    document_signing_key: str = ""
 
     # Email / SMTP Settings
     smtp_host: str = "smtp.gmail.com"
@@ -136,9 +138,25 @@ class Settings(BaseSettings):
                     stacklevel=2
                 )
 
-        # Auto-set debug based on environment (can be overridden by DEBUG env var)
-        if not os.environ.get("DEBUG"):
-            self.debug = self.app_env in ("development", "testing")
+        # Auto-generate DOCUMENT_SIGNING_KEY if not set (separate from JWT secret)
+        if not self.document_signing_key:
+            if self.app_env in ("development", "testing"):
+                import secrets
+                self.document_signing_key = secrets.token_urlsafe(32)
+            else:
+                import warnings
+                warnings.warn(
+                    "⚠️  DOCUMENT_SIGNING_KEY not set! Document HMAC signatures will be insecure.\n"
+                    "Generate with: python -c \"import secrets; print(secrets.token_urlsafe(32))\"",
+                    UserWarning,
+                    stacklevel=2
+                )
+
+        # Auto-set debug based on environment (must be explicitly enabled via DEBUG env var)
+        if os.environ.get("DEBUG"):
+            self.debug = os.environ.get("DEBUG", "").lower() in ("true", "1", "yes")
+        else:
+            self.debug = False  # Never auto-enable debug — must be explicit
 
         # Создаём необходимые директории
         self._create_directories()

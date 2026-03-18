@@ -313,8 +313,8 @@ async def analyze_contract_background(
             if contract:
                 contract.status = 'error'
                 db.commit()
-        except Exception:
-            pass
+        except Exception as update_err:
+            logger.error(f"Failed to update contract {contract_id} status to error: {update_err}")
     finally:
         db.close()
 
@@ -360,7 +360,7 @@ async def analyze_contract(
             )
 
         # Check ownership
-        if contract.assigned_to != current_user.id and current_user.role not in ['admin', 'manager']:
+        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to analyze this contract"
@@ -482,6 +482,13 @@ async def generate_disagreements(
     **Returns:** Disagreement document ID and objections list
     """
     try:
+        # Ownership check
+        contract = db.query(Contract).filter(Contract.id == request_data.contract_id).first()
+        if not contract:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
+        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission to access this contract")
+
         llm_gateway = LLMGateway(model=settings.llm_quick_model)
         agent = DisagreementProcessorAgent(llm_gateway=llm_gateway, db_session=db)
 
@@ -533,6 +540,13 @@ async def export_contract(
     **Returns:** Download links for requested formats
     """
     try:
+        # Ownership check
+        contract = db.query(Contract).filter(Contract.id == request_data.contract_id).first()
+        if not contract:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
+        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission to export this contract")
+
         llm_gateway = LLMGateway(model=settings.llm_quick_model)
         agent = QuickExportAgent(llm_gateway=llm_gateway, db_session=db)
 
@@ -592,7 +606,7 @@ async def list_contracts(
         query = db.query(Contract)
 
         # Filter by user (non-admins can only see their own contracts)
-        if current_user.role not in ['admin', 'manager']:
+        if current_user.role not in ['admin']:
             query = query.filter(Contract.assigned_to == current_user.id)
 
         # Apply filters
@@ -652,7 +666,7 @@ async def get_contract_details(
             )
 
         # Check ownership
-        if contract.assigned_to != current_user.id and current_user.role not in ['admin', 'manager']:
+        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to view this contract"
@@ -706,7 +720,7 @@ async def download_contract(
             )
 
         # Check ownership
-        if contract.assigned_to != current_user.id and current_user.role not in ['admin', 'manager']:
+        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to download this contract"
@@ -753,7 +767,7 @@ async def upload_version(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
 
         # Check ownership
-        if contract.assigned_to != current_user.id and current_user.role not in ['admin', 'manager']:
+        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission")
 
         # Read and save file
@@ -831,7 +845,7 @@ async def list_versions(
         if not contract:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
 
-        if contract.assigned_to != current_user.id and current_user.role not in ['admin', 'manager']:
+        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission")
 
         versions = db.query(ContractVersion).filter(
@@ -877,7 +891,7 @@ async def compare_versions(
         if not contract:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
 
-        if contract.assigned_to != current_user.id and current_user.role not in ['admin', 'manager']:
+        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission")
 
         # Load both versions
@@ -1027,7 +1041,7 @@ async def analyze_contract_stream(
     if not contract:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
 
-    if contract.assigned_to != current_user.id and current_user.role not in ['admin', 'manager']:
+    if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission")
 
     parsed_xml = (contract.meta_info or {}).get('xml')
@@ -1109,7 +1123,7 @@ async def batch_analyze_contracts(
         )
 
     for c in contracts:
-        if c.assigned_to != current_user.id and current_user.role not in ['admin', 'manager']:
+        if c.assigned_to != current_user.id and current_user.role not in ['admin']:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"No permission for contract {c.id}")
 
     task_id = str(uuid.uuid4())
@@ -1143,7 +1157,7 @@ async def batch_analyze_contracts(
         finally:
             batch_db.close()
 
-    background_tasks.add_task(asyncio.ensure_future, run_batch())
+    background_tasks.add_task(run_batch)
 
     return BatchAnalysisResponse(
         task_id=task_id,
@@ -1183,7 +1197,7 @@ async def export_annotated_docx(
     if not contract:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
 
-    if contract.assigned_to != current_user.id and current_user.role not in ['admin', 'manager']:
+    if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission")
 
     # Get analysis results

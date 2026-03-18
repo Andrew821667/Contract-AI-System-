@@ -32,10 +32,11 @@ class DigitalContractService:
 
     @staticmethod
     def _compute_signature(content_hash: str) -> str:
-        """Compute HMAC-SHA256 signature using server secret key"""
-        if not settings.secret_key:
-            raise ValueError("SECRET_KEY is required for digital signatures")
-        key = settings.secret_key.encode()
+        """Compute HMAC-SHA256 signature using dedicated document signing key"""
+        signing_key = settings.document_signing_key or settings.secret_key
+        if not signing_key:
+            raise ValueError("DOCUMENT_SIGNING_KEY (or SECRET_KEY) is required for digital signatures")
+        key = signing_key.encode()
         return hmac.new(key, content_hash.encode(), hashlib.sha256).hexdigest()
 
     @staticmethod

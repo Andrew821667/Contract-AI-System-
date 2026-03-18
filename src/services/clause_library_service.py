@@ -220,8 +220,9 @@ class ClauseLibraryService:
             page: Page number
             page_size: Items per page
         """
+        safe_q = query.replace('%', r'\%').replace('_', r'\_')
         db_query = self.db.query(ExtractedClause).filter(
-            ExtractedClause.text.ilike(f'%{query}%')
+            ExtractedClause.text.ilike(f'%{safe_q}%', escape='\\')
         )
 
         if clause_type:

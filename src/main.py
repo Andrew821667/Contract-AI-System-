@@ -65,26 +65,37 @@ async def lifespan(app: FastAPI):
 
     # Initialize core services (Phase 0-12)
     logger.info("🔧 Initializing core services...")
+    core_db = None
     try:
         from src.core.bootstrap import bootstrap
 
-        startup_db = SessionLocal()
+        # Keep this session alive for the entire app lifetime —
+        # core services store self.db and use it across requests.
+        core_db = SessionLocal()
         try:
-            core_services = bootstrap(startup_db)
+            core_services = bootstrap(core_db)
             app.state.core_services = core_services
+            app.state._core_db = core_db  # prevent GC, close on shutdown
             logger.info("✅ Core services bootstrapped successfully")
         except Exception as e:
             logger.warning(f"⚠️ Core services bootstrap skipped: {e}")
             app.state.core_services = None
-        finally:
-            startup_db.close()
+            if core_db:
+                core_db.close()
+                core_db = None
     except Exception as e:
         logger.warning(f"⚠️ Core services import failed: {e}")
         app.state.core_services = None
+        if core_db:
+            core_db.close()
+            core_db = None
 
     yield
 
-    # Shutdown
+    # Shutdown — close the long-lived core DB session
+    if hasattr(app.state, '_core_db') and app.state._core_db:
+        app.state._core_db.close()
+        logger.info("🔒 Core DB session closed")
     logger.info("👋 Shutting down Contract AI System Backend...")
 
 

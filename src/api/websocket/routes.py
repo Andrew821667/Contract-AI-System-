@@ -12,7 +12,7 @@ from loguru import logger
 
 from src.models.database import get_db
 from src.models import Contract, AnalysisResult
-from src.models.auth_models import User
+from src.models.auth_models import User, UserSession
 from src.services.auth_service import AuthService
 
 
@@ -72,36 +72,31 @@ manager = ConnectionManager()
 async def websocket_analysis_updates(
     websocket: WebSocket,
     contract_id: str,
-    token: str = Query(None),
     db: Session = Depends(get_db)
 ):
     """
     WebSocket endpoint for real-time contract analysis updates.
 
     **Auth:** Send token as first message: {"type": "auth", "token": "ACCESS_TOKEN"}
-    (Legacy: ?token= query param is still supported but deprecated)
 
     **Message types:** progress, status_change, clause_analyzed, risk_found, analysis_complete, error
     """
     # Accept connection first, then authenticate via first message
     await websocket.accept()
 
-    # Authenticate: prefer first-message auth, fallback to query param (legacy)
+    # Authenticate via first message only (legacy query param removed for security)
     auth_service = AuthService(db)
     payload = None
 
-    if token:
-        # Legacy: token in URL query param
-        payload = auth_service.verify_token(token, token_type="access")
-
-    if not payload:
-        # Wait for auth message (timeout 10s)
-        try:
-            raw = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
-            msg = json.loads(raw)
-            if msg.get("type") == "auth" and msg.get("token"):
-                payload = auth_service.verify_token(msg["token"], token_type="access")
-        except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
+    # Wait for auth message (timeout 10s)
+    ws_token = None
+    try:
+        raw = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
+        msg = json.loads(raw)
+        if msg.get("type") == "auth" and msg.get("token"):
+            ws_token = msg["token"]
+            payload = auth_service.verify_token(ws_token, token_type="access")
+    except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
             pass
 
     if not payload:
@@ -109,7 +104,20 @@ async def websocket_analysis_updates(
         await websocket.close(code=1008, reason="Invalid token")
         return
 
-    user = db.query(User).filter(User.id == payload.get("user_id")).first()
+    user_id = payload.get("user_id")
+
+    # Check session revocation (same as get_current_user in dependencies.py)
+    session = db.query(UserSession).filter(
+        UserSession.user_id == user_id,
+        UserSession.access_token == ws_token,
+        UserSession.revoked == False
+    ).first()
+    if not session:
+        await websocket.send_json({"type": "error", "message": "Session revoked"})
+        await websocket.close(code=1008, reason="Session revoked")
+        return
+
+    user = db.query(User).filter(User.id == user_id).first()
     if not user:
         await websocket.close(code=1008, reason="User not found")
         return
@@ -120,7 +128,7 @@ async def websocket_analysis_updates(
         await websocket.close(code=1008, reason="Contract not found")
         return
 
-    if contract.assigned_to != user.id and user.role not in ['admin', 'manager']:
+    if contract.assigned_to != user.id and user.role not in ['admin']:
         await websocket.close(code=1008, reason="Permission denied")
         return
 
@@ -205,14 +213,12 @@ async def websocket_analysis_updates(
 @router.websocket("/notifications")
 async def websocket_notifications(
     websocket: WebSocket,
-    token: str = Query(None),
     db: Session = Depends(get_db)
 ):
     """
     WebSocket endpoint for user notifications.
 
     **Auth:** Send token as first message: {"type": "auth", "token": "ACCESS_TOKEN"}
-    (Legacy: ?token= query param is still supported but deprecated)
 
     **Notification types:** analysis_complete, contract_uploaded, export_ready,
     subscription_expiring, limit_reached
@@ -222,17 +228,15 @@ async def websocket_notifications(
 
     auth_service = AuthService(db)
     payload = None
+    ws_token = None
 
-    if token:
-        payload = auth_service.verify_token(token, token_type="access")
-
-    if not payload:
-        try:
-            raw = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
-            msg = json.loads(raw)
-            if msg.get("type") == "auth" and msg.get("token"):
-                payload = auth_service.verify_token(msg["token"], token_type="access")
-        except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
+    try:
+        raw = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
+        msg = json.loads(raw)
+        if msg.get("type") == "auth" and msg.get("token"):
+            ws_token = msg["token"]
+            payload = auth_service.verify_token(ws_token, token_type="access")
+    except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
             pass
 
     if not payload:
@@ -240,7 +244,20 @@ async def websocket_notifications(
         await websocket.close(code=1008, reason="Invalid token")
         return
 
-    user = db.query(User).filter(User.id == payload.get("user_id")).first()
+    user_id = payload.get("user_id")
+
+    # Check session revocation
+    session = db.query(UserSession).filter(
+        UserSession.user_id == user_id,
+        UserSession.access_token == ws_token,
+        UserSession.revoked == False
+    ).first()
+    if not session:
+        await websocket.send_json({"type": "error", "message": "Session revoked"})
+        await websocket.close(code=1008, reason="Session revoked")
+        return
+
+    user = db.query(User).filter(User.id == user_id).first()
     if not user:
         await websocket.close(code=1008, reason="User not found")
         return

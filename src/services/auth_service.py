@@ -934,10 +934,12 @@ class AuthService:
             query = query.filter(User.is_demo == is_demo)
 
         if search:
+            # Escape SQL LIKE wildcards to prevent pattern injection
+            safe_search = search.replace('%', r'\%').replace('_', r'\_')
             query = query.filter(
                 or_(
-                    User.email.ilike(f"%{search}%"),
-                    User.name.ilike(f"%{search}%")
+                    User.email.ilike(f"%{safe_search}%", escape='\\'),
+                    User.name.ilike(f"%{safe_search}%", escape='\\')
                 )
             )
 

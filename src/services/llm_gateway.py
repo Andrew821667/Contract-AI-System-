@@ -244,6 +244,11 @@ class LLMGateway:
             return self._call_openai_compatible(prompt, system_prompt, temperature, max_tokens, **kwargs)
         elif self.provider == "yandex":
             return self._call_yandex(prompt, system_prompt, temperature, max_tokens, **kwargs)
+        elif self.provider == "qwen":
+            return self._call_qwen(prompt, system_prompt, temperature, max_tokens, **kwargs)
+        else:
+            raise ValueError(f"Unsupported LLM provider: {self.provider}")
+
     def _estimate_cost(self, tokens: int) -> float:
         """Estimate cost based on tokens (rough approximation)"""
         model = self.model or "gpt-4o-mini"

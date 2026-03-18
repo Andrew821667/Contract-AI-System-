@@ -361,7 +361,8 @@ class APIClient {
     localStorage.setItem('refresh_token', refreshToken);
     // Set cookie for Next.js middleware (server-side auth check)
     // Set a flag cookie for Next.js middleware (no sensitive data — token stays in localStorage only)
-    document.cookie = `has_token=1; path=/; max-age=3600; SameSite=Lax`;
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `has_token=1; path=/; max-age=3600; SameSite=Lax${secure}`;
   }
 
   private clearTokens() {
@@ -374,9 +375,9 @@ class APIClient {
 
   // ==================== Authentication ====================
 
-  async register(data: RegisterRequest): Promise<AuthResponse> {
-    const response = await this.client.post<AuthResponse>('/api/v1/auth/register', data);
-    this.setTokens(response.data.access_token, response.data.refresh_token);
+  async register(data: RegisterRequest): Promise<any> {
+    const response = await this.client.post('/api/v1/auth/register', data);
+    // Backend returns {message: "..."} without tokens — user must verify email first
     return response.data;
   }
 

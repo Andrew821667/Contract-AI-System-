@@ -54,8 +54,9 @@ class KnowledgeBaseService:
         )
 
         if search_query:
+            safe_q = search_query.replace('%', r'\%').replace('_', r'\_')
             query = query.filter(
-                LegalDocument.title.ilike(f'%{search_query}%')
+                LegalDocument.title.ilike(f'%{safe_q}%', escape='\\')
             )
 
         return query.order_by(desc(LegalDocument.created_at)).offset(offset).limit(limit).all()
