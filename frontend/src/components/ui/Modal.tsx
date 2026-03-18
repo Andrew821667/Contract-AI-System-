@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { ReactNode, useEffect } from 'react'
+import { ReactNode, useEffect, useRef, useCallback } from 'react'
 
 interface ModalProps {
   isOpen: boolean
@@ -25,20 +25,48 @@ export default function Modal({
     xl: 'max-w-4xl'
   }
 
-  // Close on ESC key
-  useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
+  const modalRef = useRef<HTMLDivElement>(null)
+
+  // Focus trap + ESC close
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      onClose()
+      return
     }
+    if (e.key === 'Tab' && modalRef.current) {
+      const focusable = modalRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+  }, [onClose])
+
+  useEffect(() => {
     if (isOpen) {
-      document.addEventListener('keydown', handleEsc)
+      document.addEventListener('keydown', handleKeyDown)
       document.body.style.overflow = 'hidden'
+      // Auto-focus first focusable element
+      setTimeout(() => {
+        const first = modalRef.current?.querySelector<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+        first?.focus()
+      }, 100)
     }
     return () => {
-      document.removeEventListener('keydown', handleEsc)
+      document.removeEventListener('keydown', handleKeyDown)
       document.body.style.overflow = 'unset'
     }
-  }, [isOpen, onClose])
+  }, [isOpen, handleKeyDown])
 
   return (
     <AnimatePresence>
@@ -55,7 +83,7 @@ export default function Modal({
           />
 
           {/* Modal */}
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
+          <div ref={modalRef} className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={title}>
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}

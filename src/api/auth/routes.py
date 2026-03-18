@@ -9,16 +9,51 @@ Provides REST API endpoints for:
 - Analytics
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Request, Cookie
+from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+import os
 from sqlalchemy.orm import Session
 from loguru import logger
 
 from src.models import get_db, User
 from src.services.auth_service import AuthService
+
+
+# Cookie settings for refresh token
+REFRESH_COOKIE_NAME = "refresh_token"
+REFRESH_COOKIE_PATH = "/api/v1/auth"
+REFRESH_COOKIE_HTTPONLY = True
+REFRESH_COOKIE_SAMESITE = "lax"
+REFRESH_COOKIE_SECURE = os.getenv("ENVIRONMENT", "development") == "production"
+REFRESH_COOKIE_MAX_AGE = 30 * 24 * 3600  # 30 days
+
+
+def _set_refresh_cookie(response: JSONResponse, refresh_token: str) -> None:
+    """Set refresh_token as httpOnly cookie on the response."""
+    response.set_cookie(
+        key=REFRESH_COOKIE_NAME,
+        value=refresh_token,
+        httponly=REFRESH_COOKIE_HTTPONLY,
+        secure=REFRESH_COOKIE_SECURE,
+        samesite=REFRESH_COOKIE_SAMESITE,
+        path=REFRESH_COOKIE_PATH,
+        max_age=REFRESH_COOKIE_MAX_AGE,
+    )
+
+
+def _clear_refresh_cookie(response: JSONResponse) -> None:
+    """Remove the refresh_token cookie."""
+    response.delete_cookie(
+        key=REFRESH_COOKIE_NAME,
+        path=REFRESH_COOKIE_PATH,
+        httponly=REFRESH_COOKIE_HTTPONLY,
+        secure=REFRESH_COOKIE_SECURE,
+        samesite=REFRESH_COOKIE_SAMESITE,
+    )
 
 
 # ==================== Pydantic Models ====================
@@ -65,8 +100,8 @@ class ResendVerificationRequest(BaseModel):
 
 
 class RefreshTokenRequest(BaseModel):
-    """Refresh token request"""
-    refresh_token: str
+    """Refresh token request (body is optional — refresh_token may come from httpOnly cookie)"""
+    refresh_token: Optional[str] = None
 
 
 class ChangePasswordRequest(BaseModel):
@@ -345,7 +380,12 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return login_data
+    # Set refresh_token as httpOnly cookie, remove from response body
+    refresh_token_value = login_data.pop("refresh_token", None)
+    response = JSONResponse(content=login_data)
+    if refresh_token_value:
+        _set_refresh_cookie(response, refresh_token_value)
+    return response
 
 
 @router.post("/demo-activate")
@@ -408,55 +448,73 @@ async def activate_demo(
     if error:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
 
-    return activation_data
+    # Set refresh_token as httpOnly cookie, remove from response body
+    refresh_token_value = activation_data.pop("refresh_token", None)
+    response = JSONResponse(content=activation_data)
+    if refresh_token_value:
+        _set_refresh_cookie(response, refresh_token_value)
+    return response
 
 
 @router.post("/refresh")
 async def refresh_token(
-    request_data: RefreshTokenRequest,
+    request: Request,
+    request_data: RefreshTokenRequest = None,
     db: Session = Depends(get_db)
 ):
     """
     Refresh access token using refresh token
 
     **Flow:**
-    1. Client sends refresh token
+    1. Client sends refresh token (via httpOnly cookie or body for backward compat)
     2. Server validates refresh token
-    3. Issues new access + refresh tokens
+    3. Issues new access + refresh tokens (refresh in httpOnly cookie)
     4. Old tokens are revoked
 
     **Use When:**
     - Access token expired (401 error)
     - Before expiration (proactive refresh)
-
-    **Example:**
-    ```json
-    {
-        "refresh_token": "old_refresh_token"
-    }
-    ```
+    - On page reload (cookie sent automatically)
 
     **Returns:**
     ```json
     {
         "access_token": "new_access_token",
-        "refresh_token": "new_refresh_token",
         "token_type": "Bearer",
         "expires_in": 3600
     }
     ```
     """
-    auth_service = AuthService(db)
+    # Get refresh token: prefer httpOnly cookie, fallback to body
+    token = request.cookies.get(REFRESH_COOKIE_NAME)
+    if not token and request_data:
+        token = request_data.refresh_token
 
-    new_tokens, error = auth_service.refresh_session(request_data.refresh_token)
-
-    if error:
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=error
+            detail="Refresh token не предоставлен"
         )
 
-    return new_tokens
+    auth_service = AuthService(db)
+
+    new_tokens, error = auth_service.refresh_session(token)
+
+    if error:
+        # Clear the stale cookie on failure
+        resp = JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": error}
+        )
+        _clear_refresh_cookie(resp)
+        return resp
+
+    # Set new refresh_token as httpOnly cookie, remove from response body
+    new_refresh_token = new_tokens.pop("refresh_token", None)
+    response = JSONResponse(content=new_tokens)
+    if new_refresh_token:
+        _set_refresh_cookie(response, new_refresh_token)
+    return response
 
 
 @router.post("/logout")
@@ -502,7 +560,10 @@ async def logout(
             detail="Logout failed"
         )
 
-    return {"message": "Logged out successfully"}
+    # Clear refresh_token cookie
+    response = JSONResponse(content={"message": "Logged out successfully"})
+    _clear_refresh_cookie(response)
+    return response
 
 
 # ==================== Protected Endpoints ====================

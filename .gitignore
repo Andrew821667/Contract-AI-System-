@@ -135,6 +135,8 @@ test_model_*.py
 data/contracts/*.pdf
 data/contracts/*.docx
 data/contracts/*.doc
+data/contracts/*.txt
+data/chromadb/
 
 # Temporary MD files
 СРОЧНО_*.md

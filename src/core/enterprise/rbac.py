@@ -102,6 +102,15 @@ ROLE_PERMISSIONS: dict[str, list[str]] = {
 }
 
 
+# ── Legacy role mapping (v1 User.role → v2 RBAC role) ────
+LEGACY_ROLE_MAP: dict[str, str] = {
+    "admin": "platform_admin",
+    "senior_lawyer": "reviewer",
+    "user": "editor",
+    "demo": "viewer",
+}
+
+
 class RBACService:
     """Сервис проверки ролей и разрешений."""
 
@@ -162,8 +171,11 @@ class RBACService:
             user = self.db.query(User).filter(User.id == user_id).first()
             if user and hasattr(user, "role"):
                 role_name = getattr(user, "role", None)
-                if role_name and role_name not in roles:
-                    roles.append(role_name)
+                if role_name:
+                    # Map legacy v1 roles to v2 RBAC roles
+                    mapped = LEGACY_ROLE_MAP.get(role_name, role_name)
+                    if mapped not in roles:
+                        roles.append(mapped)
         except Exception as exc:
             from loguru import logger
             logger.error(f"RBAC: failed to load user role for user={user_id}: {exc}")

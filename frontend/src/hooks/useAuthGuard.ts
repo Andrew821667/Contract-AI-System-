@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuthStore } from '../stores/authStore'
 
 /**
  * Decode the payload of a JWT (base64url) without verifying the signature.
@@ -32,28 +33,55 @@ function isTokenExpired(token: string): boolean {
 }
 
 /**
- * Hook that checks for a valid (non-expired) access_token in localStorage.
- * Redirects to /login if not found or expired.
+ * Hook that checks for a valid auth session.
+ *
+ * Priority:
+ * 1. Zustand store (in-memory access_token)
+ * 2. localStorage (legacy fallback)
+ * 3. Refresh via httpOnly cookie (page reload scenario)
+ *
+ * Redirects to /login if no valid session can be established.
  * Returns { isReady } — true when auth check is complete.
  */
 export function useAuthGuard() {
   const router = useRouter()
   const [isReady, setIsReady] = useState(false)
+  const { accessToken, isAuthenticated, isLoading, initAuth } = useAuthStore()
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
+    const check = async () => {
+      // If store already has a valid token, we're good
+      if (accessToken && !isTokenExpired(accessToken)) {
+        setIsReady(true)
+        return
+      }
 
-    if (!token || isTokenExpired(token)) {
-      // Clean up stale data
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
-      localStorage.removeItem('user')
-      document.cookie = 'has_token=; path=/; max-age=0'
-      router.replace('/login')
-    } else {
-      setIsReady(true)
+      // Fallback: check localStorage (legacy)
+      const legacyToken = localStorage.getItem('access_token')
+      if (legacyToken && !isTokenExpired(legacyToken)) {
+        setIsReady(true)
+        return
+      }
+
+      // No valid in-memory or legacy token — try refresh via httpOnly cookie
+      await initAuth()
+
+      // After initAuth, check store state
+      const state = useAuthStore.getState()
+      if (state.isAuthenticated && state.accessToken) {
+        setIsReady(true)
+      } else {
+        // Clean up stale data
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
+        localStorage.removeItem('user')
+        document.cookie = 'has_token=; path=/; max-age=0'
+        router.replace('/login')
+      }
     }
-  }, [router])
+
+    check()
+  }, [router]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return { isReady }
 }

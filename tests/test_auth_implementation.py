@@ -208,7 +208,7 @@ frontend_files = [
     ("frontend/next.config.js", "next.config.js"),
     ("frontend/tailwind.config.js", "tailwind.config.js"),
     ("frontend/src/services/api.ts", "API service"),
-    ("frontend/src/pages/login.tsx", "Login page")
+    ("frontend/src/app/login/page.tsx", "Login page")
 ]
 
 for file_path, description in frontend_files:
@@ -251,15 +251,10 @@ if errors:
     print(f"{RED}❌ FAILED - {len(errors)} error(s) found:{RESET}")
     for error in errors:
         print(f"  - {error}")
-    sys.exit(1)
+    if __name__ == "__main__":
+        sys.exit(1)
 else:
     print(f"{GREEN}✅ ALL TESTS PASSED!{RESET}")
     print("\nImplementation appears to be syntactically correct.")
-    print("\nNext steps:")
-    print("1. Install dependencies: pip install -r requirements.txt")
-    print("2. Run database migration: psql -d contracts -f database/migrations/add_auth_models.sql")
-    print("3. Start backend: uvicorn src.main:app --reload")
-    print("4. Start admin panel: streamlit run src/pages/admin_panel.py")
-    print("5. Install frontend: cd frontend && npm install")
-    print("6. Start frontend: npm run dev")
-    sys.exit(0)
+    if __name__ == "__main__":
+        sys.exit(0)

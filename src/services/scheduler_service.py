@@ -7,8 +7,10 @@ Scheduler Service — фоновые задачи системы Contract AI
 - Очистка устаревших сессий пользователей
 - Агрегация аналитических метрик
 """
+import os
 import threading
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Dict, Any, Optional, List
 
 from loguru import logger
@@ -121,7 +123,16 @@ class SchedulerService:
             replace_existing=True,
         )
 
-        logger.info("Зарегистрировано 3 стандартных задачи")
+        # 4. Очистка временных файлов загрузки — каждый день в 04:00
+        self.scheduler.add_job(
+            self._job_cleanup_temp_files,
+            trigger=CronTrigger(hour=4, minute=0),
+            id='cleanup_temp_files',
+            name='Очистка временных файлов',
+            replace_existing=True,
+        )
+
+        logger.info("Зарегистрировано 4 стандартных задачи")
 
     # ─── Реализация задач ────────────────────────────────────
 
@@ -283,6 +294,70 @@ class SchedulerService:
         finally:
             db.close()
 
+    def _job_cleanup_temp_files(self):
+        """Удаление временных файлов загрузки старше 24 часов (L4)"""
+        started_at = datetime.now(timezone.utc)
+        upload_dir = Path("data/contracts")
+        max_age_hours = 24
+        removed = 0
+
+        try:
+            if not upload_dir.exists():
+                self._log_task(
+                    'cleanup_temp_files', 'Очистка временных файлов',
+                    'skipped', started_at,
+                    result='Директория data/contracts не существует',
+                )
+                return
+
+            now = datetime.now(timezone.utc).timestamp()
+            cutoff = now - (max_age_hours * 3600)
+
+            # Check which files are still referenced in DB
+            referenced_paths: set = set()
+            db = self._get_db()
+            if db:
+                try:
+                    from ..models.database import Contract
+                    rows = db.query(Contract.file_path).filter(
+                        Contract.file_path.isnot(None)
+                    ).all()
+                    referenced_paths = {Path(r[0]).name for r in rows if r[0]}
+                except Exception as e:
+                    logger.warning(f"cleanup_temp_files: не удалось загрузить file_path из БД: {e}")
+                finally:
+                    db.close()
+
+            for fpath in upload_dir.iterdir():
+                if not fpath.is_file():
+                    continue
+                # Skip files still referenced by contracts
+                if fpath.name in referenced_paths:
+                    continue
+                # Skip recently modified files
+                if fpath.stat().st_mtime > cutoff:
+                    continue
+                try:
+                    fpath.unlink()
+                    removed += 1
+                except OSError as e:
+                    logger.warning(f"cleanup_temp_files: не удалось удалить {fpath}: {e}")
+
+            self._log_task(
+                'cleanup_temp_files', 'Очистка временных файлов',
+                'success', started_at,
+                result=f'Удалено {removed} временных файлов',
+                items_processed=removed,
+            )
+            if removed:
+                logger.info(f"cleanup_temp_files: удалено {removed} файлов")
+        except Exception as e:
+            logger.error(f"cleanup_temp_files ошибка: {e}")
+            self._log_task(
+                'cleanup_temp_files', 'Очистка временных файлов',
+                'error', started_at, error=str(e),
+            )
+
     # ─── Ручной запуск ───────────────────────────────────────
 
     def run_job_now(self, job_id: str) -> str:
@@ -291,6 +366,7 @@ class SchedulerService:
             'reindex_pending': self._job_reindex_pending,
             'cleanup_sessions': self._job_cleanup_sessions,
             'aggregate_analytics': self._job_aggregate_analytics,
+            'cleanup_temp_files': self._job_cleanup_temp_files,
         }
         func = job_map.get(job_id)
         if not func:

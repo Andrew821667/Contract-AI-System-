@@ -45,7 +45,7 @@ export interface DemoActivateRequest {
 export interface AuthResponse {
   user: User;
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string;  // Now sent as httpOnly cookie, may be absent from JSON
   token_type: string;
   expires_in: number;
 }
@@ -293,6 +293,7 @@ class APIClient {
     this.client = axios.create({
       baseURL,
       timeout: 30000,
+      withCredentials: true,  // Send httpOnly cookies (refresh_token) with every request
       headers: {
         'Content-Type': 'application/json',
       },
@@ -345,22 +346,41 @@ class APIClient {
 
   // ==================== Token Management ====================
 
+  /**
+   * Get access token from Zustand store first, fallback to localStorage (legacy).
+   * Access token is kept in memory (Zustand), NOT persisted to localStorage.
+   */
   private getAccessToken(): string | null {
     if (typeof window === 'undefined') return null;
+    // Try Zustand store first (lazy import to avoid circular deps at module init)
+    try {
+      const { useAuthStore } = require('../stores/authStore');
+      const storeToken = useAuthStore.getState().accessToken;
+      if (storeToken) return storeToken;
+    } catch {
+      // Store not available yet
+    }
+    // Legacy fallback
     return localStorage.getItem('access_token');
   }
 
-  private getRefreshToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem('refresh_token');
-  }
-
-  private setTokens(accessToken: string, refreshToken: string) {
+  /**
+   * Store access token in Zustand store (memory) and set has_token flag cookie.
+   * Refresh token is now an httpOnly cookie set by the backend — we never touch it.
+   * Legacy: also write to localStorage for backward compat with existing components.
+   */
+  private setAccessToken(accessToken: string) {
     if (typeof window === 'undefined') return;
+    // Update Zustand store
+    try {
+      const { useAuthStore } = require('../stores/authStore');
+      useAuthStore.getState().setAccessToken(accessToken);
+    } catch {
+      // Store not available
+    }
+    // Legacy: keep in localStorage for components that still read it directly
     localStorage.setItem('access_token', accessToken);
-    localStorage.setItem('refresh_token', refreshToken);
-    // Set cookie for Next.js middleware (server-side auth check)
-    // Set a flag cookie for Next.js middleware (no sensitive data — token stays in localStorage only)
+    // Set flag cookie for Next.js middleware
     const secure = window.location.protocol === 'https:' ? '; Secure' : '';
     document.cookie = `has_token=1; path=/; max-age=3600; SameSite=Lax${secure}`;
   }
@@ -368,9 +388,16 @@ class APIClient {
   private clearTokens() {
     if (typeof window === 'undefined') return;
     localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('refresh_token');  // Clean up legacy
     localStorage.removeItem('user');
     document.cookie = 'has_token=; path=/; max-age=0';
+    // Clear Zustand store
+    try {
+      const { useAuthStore } = require('../stores/authStore');
+      useAuthStore.getState().clearAuth();
+    } catch {
+      // Store not available
+    }
   }
 
   // ==================== Authentication ====================
@@ -397,9 +424,19 @@ class APIClient {
       }
     );
 
-    this.setTokens(response.data.access_token, response.data.refresh_token);
+    // access_token in memory (Zustand + legacy localStorage)
+    // refresh_token comes as httpOnly cookie — we don't handle it
+    this.setAccessToken(response.data.access_token);
+
+    // Update Zustand store with full auth data
     if (typeof window !== 'undefined') {
       localStorage.setItem('user', JSON.stringify(response.data.user));
+      try {
+        const { useAuthStore } = require('../stores/authStore');
+        useAuthStore.getState().setAuth(response.data.user, response.data.access_token);
+      } catch {
+        // Store not available
+      }
     }
     return response.data;
   }
@@ -410,9 +447,17 @@ class APIClient {
       data
     );
 
-    this.setTokens(response.data.access_token, response.data.refresh_token);
+    // access_token in memory, refresh_token as httpOnly cookie
+    this.setAccessToken(response.data.access_token);
+
     if (typeof window !== 'undefined') {
       localStorage.setItem('user', JSON.stringify(response.data.user));
+      try {
+        const { useAuthStore } = require('../stores/authStore');
+        useAuthStore.getState().setAuth(response.data.user, response.data.access_token);
+      } catch {
+        // Store not available
+      }
     }
     return response.data;
   }
@@ -430,17 +475,26 @@ class APIClient {
   async refreshToken(): Promise<boolean> {
     if (this.refreshing) return false;
 
-    const refreshToken = this.getRefreshToken();
-    if (!refreshToken) return false;
-
     this.refreshing = true;
 
     try {
-      const response = await this.client.post('/api/v1/auth/refresh', {
-        refresh_token: refreshToken,
-      });
+      // Refresh token is sent automatically as httpOnly cookie (withCredentials: true)
+      // No body needed — backend reads from cookie first
+      const response = await this.client.post('/api/v1/auth/refresh', {});
 
-      this.setTokens(response.data.access_token, response.data.refresh_token);
+      // Store new access token in memory
+      this.setAccessToken(response.data.access_token);
+
+      // Update Zustand store with user data if present
+      if (response.data.user) {
+        try {
+          const { useAuthStore } = require('../stores/authStore');
+          useAuthStore.getState().setAuth(response.data.user, response.data.access_token);
+        } catch {
+          // Store not available
+        }
+      }
+
       this.refreshing = false;
       return true;
     } catch (error) {
@@ -461,6 +515,12 @@ class APIClient {
     const response = await this.client.get<User>('/api/v1/auth/me');
     if (typeof window !== 'undefined') {
       localStorage.setItem('user', JSON.stringify(response.data));
+      try {
+        const { useAuthStore } = require('../stores/authStore');
+        useAuthStore.getState().setUser(response.data);
+      } catch {
+        // Store not available
+      }
     }
     return response.data;
   }

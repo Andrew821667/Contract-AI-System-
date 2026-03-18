@@ -165,7 +165,7 @@ class ReviewTask(Base):
     sla_breached = Column(Boolean, default=False, index=True)
 
     # Audit trail
-    history = Column(Text)  # JSON array of status changes with timestamps
+    history = Column(JSON, default=list)  # JSON array of status changes with timestamps
 
     # Relationships
     contract = relationship("Contract", back_populates="review_tasks")

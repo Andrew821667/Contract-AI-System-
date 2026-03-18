@@ -1,12 +1,45 @@
 """
 Smart Model Router for Contract AI System v2.0
 Intelligent selection between DeepSeek-V3, Claude 4.5 Sonnet, GPT-4o, and GPT-4o-mini
+
+H11: When CascadeManager (v2) is available, delegates to it transparently.
+     Otherwise falls back to legacy rule-based logic.
 """
-from typing import Optional, Dict, Any
+from __future__ import annotations
+
+from typing import Optional, Dict, Any, TYPE_CHECKING
 from src.config.llm_config import get_llm_config
 import logging
 
+if TYPE_CHECKING:
+    from src.core.llm_cascade.cascade_manager import CascadeManager
+
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Mapping helpers: v1 params -> v2 cascade level / task_type
+# ---------------------------------------------------------------------------
+
+def _v1_to_cascade_level(
+    doc_complexity_score: float,
+    is_scanned_image: bool,
+    user_mode: str,
+) -> str:
+    """Map v1 routing params to a v2 cascade level."""
+    if user_mode == "expert":
+        return "expert"
+    if doc_complexity_score > 0.7 or (is_scanned_image and doc_complexity_score > 0.5):
+        return "expert"
+    if doc_complexity_score > 0.4:
+        return "agent"
+    return "orchestration"
+
+
+def _v1_to_sensitivity(user_mode: str) -> str:
+    if user_mode == "expert":
+        return "high"
+    return "normal"
 
 
 class ModelRouter:
@@ -20,16 +53,25 @@ class ModelRouter:
     - GPT-4o-mini: Testing and validation
     """
 
-    def __init__(self, rag_service: Optional[Any] = None):
+    def __init__(
+        self,
+        rag_service: Optional[Any] = None,
+        cascade_manager: Optional["CascadeManager"] = None,
+    ):
         """
         Initialize Model Router.
 
         Args:
             rag_service: Optional RAG service for context-aware routing
+            cascade_manager: Optional v2 CascadeManager — when provided,
+                select_model() and get_fallback_model() delegate to it.
         """
         self.config = get_llm_config()
         self.rag = rag_service
+        self._cascade: Optional["CascadeManager"] = cascade_manager
         logger.info(f"ModelRouter initialized with default model: {self.config.ROUTER_DEFAULT_MODEL}")
+        if self._cascade:
+            logger.info("ModelRouter: CascadeManager (v2) bridge active")
 
     def select_model(
         self,
@@ -63,6 +105,36 @@ class ModelRouter:
             logger.info(f"Force model selected: {force_model}")
             return self._normalize_model_name(force_model)
 
+        # ------------------------------------------------------------------
+        # H11: delegate to CascadeManager (v2) when available
+        # ------------------------------------------------------------------
+        if self._cascade is not None and user_mode != "testing":
+            try:
+                cascade_level = _v1_to_cascade_level(
+                    doc_complexity_score, is_scanned_image, user_mode,
+                )
+                sensitivity = _v1_to_sensitivity(user_mode)
+                selection = self._cascade.select_model_for_level(
+                    cascade_level=cascade_level,
+                    task_type="document.processing",
+                    sensitivity=sensitivity,
+                )
+                model = selection["model"]
+                logger.info(
+                    f"CascadeManager selected: {model} "
+                    f"(level={cascade_level}, reason={selection.get('reason', '')})"
+                )
+                return self._normalize_model_name(model)
+            except Exception as exc:
+                logger.warning(
+                    f"CascadeManager delegation failed, falling back to legacy: {exc}"
+                )
+                # fall through to legacy logic
+
+        # ------------------------------------------------------------------
+        # Legacy v1 routing (fallback)
+        # ------------------------------------------------------------------
+
         # User mode override
         if user_mode == "expert":
             logger.info("Expert mode: using Claude 4.5 Sonnet")
@@ -90,13 +162,17 @@ class ModelRouter:
         )
         return selected_model
 
+    # ==================================================================
+    # Legacy v1 helpers (used as fallback when CascadeManager unavailable)
+    # ==================================================================
+
     def _rule_based_selection(
         self,
         doc_complexity_score: float,
         is_scanned_image: bool
     ) -> str:
         """
-        Rule-based model selection logic.
+        [Legacy] Rule-based model selection logic.
 
         Rules:
         1. Scanned image + high complexity → Claude (best Vision capabilities)
@@ -119,7 +195,7 @@ class ModelRouter:
 
     def _get_rag_suggestion(self, doc_complexity_score: float) -> Optional[str]:
         """
-        Get model suggestion from RAG based on similar documents.
+        [Legacy] Get model suggestion from RAG based on similar documents.
 
         Logic:
         - Find similar documents that were successfully processed
@@ -208,6 +284,9 @@ class ModelRouter:
         - Claude fails → GPT-4o
         - GPT-4o fails → None (no more fallbacks)
 
+        When CascadeManager (v2) is available, the fallback chain is built
+        from the policy-aware cascade instead of the hardcoded map.
+
         Args:
             failed_model: Model that failed
 
@@ -217,6 +296,33 @@ class ModelRouter:
         if not self.config.ROUTER_ENABLE_FALLBACK:
             return None
 
+        # ------------------------------------------------------------------
+        # H11: policy-aware fallback via CascadeManager
+        # ------------------------------------------------------------------
+        if self._cascade is not None:
+            try:
+                selection = self._cascade.select_model_for_level(
+                    cascade_level="agent",
+                    task_type="document.processing",
+                )
+                chain = selection.get("fallback_chain", [])
+                # Return the first model in the chain that isn't the failed one
+                for m in chain:
+                    if m != failed_model:
+                        logger.info(f"CascadeManager fallback: {failed_model} → {m}")
+                        return m
+                logger.warning(
+                    f"CascadeManager: no fallback available for {failed_model}"
+                )
+                return None
+            except Exception as exc:
+                logger.warning(
+                    f"CascadeManager fallback failed, using legacy: {exc}"
+                )
+
+        # ------------------------------------------------------------------
+        # Legacy v1 fallback chain
+        # ------------------------------------------------------------------
         fallback_chain = {
             self.config.DEEPSEEK_MODEL: self.config.ANTHROPIC_MODEL,
             self.config.ANTHROPIC_MODEL: self.config.OPENAI_MODEL,

@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # Import Base and all models so Alembic sees the full metadata
 from src.models.database import Base
 from src.models.auth_models import *  # noqa: F401,F403 — register User, Session, etc.
+from src.models.analyzer_models import *  # noqa: F401,F403 — register ContractRisk, ContractRecommendation, etc.
 
 # Import all core models so Alembic sees the new tables
 from src.core.identity_org.models import *  # noqa: F401,F403

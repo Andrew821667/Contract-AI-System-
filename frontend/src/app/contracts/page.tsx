@@ -113,7 +113,9 @@ export default function ContractsListPage() {
               {/* Search */}
               <div className="md:col-span-1">
                 <div className="relative">
+                  <label htmlFor="contract-search" className="sr-only">Поиск по названию</label>
                   <input
+                    id="contract-search"
                     type="text"
                     placeholder="Поиск по названию..."
                     value={searchQuery}
@@ -128,7 +130,9 @@ export default function ContractsListPage() {
 
               {/* Type Filter */}
               <div>
+                <label htmlFor="contract-type-filter" className="sr-only">Фильтр по типу</label>
                 <select
+                  id="contract-type-filter"
                   value={filterType}
                   onChange={(e) => setFilterType(e.target.value)}
                   className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-primary-400 focus:outline-none transition-colors"
@@ -143,7 +147,9 @@ export default function ContractsListPage() {
 
               {/* Status Filter */}
               <div>
+                <label htmlFor="contract-status-filter" className="sr-only">Фильтр по статусу</label>
                 <select
+                  id="contract-status-filter"
                   value={filterStatus}
                   onChange={(e) => setFilterStatus(e.target.value)}
                   className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-primary-400 focus:outline-none transition-colors"
@@ -158,6 +164,11 @@ export default function ContractsListPage() {
             </div>
           </Card>
         </motion.div>
+
+        {/* Live region for screen readers */}
+        <div aria-live="polite" className="sr-only">
+          {isLoading ? 'Загрузка договоров...' : `Найдено ${filteredContracts.length} договоров`}
+        </div>
 
         {/* Loading State */}
         {isLoading && (

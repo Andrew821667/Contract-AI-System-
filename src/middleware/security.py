@@ -2,7 +2,7 @@
 Security Middleware for FastAPI
 
 Features:
-- Rate limiting (token bucket algorithm)
+- Rate limiting (token bucket algorithm, Redis-backed if available)
 - CORS configuration
 - Security headers
 - IP blocking/whitelisting
@@ -19,25 +19,43 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 import time
 
+from loguru import logger
+
+
+def _get_redis_client():
+    """Try to connect to Redis. Returns client or None."""
+    try:
+        import redis
+        from config.settings import settings
+        client = redis.Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=1)
+        client.ping()
+        return client
+    except Exception:
+        return None
+
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
-    Rate limiting middleware using token bucket algorithm
-
-    Limits:
-    - Default: 1000 requests per minute per IP
-    - Login: 20 requests per minute per IP
-    - Register: 20 requests per minute per IP
-    - Demo Activate: 50 requests per minute per IP
+    Rate limiting middleware using token bucket algorithm.
+    Uses Redis if available (survives restarts, works with multiple workers).
+    Falls back to in-memory if Redis is unavailable.
     """
 
-    # Rate limiting settings
-    requests_per_minute: int = 1000  # Increased from 100
+    requests_per_minute: int = 1000
     burst_limit: int = 50
 
     def __init__(self, app, requests_per_minute: int = 1000):
         super().__init__(app)
         self.requests_per_minute = requests_per_minute
+
+        # Try Redis first
+        self._redis = _get_redis_client()
+        if self._redis:
+            logger.info("Rate limiter: using Redis backend")
+        else:
+            logger.warning("Rate limiter: Redis unavailable, using in-memory (not suitable for multi-worker)")
+
+        # In-memory fallback
         self.buckets: Dict[str, Dict] = defaultdict(lambda: {
             'tokens': requests_per_minute,
             'last_update': time.time()
@@ -87,15 +105,35 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def _allow_request(self, client_ip: str, limit: int) -> bool:
         """
-        Token bucket algorithm for rate limiting
-
-        Args:
-            client_ip: Client IP address
-            limit: Requests per minute
-
-        Returns:
-            True if request allowed, False if rate limit exceeded
+        Token bucket algorithm for rate limiting.
+        Uses Redis if available, falls back to in-memory.
         """
+        if self._redis:
+            return self._allow_request_redis(client_ip, limit)
+        return self._allow_request_memory(client_ip, limit)
+
+    def _allow_request_redis(self, client_ip: str, limit: int) -> bool:
+        """Redis-backed sliding window rate limiter."""
+        try:
+            key = f"ratelimit:{client_ip}:{limit}"
+            now = time.time()
+            window = 60  # 1 minute
+
+            pipe = self._redis.pipeline()
+            pipe.zremrangebyscore(key, 0, now - window)  # Remove expired entries
+            pipe.zadd(key, {str(now): now})  # Add current request
+            pipe.zcard(key)  # Count requests in window
+            pipe.expire(key, window + 1)  # Auto-cleanup
+            results = pipe.execute()
+
+            count = results[2]
+            return count <= limit
+        except Exception:
+            # Redis error — fallback to memory
+            return self._allow_request_memory(client_ip, limit)
+
+    def _allow_request_memory(self, client_ip: str, limit: int) -> bool:
+        """In-memory token bucket (original implementation)."""
         bucket = self.buckets[client_ip]
         now = time.time()
 

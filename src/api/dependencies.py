@@ -94,3 +94,26 @@ async def require_senior_or_admin(current_user: User = Depends(get_current_user)
             detail="Senior lawyer or admin access required"
         )
     return current_user
+
+
+def require_permission(permission: str):
+    """
+    Factory for RBAC permission checks (L5).
+
+    Usage:
+        @router.get("/contracts", dependencies=[Depends(require_permission("contract.read"))])
+        async def list_contracts(...): ...
+    """
+    async def _check(
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> User:
+        from src.core.enterprise.rbac import RBACService
+        rbac = RBACService(db)
+        if not rbac.has_permission(str(current_user.id), permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission required: {permission}",
+            )
+        return current_user
+    return _check
