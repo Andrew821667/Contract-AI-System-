@@ -52,23 +52,18 @@ def get_url():
     return os.getenv("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
 
 
+def _is_sqlite(url: str) -> bool:
+    return url.startswith("sqlite")
+
+
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode.
-
-    This configures the context with just a URL
-    and not an Engine, though an Engine is acceptable
-    here as well.  By skipping the Engine creation
-    we don't even need a DBAPI to be available.
-
-    Calls to context.execute() here emit the given string to the
-    script output.
-
-    """
+    """Run migrations in 'offline' mode."""
     url = get_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
+        render_as_batch=_is_sqlite(url),
         dialect_opts={"paramstyle": "named"},
     )
 
@@ -92,8 +87,11 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        is_sqlite = connection.dialect.name == "sqlite"
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection,
+            target_metadata=target_metadata,
+            render_as_batch=is_sqlite,
         )
 
         with context.begin_transaction():
