@@ -51,16 +51,31 @@ def _check_csrf(request: Request) -> None:
 
     Validates Origin header to prevent cross-site request forgery
     when refresh_token is sent via httpOnly cookie.
+    Falls back to Referer header validation when Origin is absent.
     """
     origin = request.headers.get("origin")
-    if not origin:
-        # No Origin header = same-origin or non-browser client (curl, etc.)
+    if origin:
+        if origin not in _ALLOWED_ORIGINS:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="CSRF: origin not allowed",
+            )
         return
-    if origin not in _ALLOWED_ORIGINS:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="CSRF: origin not allowed",
-        )
+
+    # No Origin header — check Referer as fallback (some browsers omit Origin)
+    referer = request.headers.get("referer")
+    if referer:
+        from urllib.parse import urlparse
+        parsed = urlparse(referer)
+        referer_origin = f"{parsed.scheme}://{parsed.netloc}"
+        if referer_origin not in _ALLOWED_ORIGINS:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="CSRF: referer not allowed",
+            )
+        return
+
+    # No Origin and no Referer — allow (non-browser client like curl, Postman)
 
 
 def _set_refresh_cookie(response: JSONResponse, refresh_token: str) -> None:

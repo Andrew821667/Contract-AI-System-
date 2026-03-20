@@ -347,47 +347,41 @@ class APIClient {
   // ==================== Token Management ====================
 
   /**
-   * Get access token from Zustand store first, fallback to localStorage (legacy).
-   * Access token is kept in memory (Zustand), NOT persisted to localStorage.
+   * Get access token from Zustand store (in-memory only).
+   * Security: never reads from localStorage to prevent XSS token theft.
    */
   private getAccessToken(): string | null {
     if (typeof window === 'undefined') return null;
-    // Try Zustand store first (lazy import to avoid circular deps at module init)
     try {
       const { useAuthStore } = require('../stores/authStore');
-      const storeToken = useAuthStore.getState().accessToken;
-      if (storeToken) return storeToken;
+      return useAuthStore.getState().accessToken || null;
     } catch {
-      // Store not available yet
+      return null;
     }
-    // Legacy fallback
-    return localStorage.getItem('access_token');
   }
 
   /**
    * Store access token in Zustand store (memory) and set has_token flag cookie.
    * Refresh token is now an httpOnly cookie set by the backend — we never touch it.
-   * Legacy: also write to localStorage for backward compat with existing components.
+   * Security: access token is ONLY in memory (Zustand), never in localStorage.
    */
   private setAccessToken(accessToken: string) {
     if (typeof window === 'undefined') return;
-    // Update Zustand store
+    // Update Zustand store (in-memory only — not vulnerable to XSS)
     try {
       const { useAuthStore } = require('../stores/authStore');
       useAuthStore.getState().setAccessToken(accessToken);
     } catch {
       // Store not available
     }
-    // Legacy: keep in localStorage for components that still read it directly
-    localStorage.setItem('access_token', accessToken);
-    // Set flag cookie for Next.js middleware
+    // Set flag cookie for Next.js middleware (no actual token value)
     const secure = window.location.protocol === 'https:' ? '; Secure' : '';
     document.cookie = `has_token=1; path=/; max-age=3600; SameSite=Lax${secure}`;
   }
 
   private clearTokens() {
     if (typeof window === 'undefined') return;
-    localStorage.removeItem('access_token');
+    localStorage.removeItem('access_token');  // Clean up legacy if still present
     localStorage.removeItem('refresh_token');  // Clean up legacy
     localStorage.removeItem('user');
     document.cookie = 'has_token=; path=/; max-age=0';

@@ -2,6 +2,9 @@
 """
 WebSocket Routes for Real-Time Updates
 Contract analysis progress, notifications, live updates
+
+Performance: DB sessions are short-lived (opened per poll, not per connection).
+This prevents connection pool exhaustion with many WebSocket clients.
 """
 import json
 import asyncio
@@ -10,7 +13,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
 from sqlalchemy.orm import Session
 from loguru import logger
 
-from src.models.database import get_db
+from src.models.database import get_db, SessionLocal
 from src.models import Contract, AnalysisResult
 from src.models.auth_models import User, UserSession
 from src.services.auth_service import AuthService
@@ -68,6 +71,31 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+def _authenticate_ws(db: Session, ws_token: str):
+    """Authenticate WebSocket connection. Returns (user_id, user_role, assigned_to_check) or None."""
+    auth_service = AuthService(db)
+    payload = auth_service.verify_token(ws_token, token_type="access")
+    if not payload:
+        return None
+
+    user_id = payload.get("user_id")
+
+    # Check session revocation
+    session = db.query(UserSession).filter(
+        UserSession.user_id == user_id,
+        UserSession.access_token == ws_token,
+        UserSession.revoked == False
+    ).first()
+    if not session:
+        return None
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return None
+
+    return {"user_id": user.id, "role": user.role}
+
+
 @router.websocket("/analysis/{contract_id}")
 async def websocket_analysis_updates(
     websocket: WebSocket,
@@ -80,13 +108,12 @@ async def websocket_analysis_updates(
     **Auth:** Send token as first message: {"type": "auth", "token": "ACCESS_TOKEN"}
 
     **Message types:** progress, status_change, clause_analyzed, risk_found, analysis_complete, error
+
+    **Performance:** DB session is closed after authentication. Short-lived sessions
+    are used for periodic status polling to avoid holding connection pool slots.
     """
     # Accept connection first, then authenticate via first message
     await websocket.accept()
-
-    # Authenticate via first message only (legacy query param removed for security)
-    auth_service = AuthService(db)
-    payload = None
 
     # Wait for auth message (timeout 10s)
     ws_token = None
@@ -95,44 +122,37 @@ async def websocket_analysis_updates(
         msg = json.loads(raw)
         if msg.get("type") == "auth" and msg.get("token"):
             ws_token = msg["token"]
-            payload = auth_service.verify_token(ws_token, token_type="access")
     except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
-            pass
+        pass
 
-    if not payload:
+    if not ws_token:
         await websocket.send_json({"type": "error", "message": "Authentication failed"})
         await websocket.close(code=1008, reason="Invalid token")
         return
 
-    user_id = payload.get("user_id")
-
-    # Check session revocation (same as get_current_user in dependencies.py)
-    session = db.query(UserSession).filter(
-        UserSession.user_id == user_id,
-        UserSession.access_token == ws_token,
-        UserSession.revoked == False
-    ).first()
-    if not session:
-        await websocket.send_json({"type": "error", "message": "Session revoked"})
-        await websocket.close(code=1008, reason="Session revoked")
+    # Authenticate using the injected DB session, then close it
+    auth_info = _authenticate_ws(db, ws_token)
+    if not auth_info:
+        await websocket.send_json({"type": "error", "message": "Authentication failed"})
+        await websocket.close(code=1008, reason="Invalid token")
         return
 
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        await websocket.close(code=1008, reason="User not found")
-        return
-
-    # Check contract exists and user has access
+    # Check contract access
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not contract:
         await websocket.close(code=1008, reason="Contract not found")
         return
 
-    if contract.assigned_to != user.id and user.role not in ['admin']:
+    if contract.assigned_to != auth_info["user_id"] and auth_info["role"] != "admin":
         await websocket.close(code=1008, reason="Permission denied")
         return
 
-    # Register connection (already accepted above)
+    initial_status = contract.status
+
+    # Close the injected DB session — we'll use short-lived sessions for polling
+    db.close()
+
+    # Register connection
     if contract_id not in manager.active_connections:
         manager.active_connections[contract_id] = set()
     manager.active_connections[contract_id].add(websocket)
@@ -143,7 +163,7 @@ async def websocket_analysis_updates(
         await manager.send_personal_message({
             "type": "connected",
             "contract_id": contract_id,
-            "status": contract.status,
+            "status": initial_status,
             "message": "Connected to analysis updates"
         }, websocket)
 
@@ -152,13 +172,27 @@ async def websocket_analysis_updates(
             # Poll database for updates every 5 seconds
             await asyncio.sleep(5)
 
-            # Refresh contract status
-            db.refresh(contract)
+            # Short-lived DB session for each poll — does not hold pool slot between polls
+            poll_db = SessionLocal()
+            try:
+                contract = poll_db.query(Contract).filter(Contract.id == contract_id).first()
+                if not contract:
+                    break
 
-            # Get analysis if available
-            analysis = db.query(AnalysisResult).filter(
-                AnalysisResult.contract_id == contract_id
-            ).first()
+                analysis = poll_db.query(AnalysisResult).filter(
+                    AnalysisResult.contract_id == contract_id
+                ).first()
+
+                current_status = contract.status
+                risks_count = len(analysis.risks_by_category) if analysis and analysis.risks_by_category else 0
+                recs_count = len(analysis.recommendations) if analysis and analysis.recommendations else 0
+
+                # For final message
+                final_analysis_id = analysis.id if analysis else None
+                final_risks = len(analysis.risks) if analysis and hasattr(analysis, 'risks') and analysis.risks else 0
+                final_recs = len(analysis.recommendations) if analysis and hasattr(analysis, 'recommendations') and analysis.recommendations else 0
+            finally:
+                poll_db.close()
 
             # Calculate progress based on status
             progress_map = {
@@ -168,36 +202,36 @@ async def websocket_analysis_updates(
                 'completed': 100,
                 'error': 0
             }
-            progress = progress_map.get(contract.status, 0)
+            progress = progress_map.get(current_status, 0)
 
             # Send status update
             update_message = {
                 "type": "progress",
                 "contract_id": contract_id,
-                "status": contract.status,
+                "status": current_status,
                 "progress": progress,
-                "message": f"Status: {contract.status}",
+                "message": f"Status: {current_status}",
                 "data": {
-                    "risks_count": len(analysis.risks_by_category) if analysis and analysis.risks_by_category else 0,
-                    "recommendations_count": len(analysis.recommendations) if analysis and analysis.recommendations else 0
+                    "risks_count": risks_count,
+                    "recommendations_count": recs_count,
                 }
             }
 
             await manager.send_personal_message(update_message, websocket)
 
             # If analysis is complete or failed, send final message
-            if contract.status in ['completed', 'error']:
+            if current_status in ['completed', 'error']:
                 final_message = {
-                    "type": "analysis_complete" if contract.status == 'completed' else "error",
+                    "type": "analysis_complete" if current_status == 'completed' else "error",
                     "contract_id": contract_id,
-                    "status": contract.status,
-                    "progress": 100 if contract.status == 'completed' else 0,
-                    "message": "Analysis completed successfully" if contract.status == 'completed' else "Analysis failed",
+                    "status": current_status,
+                    "progress": 100 if current_status == 'completed' else 0,
+                    "message": "Analysis completed successfully" if current_status == 'completed' else "Analysis failed",
                     "data": {
-                        "analysis_id": analysis.id if analysis else None,
-                        "risks_count": len(analysis.risks) if analysis and hasattr(analysis, 'risks') else 0,
-                        "recommendations_count": len(analysis.recommendations) if analysis and hasattr(analysis, 'recommendations') else 0
-                    } if contract.status == 'completed' else {}
+                        "analysis_id": final_analysis_id,
+                        "risks_count": final_risks,
+                        "recommendations_count": final_recs,
+                    } if current_status == 'completed' else {}
                 }
                 await manager.send_personal_message(final_message, websocket)
                 break
@@ -222,54 +256,45 @@ async def websocket_notifications(
 
     **Notification types:** analysis_complete, contract_uploaded, export_ready,
     subscription_expiring, limit_reached
+
+    **Performance:** DB session closed after auth; short-lived sessions for polling.
     """
     # Accept connection first, then authenticate via first message
     await websocket.accept()
 
-    auth_service = AuthService(db)
-    payload = None
     ws_token = None
-
     try:
         raw = await asyncio.wait_for(websocket.receive_text(), timeout=10.0)
         msg = json.loads(raw)
         if msg.get("type") == "auth" and msg.get("token"):
             ws_token = msg["token"]
-            payload = auth_service.verify_token(ws_token, token_type="access")
     except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
-            pass
+        pass
 
-    if not payload:
+    if not ws_token:
         await websocket.send_json({"type": "error", "message": "Authentication failed"})
         await websocket.close(code=1008, reason="Invalid token")
         return
 
-    user_id = payload.get("user_id")
-
-    # Check session revocation
-    session = db.query(UserSession).filter(
-        UserSession.user_id == user_id,
-        UserSession.access_token == ws_token,
-        UserSession.revoked == False
-    ).first()
-    if not session:
-        await websocket.send_json({"type": "error", "message": "Session revoked"})
+    auth_info = _authenticate_ws(db, ws_token)
+    if not auth_info:
+        await websocket.send_json({"type": "error", "message": "Authentication failed"})
         await websocket.close(code=1008, reason="Session revoked")
         return
 
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        await websocket.close(code=1008, reason="User not found")
-        return
+    user_id = auth_info["user_id"]
 
-    logger.info(f"User {user.id} connected to notifications")
+    # Close the injected DB session
+    db.close()
+
+    logger.info(f"User {user_id} connected to notifications")
 
     try:
         # Send welcome notification
         await websocket.send_json({
             "type": "connected",
             "message": "Connected to notification service",
-            "user_id": user.id
+            "user_id": user_id
         })
 
         # Keep connection alive
@@ -277,34 +302,46 @@ async def websocket_notifications(
             # Check for new notifications every 5 seconds
             await asyncio.sleep(5)
 
-            # Refresh user data
-            db.refresh(user)
+            # Short-lived DB session for each poll
+            poll_db = SessionLocal()
+            try:
+                user = poll_db.query(User).filter(User.id == user_id).first()
+                if not user:
+                    break
 
-            # Check demo expiration
-            if user.is_demo and user.demo_expires:
-                from datetime import datetime, timedelta, timezone
-                time_left = user.demo_expires - datetime.now(timezone.utc)
-                if timedelta(0) < time_left < timedelta(hours=1):
-                    await websocket.send_json({
-                        "type": "demo_expiring",
-                        "title": "Демо-доступ истекает",
-                        "message": f"Ваш демо-доступ истекает через {int(time_left.total_seconds() / 60)} минут",
+                notifications = []
+
+                # Check demo expiration
+                if user.is_demo and user.demo_expires:
+                    from datetime import datetime, timedelta, timezone
+                    time_left = user.demo_expires - datetime.now(timezone.utc)
+                    if timedelta(0) < time_left < timedelta(hours=1):
+                        notifications.append({
+                            "type": "demo_expiring",
+                            "title": "Демо-доступ истекает",
+                            "message": f"Ваш демо-доступ истекает через {int(time_left.total_seconds() / 60)} минут",
+                            "severity": "warning"
+                        })
+
+                # Check daily limits
+                if user.contracts_today >= user.max_contracts_per_day:
+                    notifications.append({
+                        "type": "limit_reached",
+                        "title": "Лимит достигнут",
+                        "message": "Вы достигли дневного лимита контрактов",
                         "severity": "warning"
                     })
+            finally:
+                poll_db.close()
 
-            # Check daily limits
-            if user.contracts_today >= user.max_contracts_per_day:
-                await websocket.send_json({
-                    "type": "limit_reached",
-                    "title": "Лимит достигнут",
-                    "message": "Вы достигли дневного лимита контрактов",
-                    "severity": "warning"
-                })
+            # Send collected notifications outside DB session
+            for notif in notifications:
+                await websocket.send_json(notif)
 
     except WebSocketDisconnect:
-        logger.info(f"User {user.id} disconnected from notifications")
+        logger.info(f"User {user_id} disconnected from notifications")
     except Exception as e:
-        logger.error(f"WebSocket error for user {user.id}: {e}", exc_info=True)
+        logger.error(f"WebSocket error for user {user_id}: {e}", exc_info=True)
 
 
 # Helper function to broadcast updates (can be called from agents)

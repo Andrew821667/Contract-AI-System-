@@ -380,11 +380,13 @@ if DATABASE_URL.startswith("sqlite"):
     )
 else:
     # For PostgreSQL — with connection pooling
+    # pool_size=20 + max_overflow=40 = 60 max connections
+    # Accounts for: API requests, WebSocket polling, background tasks, bootstrap session
     engine = create_engine(
         DATABASE_URL,
         echo=False,
-        pool_size=10,
-        max_overflow=20,
+        pool_size=20,
+        max_overflow=40,
         pool_pre_ping=True,  # Detect stale connections
         pool_recycle=300,     # Recycle connections after 5 minutes
     )

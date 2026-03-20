@@ -89,6 +89,12 @@ async def get_material_changes(
     """
     Возвращает список существенных изменений для указанного сравнения.
     """
+    # IDOR fix: проверяем доступ к документу через кеш сравнения
+    from src.core.negotiation.version_service import _comparison_cache
+    cached = _comparison_cache.get(comparison_id)
+    if cached and cached.get("document_id"):
+        verify_document_access(cached["document_id"], current_user, db)
+
     core = getattr(request.app.state, "core_services", None)
     if core:
         svc = VersionIntelligenceService(
@@ -121,6 +127,12 @@ async def get_recommendations(
     """
     Возвращает рекомендации: принять / отклонить / обсудить каждое изменение.
     """
+    # IDOR fix: проверяем доступ к документу через кеш сравнения
+    from src.core.negotiation.version_service import _comparison_cache
+    cached = _comparison_cache.get(comparison_id)
+    if cached and cached.get("document_id"):
+        verify_document_access(cached["document_id"], current_user, db)
+
     core = getattr(request.app.state, "core_services", None)
     if core:
         svc = VersionIntelligenceService(

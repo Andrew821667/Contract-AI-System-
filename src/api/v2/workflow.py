@@ -55,6 +55,12 @@ async def create_workflow_definition(
     current_user: User = Depends(get_current_user),
 ) -> WorkflowDefinitionRead:
     """Создать новый шаблон маршрута согласования."""
+    # Security: только admin может создавать workflow definitions
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Только администратор может создавать маршруты согласования",
+        )
     definition = WorkflowDefinition(
         name=body.name,
         description=body.description,
@@ -106,6 +112,9 @@ async def complete_task(
     current_user: User = Depends(get_current_user),
 ) -> WorkflowTaskRead:
     """Завершить задачу с решением (approve/reject/return_for_revision)."""
+    # IDOR fix: проверяем, что задача назначена текущему пользователю
+    verify_workflow_task_ownership(task_id, current_user, db)
+
     engine = WorkflowEngineService(db)
     try:
         task = engine.complete_task(

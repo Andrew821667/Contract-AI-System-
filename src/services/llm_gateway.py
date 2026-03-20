@@ -5,12 +5,17 @@ LLM Gateway - Единая точка доступа ко всем LLM пров�
 import json
 import asyncio
 import hashlib
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Literal, Optional, Union
 from tenacity import retry, stop_after_attempt, wait_exponential
 from loguru import logger
 from datetime import datetime, timezone
 from config.settings import settings
 from ..utils.rate_limiter import get_global_rate_limiter, RateLimitExceeded
+
+# Dedicated thread pool for LLM calls — default Python pool is only 5-8 threads,
+# which causes all async endpoints to stall when saturated with slow LLM requests.
+_LLM_THREAD_POOL = ThreadPoolExecutor(max_workers=32, thread_name_prefix="llm")
 
 
 class LLMGateway:
@@ -262,10 +267,10 @@ class LLMGateway:
         db_session=None,
         **kwargs
     ) -> Union[str, Dict[str, Any]]:
-        """Async wrapper for call() — runs sync LLM call in thread pool to avoid blocking event loop."""
+        """Async wrapper for call() — runs sync LLM call in dedicated thread pool (32 workers)."""
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
-            None,
+            _LLM_THREAD_POOL,
             lambda: self.call(
                 prompt=prompt,
                 system_prompt=system_prompt,

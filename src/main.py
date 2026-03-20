@@ -79,6 +79,9 @@ async def lifespan(app: FastAPI):
             core_services = bootstrap(core_db)
             app.state.core_services = core_services
             app.state._core_db = core_db  # prevent GC, close on shutdown
+            # Expire all cached ORM objects after bootstrap (seed) to prevent stale reads.
+            # Next access will re-query from DB with fresh data.
+            core_db.expire_all()
             logger.info("✅ Core services bootstrapped successfully")
         except Exception as e:
             logger.warning(f"⚠️ Core services bootstrap skipped: {e}")

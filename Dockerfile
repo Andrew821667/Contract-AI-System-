@@ -75,4 +75,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Default command (FastAPI backend)
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Gunicorn with 4 Uvicorn workers for multi-core utilization.
+# Requires Redis for rate limiting (in-memory rate limiter is per-process).
+CMD ["gunicorn", "src.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "120", "--graceful-timeout", "30"]

@@ -123,6 +123,18 @@ async def get_clause_details(
                 detail="Clause not found"
             )
 
+        # IDOR fix: проверяем, что клаузула принадлежит контракту текущего пользователя
+        if current_user.role != "admin":
+            from src.models.database import Contract
+            contract_id = clause.get("contract_id") if isinstance(clause, dict) else getattr(clause, "contract_id", None)
+            if contract_id:
+                contract = db.query(Contract).filter(Contract.id == contract_id).first()
+                if not contract or contract.assigned_to != current_user.id:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Нет доступа к данной клаузуле"
+                    )
+
         return clause
 
     except HTTPException:

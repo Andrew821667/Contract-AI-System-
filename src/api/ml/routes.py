@@ -495,6 +495,11 @@ async def get_next_sections(
         raise HTTPException(status_code=404, detail="Session not found")
 
     session_data = _composer_sessions[session_id]
+
+    # IDOR fix: проверяем ownership (как в suggest/validate)
+    if session_data['user_id'] != current_user.id:
+        raise HTTPException(status_code=403, detail="Not your session")
+
     context = session_data['context']
 
     composer = get_smart_composer()
