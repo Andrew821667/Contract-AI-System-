@@ -3,7 +3,8 @@
 Contract Listing Routes
 """
 import os
-from typing import Optional
+import time
+from typing import Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
@@ -16,6 +17,34 @@ from src.models.auth_models import User
 from src.api.dependencies import get_current_user
 
 from .schemas import ContractListResponse
+
+
+# ── Contract list cache (30s TTL) ────────────────────────────────────────
+# Short-lived cache to reduce DB load when many users refresh the list page.
+_LIST_CACHE_TTL = 30
+_list_cache: dict[str, tuple[Any, float]] = {}
+_LIST_CACHE_MAX = 128
+
+
+def _list_cache_key(user_id, page, page_size, status_f, type_f, search, cursor) -> str:
+    return f"{user_id}:{page}:{page_size}:{status_f}:{type_f}:{search}:{cursor}"
+
+
+def _list_cache_get(key: str) -> Any | None:
+    entry = _list_cache.get(key)
+    if entry and entry[1] > time.time():
+        return entry[0]
+    _list_cache.pop(key, None)
+    return None
+
+
+def _list_cache_set(key: str, data: Any) -> None:
+    if len(_list_cache) >= _LIST_CACHE_MAX:
+        now = time.time()
+        expired = [k for k, v in _list_cache.items() if v[1] <= now]
+        for k in expired:
+            del _list_cache[k]
+    _list_cache[key] = (data, time.time() + _LIST_CACHE_TTL)
 
 
 router = APIRouter()
@@ -51,6 +80,14 @@ async def list_contracts(
             page_size = 100
         if page < 1:
             page = 1
+
+        # Check cache (30s TTL)
+        cache_key = _list_cache_key(
+            current_user.id, page, page_size, status, contract_type, search, cursor
+        )
+        cached = _list_cache_get(cache_key)
+        if cached:
+            return cached
 
         query = db.query(Contract)
 
@@ -111,13 +148,15 @@ async def list_contracts(
             if last.created_at:
                 next_cursor = f"{last.created_at.isoformat()}:{last.id}"
 
-        return ContractListResponse(
+        result = ContractListResponse(
             contracts=contracts_data,
             total=total,
             page=page,
             page_size=page_size,
             next_cursor=next_cursor,
         )
+        _list_cache_set(cache_key, result)
+        return result
 
     except Exception as e:
         logger.error(f"Error listing contracts: {e}", exc_info=True)

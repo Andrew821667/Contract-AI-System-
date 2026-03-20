@@ -14,7 +14,8 @@ Endpoints:
 Author: AI Contract System
 """
 
-from typing import Optional
+import time
+from typing import Optional, Any
 from datetime import datetime
 from fastapi import APIRouter, Depends, Query, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
@@ -25,6 +26,31 @@ from src.models.database import get_db
 from src.models.auth_models import User
 from src.api.contracts.routes import get_current_user
 from sqlalchemy.orm import Session
+
+
+# ── Analytics cache (5 min TTL) ──────────────────────────────────────────
+# Dashboard queries are expensive (multiple aggregations). Cache per user+period.
+_ANALYTICS_CACHE_TTL = 300  # 5 minutes
+_analytics_cache: dict[str, tuple[Any, float]] = {}  # key → (data, expires_at)
+_ANALYTICS_CACHE_MAX = 64
+
+
+def _analytics_cache_get(key: str) -> Any | None:
+    entry = _analytics_cache.get(key)
+    if entry and entry[1] > time.time():
+        return entry[0]
+    _analytics_cache.pop(key, None)
+    return None
+
+
+def _analytics_cache_set(key: str, data: Any) -> None:
+    if len(_analytics_cache) >= _ANALYTICS_CACHE_MAX:
+        # Evict expired
+        now = time.time()
+        expired = [k for k, v in _analytics_cache.items() if v[1] <= now]
+        for k in expired:
+            del _analytics_cache[k]
+    _analytics_cache[key] = (data, time.time() + _ANALYTICS_CACHE_TTL)
 
 
 # Router
@@ -88,6 +114,12 @@ async def get_dashboard(
 
     **Access:** Requires authentication
     """
+    # Check cache (5 min TTL per user+period)
+    cache_key = f"dashboard:{current_user.id}:{period_days}"
+    cached = _analytics_cache_get(cache_key)
+    if cached:
+        return cached
+
     analytics = get_analytics_service(db)
 
     dashboard_data = analytics.get_dashboard_summary(
@@ -95,6 +127,7 @@ async def get_dashboard(
         period_days=period_days
     )
 
+    _analytics_cache_set(cache_key, dashboard_data)
     return dashboard_data
 
 
