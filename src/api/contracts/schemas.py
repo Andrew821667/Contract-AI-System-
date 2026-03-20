@@ -59,6 +59,7 @@ class ContractListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+    next_cursor: Optional[str] = None  # Keyset cursor for efficient deep pagination
 
 
 class ContractVersionResponse(BaseModel):

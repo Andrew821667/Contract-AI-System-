@@ -28,6 +28,7 @@ async def list_contracts(
     status: Optional[str] = None,
     contract_type: Optional[str] = None,
     search: Optional[str] = None,
+    cursor: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -37,6 +38,10 @@ async def list_contracts(
     **Filters:**
     - status: uploaded, analyzing, completed, error
     - contract_type: supply, service, lease, etc.
+
+    **Pagination:**
+    - Offset mode (default): use `page` + `page_size`
+    - Cursor mode (faster for deep pages): pass `cursor` from previous response's `next_cursor`
 
     **Returns:** Paginated list of contracts
     """
@@ -67,8 +72,25 @@ async def list_contracts(
         # Get total count
         total = query.count()
 
-        # Paginate
-        contracts = query.order_by(Contract.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+        # Paginate — cursor-based if cursor provided, else offset
+        if cursor:
+            # Cursor is "created_at:id" for keyset pagination (O(1) vs O(N) for offset)
+            try:
+                cursor_ts, cursor_id = cursor.rsplit(":", 1)
+                from datetime import datetime
+                cursor_dt = datetime.fromisoformat(cursor_ts)
+                query = query.filter(
+                    (Contract.created_at < cursor_dt) |
+                    ((Contract.created_at == cursor_dt) & (Contract.id < cursor_id))
+                )
+            except (ValueError, TypeError):
+                pass  # Invalid cursor — fall through to normal ordering
+
+        contracts = query.order_by(Contract.created_at.desc(), Contract.id.desc()).limit(page_size).all()
+
+        if not cursor:
+            # Offset mode for backward compat
+            contracts = query.order_by(Contract.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
         # Format response
         contracts_data = []
@@ -82,11 +104,19 @@ async def list_contracts(
                 'updated_at': contract.updated_at.isoformat() if contract.updated_at else None
             })
 
+        # Build next_cursor for keyset pagination
+        next_cursor = None
+        if contracts_data and len(contracts_data) == page_size:
+            last = contracts[-1]
+            if last.created_at:
+                next_cursor = f"{last.created_at.isoformat()}:{last.id}"
+
         return ContractListResponse(
             contracts=contracts_data,
             total=total,
             page=page,
-            page_size=page_size
+            page_size=page_size,
+            next_cursor=next_cursor,
         )
 
     except Exception as e:

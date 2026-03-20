@@ -56,7 +56,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if self._redis:
             logger.info("Rate limiter: using Redis backend")
         else:
-            logger.warning("Rate limiter: Redis unavailable, using in-memory (not suitable for multi-worker)")
+            import os
+            env = os.getenv("ENVIRONMENT", "development")
+            if env == "production":
+                logger.error(
+                    "Rate limiter: Redis unavailable in PRODUCTION! "
+                    "In-memory rate limiting is per-process and ineffective with multiple workers. "
+                    "Please configure REDIS_URL."
+                )
+            else:
+                logger.warning("Rate limiter: Redis unavailable, using in-memory (not suitable for multi-worker)")
 
         # In-memory fallback
         self.buckets: Dict[str, Dict] = defaultdict(lambda: {
@@ -216,9 +225,9 @@ class IPFilterMiddleware(BaseHTTPMiddleware):
         return request.client.host if request.client else "unknown"
 
 
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+class SecurityHeadersMiddleware:
     """
-    Security headers middleware
+    Pure ASGI security headers middleware (no BaseHTTPMiddleware overhead).
 
     Adds security-related HTTP headers:
     - X-Content-Type-Options
@@ -228,31 +237,43 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     - Content-Security-Policy (CSP)
     """
 
-    async def dispatch(self, request: Request, call_next):
-        response = await call_next(request)
+    _SECURITY_HEADERS = [
+        (b"x-content-type-options", b"nosniff"),
+        (b"x-frame-options", b"DENY"),
+        (b"x-xss-protection", b"1; mode=block"),
+        (b"strict-transport-security", b"max-age=31536000; includeSubDomains; preload"),
+        (b"content-security-policy", (
+            b"default-src 'self'; "
+            b"script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            b"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            b"font-src 'self' https://fonts.gstatic.com; "
+            b"img-src 'self' https: data:; "
+            b"connect-src 'self' ws: wss:; "
+            b"form-action 'self'; "
+            b"frame-ancestors 'none'; "
+            b"base-uri 'self'"
+        )),
+    ]
 
-        # Add security headers
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["X-XSS-Protection"] = "1; mode=block"
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-            "font-src 'self' https://fonts.gstatic.com; "
-            "img-src 'self' https: data:; "
-            "connect-src 'self' ws: wss:; "
-            "form-action 'self'; "
-            "frame-ancestors 'none'; "
-            "base-uri 'self'"
-        )
+    def __init__(self, app):
+        self.app = app
 
-        # Remove server header (security through obscurity)
-        if "server" in response.headers:
-            del response.headers["server"]
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        return response
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                # Add security headers
+                headers.extend(self._SECURITY_HEADERS)
+                # Remove server header
+                headers = [(k, v) for k, v in headers if k.lower() != b"server"]
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
 
 
 def setup_cors(app):
@@ -317,7 +338,7 @@ def setup_security_middleware(app):
     # Rate limiting
     app.add_middleware(RateLimitMiddleware, requests_per_minute=1000)
 
-    # Security headers
+    # Security headers (pure ASGI — no BaseHTTPMiddleware threading overhead)
     app.add_middleware(SecurityHeadersMiddleware)
 
     # IP filtering (optional - disabled by default)

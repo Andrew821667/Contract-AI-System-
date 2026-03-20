@@ -310,8 +310,6 @@ async def batch_analyze_contracts(
 
     # Launch background batch processing
     async def run_batch():
-        from src.models.database import SessionLocal
-        batch_db = SessionLocal()
         try:
             import asyncio
             tasks = []
@@ -334,8 +332,6 @@ async def batch_analyze_contracts(
             await asyncio.gather(*(bounded(t) for t in tasks), return_exceptions=True)
         except Exception as e:
             logger.error(f"Batch analysis error: {e}", exc_info=True)
-        finally:
-            batch_db.close()
 
     background_tasks.add_task(run_batch)
 
