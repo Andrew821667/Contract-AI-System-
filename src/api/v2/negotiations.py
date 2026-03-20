@@ -78,8 +78,8 @@ async def start_negotiation(
 
     try:
         result = await svc.start_negotiation(body, user_id=current_user.id)
-    except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    except PermissionError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа")
 
     return result
 
@@ -108,8 +108,10 @@ async def generate_objections(
 
     try:
         result = await svc.generate_objections(body, user_id=current_user.id)
-    except (PermissionError, ValueError) as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except PermissionError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа")
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Некорректные параметры запроса")
 
     return result
 
@@ -163,8 +165,10 @@ async def prepare_position(
 
     try:
         result = await svc.prepare_position(body, user_id=current_user.id)
-    except (PermissionError, ValueError) as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except PermissionError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа")
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Некорректные параметры запроса")
 
     return result
 

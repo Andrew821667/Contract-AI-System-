@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 Contract Listing Routes
+
+Uses async DB sessions (asyncpg) when available for non-blocking queries.
+Falls back to sync sessions on SQLite (dev mode).
 """
 import os
 import time
@@ -8,10 +11,10 @@ from typing import Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+from sqlalchemy import select, func, or_, and_
 from loguru import logger
 
-from src.models.database import get_db
+from src.models.database import get_async_db, AsyncSessionLocal
 from src.models import Contract, AnalysisResult
 from src.models.auth_models import User
 from src.api.dependencies import get_current_user
@@ -49,6 +52,9 @@ def _list_cache_set(key: str, data: Any) -> None:
 
 router = APIRouter()
 
+# Check if we're in async mode (PostgreSQL) or sync fallback (SQLite)
+_ASYNC_MODE = AsyncSessionLocal is not None
+
 
 @router.get("", response_model=ContractListResponse)
 async def list_contracts(
@@ -59,7 +65,7 @@ async def list_contracts(
     search: Optional[str] = None,
     cursor: Optional[str] = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db=Depends(get_async_db)
 ):
     """
     List contracts for current user
@@ -89,25 +95,32 @@ async def list_contracts(
         if cached:
             return cached
 
-        query = db.query(Contract)
+        # Build query using SQLAlchemy 2.0 select() style (works with both sync and async)
+        stmt = select(Contract)
 
         # Filter by user (non-admins can only see their own contracts)
         if current_user.role not in ['admin']:
-            query = query.filter(Contract.assigned_to == current_user.id)
+            stmt = stmt.where(Contract.assigned_to == current_user.id)
 
         # Apply filters
         if status:
-            query = query.filter(Contract.status == status)
+            stmt = stmt.where(Contract.status == status)
         if contract_type:
-            query = query.filter(Contract.contract_type == contract_type)
+            stmt = stmt.where(Contract.contract_type == contract_type)
         if search:
             safe_search = search.replace('%', r'\%').replace('_', r'\_')
-            query = query.filter(
+            stmt = stmt.where(
                 Contract.file_name.ilike(f'%{safe_search}%', escape='\\')
             )
 
         # Get total count
-        total = query.count()
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+
+        if _ASYNC_MODE:
+            total_result = await db.execute(count_stmt)
+            total = total_result.scalar()
+        else:
+            total = db.execute(count_stmt).scalar()
 
         # Paginate — cursor-based if cursor provided, else offset
         if cursor:
@@ -116,18 +129,25 @@ async def list_contracts(
                 cursor_ts, cursor_id = cursor.rsplit(":", 1)
                 from datetime import datetime
                 cursor_dt = datetime.fromisoformat(cursor_ts)
-                query = query.filter(
-                    (Contract.created_at < cursor_dt) |
-                    ((Contract.created_at == cursor_dt) & (Contract.id < cursor_id))
+                stmt = stmt.where(
+                    or_(
+                        Contract.created_at < cursor_dt,
+                        and_(Contract.created_at == cursor_dt, Contract.id < cursor_id)
+                    )
                 )
             except (ValueError, TypeError):
                 pass  # Invalid cursor — fall through to normal ordering
 
-        contracts = query.order_by(Contract.created_at.desc(), Contract.id.desc()).limit(page_size).all()
-
-        if not cursor:
+            stmt = stmt.order_by(Contract.created_at.desc(), Contract.id.desc()).limit(page_size)
+        else:
             # Offset mode for backward compat
-            contracts = query.order_by(Contract.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+            stmt = stmt.order_by(Contract.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+
+        if _ASYNC_MODE:
+            result = await db.execute(stmt)
+            contracts = result.scalars().all()
+        else:
+            contracts = db.execute(stmt).scalars().all()
 
         # Format response
         contracts_data = []
@@ -170,11 +190,18 @@ async def list_contracts(
 async def get_contract_details(
     contract_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db=Depends(get_async_db)
 ):
     """Get contract details including analysis results"""
     try:
-        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        stmt = select(Contract).where(Contract.id == contract_id)
+
+        if _ASYNC_MODE:
+            result = await db.execute(stmt)
+            contract = result.scalar_one_or_none()
+        else:
+            contract = db.execute(stmt).scalar_one_or_none()
+
         if not contract:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -189,7 +216,13 @@ async def get_contract_details(
             )
 
         # Get analysis results if available
-        analysis = db.query(AnalysisResult).filter(AnalysisResult.contract_id == contract_id).first()
+        analysis_stmt = select(AnalysisResult).where(AnalysisResult.contract_id == contract_id)
+
+        if _ASYNC_MODE:
+            analysis_result = await db.execute(analysis_stmt)
+            analysis = analysis_result.scalar_one_or_none()
+        else:
+            analysis = db.execute(analysis_stmt).scalar_one_or_none()
 
         return {
             'contract': {
@@ -222,11 +255,18 @@ async def get_contract_details(
 async def download_contract(
     contract_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db=Depends(get_async_db)
 ):
     """Download original contract file"""
     try:
-        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        stmt = select(Contract).where(Contract.id == contract_id)
+
+        if _ASYNC_MODE:
+            result = await db.execute(stmt)
+            contract = result.scalar_one_or_none()
+        else:
+            contract = db.execute(stmt).scalar_one_or_none()
+
         if not contract:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

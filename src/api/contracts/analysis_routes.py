@@ -272,7 +272,7 @@ async def analyze_contract_stream(
 
         except Exception as e:
             logger.error(f"Streaming analysis error: {e}", exc_info=True)
-            yield {"event": "error", "data": json_mod.dumps({"error": str(e)})}
+            yield {"event": "error", "data": json_mod.dumps({"error": "Ошибка анализа. Попробуйте снова."})}
 
     return EventSourceResponse(event_generator())
 

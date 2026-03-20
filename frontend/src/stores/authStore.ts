@@ -50,10 +50,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setAuth: (user, accessToken) => {
     set({ user, accessToken, isAuthenticated: true, isLoading: false });
-    // Keep localStorage copy for components that still read it directly (backward compat)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('user', JSON.stringify(user));
-    }
   },
 
   setAccessToken: (token) => {
@@ -62,9 +58,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   setUser: (user) => {
     set({ user });
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('user', JSON.stringify(user));
-    }
   },
 
   login: async (username, password) => {
@@ -106,9 +99,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const user = await api.getCurrentUser();
       set({ user });
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('user', JSON.stringify(user));
-      }
     } catch {
       // If /me fails, user might be logged out
     }
@@ -123,26 +113,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return;
     }
 
-    // Fallback: try localStorage (legacy / backward compat during migration)
+    // Migration cleanup: remove stale localStorage tokens (security: prevent XSS theft)
     if (typeof window !== 'undefined') {
-      const legacyToken = localStorage.getItem('access_token');
-      const legacyUser = localStorage.getItem('user');
-      if (legacyToken && legacyUser) {
-        try {
-          set({
-            accessToken: legacyToken,
-            user: JSON.parse(legacyUser),
-            isAuthenticated: true,
-            isLoading: false,
-          });
-          return;
-        } catch {
-          // corrupted data, fall through to refresh
-        }
-      }
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
     }
 
-    // No in-memory or legacy token — try refresh via httpOnly cookie
+    // No in-memory token — try refresh via httpOnly cookie
     try {
       const { default: api } = await import('../services/api');
       const refreshed = await api.refreshToken();

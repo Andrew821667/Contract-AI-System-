@@ -158,6 +158,16 @@ class Settings(BaseSettings):
         else:
             self.debug = False  # Never auto-enable debug — must be explicit
 
+        # Security: never allow debug in production
+        if self.app_env == "production" and self.debug:
+            import warnings
+            warnings.warn(
+                "DEBUG=true is forbidden in production! Forcing debug=False.",
+                UserWarning,
+                stacklevel=2
+            )
+            self.debug = False
+
         # Создаём необходимые директории
         self._create_directories()
 

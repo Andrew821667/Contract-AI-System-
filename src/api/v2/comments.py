@@ -131,10 +131,10 @@ async def reply_to_comment(
             author_id=str(current_user.id),
             content=body.content,
         )
-    except ValueError as exc:
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
+            detail="Комментарий не найден",
         )
     db.commit()
     db.refresh(comment)
@@ -193,10 +193,10 @@ async def assign_comment(
             comment_id=comment_id,
             assignee_id=body.assignee_id,
         )
-    except Exception as exc:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ошибка назначения: {exc}",
+            detail="Ошибка назначения комментария",
         )
     db.commit()
     return {

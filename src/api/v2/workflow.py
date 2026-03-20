@@ -123,10 +123,10 @@ async def complete_task(
             decision=body.decision,
             comment=body.comment,
         )
-    except ValueError as exc:
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
+            detail="Задача не найдена",
         )
     db.commit()
     db.refresh(task)

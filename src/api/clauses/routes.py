@@ -69,7 +69,8 @@ async def get_clause_stats(
     """Get clause library statistics: counts by type, risk level, etc."""
     try:
         service = ClauseLibraryService(db)
-        return service.get_stats()
+        user_id = None if current_user.role == "admin" else current_user.id
+        return service.get_stats(user_id=user_id)
 
     except Exception as e:
         logger.error(f"Error getting clause stats: {e}", exc_info=True)
@@ -91,11 +92,13 @@ async def search_clauses(
     """Search clauses by text content with optional type filter."""
     try:
         service = ClauseLibraryService(db)
+        user_id = None if current_user.role == "admin" else current_user.id
         return service.search(
             query=q,
             clause_type=clause_type,
             page=page,
-            page_size=page_size
+            page_size=page_size,
+            user_id=user_id
         )
 
     except Exception as e:

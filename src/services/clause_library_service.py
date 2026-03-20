@@ -162,13 +162,21 @@ class ClauseLibraryService:
                 result['analysis'] = None
         return result
 
-    def get_stats(self) -> Dict[str, Any]:
-        """Get clause library statistics"""
-        total = self.db.query(func.count(ExtractedClause.id)).scalar() or 0
+    def get_stats(self, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """Get clause library statistics (filtered by user's contracts if user_id provided)"""
+        from src.models.database import Contract
+
+        base = self.db.query(ExtractedClause)
+        if user_id:
+            base = base.join(Contract, Contract.id == ExtractedClause.contract_id).filter(
+                Contract.assigned_to == user_id
+            )
+
+        total = base.with_entities(func.count(ExtractedClause.id)).scalar() or 0
 
         # Count by type
         type_stats = (
-            self.db.query(
+            base.with_entities(
                 ExtractedClause.clause_type,
                 func.count(ExtractedClause.id)
             )
@@ -178,7 +186,7 @@ class ClauseLibraryService:
 
         # Count by risk level
         risk_stats = (
-            self.db.query(
+            base.with_entities(
                 ExtractedClause.risk_level,
                 func.count(ExtractedClause.id)
             )
@@ -187,12 +195,12 @@ class ClauseLibraryService:
         )
 
         # Average severity score
-        avg_severity = self.db.query(
+        avg_severity = base.with_entities(
             func.avg(ExtractedClause.severity_score)
         ).scalar() or 0.0
 
         # Contracts with clauses
-        contracts_count = self.db.query(
+        contracts_count = base.with_entities(
             func.count(func.distinct(ExtractedClause.contract_id))
         ).scalar() or 0
 
@@ -209,7 +217,8 @@ class ClauseLibraryService:
         query: str,
         clause_type: Optional[str] = None,
         page: int = 1,
-        page_size: int = 20
+        page_size: int = 20,
+        user_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Search clauses by text content.
@@ -219,11 +228,20 @@ class ClauseLibraryService:
             clause_type: Optional filter by type
             page: Page number
             page_size: Items per page
+            user_id: Filter by contract owner (None = all, for admins)
         """
+        from src.models.database import Contract
+
         safe_q = query.replace('%', r'\%').replace('_', r'\_')
         db_query = self.db.query(ExtractedClause).filter(
             ExtractedClause.text.ilike(f'%{safe_q}%', escape='\\')
         )
+
+        # Security: non-admins can only search their own contracts' clauses
+        if user_id:
+            db_query = db_query.join(
+                Contract, Contract.id == ExtractedClause.contract_id
+            ).filter(Contract.assigned_to == user_id)
 
         if clause_type:
             db_query = db_query.filter(ExtractedClause.clause_type == clause_type)

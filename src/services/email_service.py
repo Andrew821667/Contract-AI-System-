@@ -27,6 +27,7 @@ try:
 except ImportError:
     SENDGRID_AVAILABLE = False
 
+from html import escape as html_escape
 from config.settings import settings
 
 
@@ -211,6 +212,7 @@ class EmailService:
             user_name: User's name
         """
         verification_url = f"{self.frontend_url}/verify-email?token={verification_token}"
+        safe_name = html_escape(user_name)
 
         html_content = f"""
         <!DOCTYPE html>
@@ -233,7 +235,7 @@ class EmailService:
                 </div>
                 <div class="content">
                     <h2>Подтверждение email</h2>
-                    <p>Здравствуйте, {user_name}!</p>
+                    <p>Здравствуйте, {safe_name}!</p>
                     <p>Спасибо за регистрацию в Contract AI System. Для активации вашего аккаунта, пожалуйста, подтвердите ваш email адрес.</p>
                     <p style="text-align: center;">
                         <a href="{verification_url}" class="button">Подтвердить Email</a>
@@ -285,6 +287,7 @@ Contract AI System - Подтверждение email
     ) -> tuple[bool, Optional[str]]:
         """Send password reset link"""
         reset_url = f"{self.frontend_url}/reset-password?token={reset_token}"
+        safe_name = html_escape(user_name)
 
         html_content = f"""
         <!DOCTYPE html>
@@ -308,7 +311,7 @@ Contract AI System - Подтверждение email
                 </div>
                 <div class="content">
                     <h2>Запрос на сброс пароля</h2>
-                    <p>Здравствуйте, {user_name}!</p>
+                    <p>Здравствуйте, {safe_name}!</p>
                     <p>Вы запросили сброс пароля для вашего аккаунта в Contract AI System.</p>
                     <p style="text-align: center;">
                         <a href="{reset_url}" class="button">Сбросить пароль</a>
@@ -366,6 +369,7 @@ Contract AI System - Сброс пароля
         is_demo: bool = False
     ) -> tuple[bool, Optional[str]]:
         """Send welcome email to new user"""
+        safe_name = html_escape(user_name)
         demo_info = ""
         if is_demo:
             demo_info = """
@@ -403,7 +407,7 @@ Contract AI System - Сброс пароля
                     <h1>🎉 Добро пожаловать!</h1>
                 </div>
                 <div class="content">
-                    <h2>Здравствуйте, {user_name}!</h2>
+                    <h2>Здравствуйте, {safe_name}!</h2>
                     <p>Спасибо за регистрацию в <strong>Contract AI System</strong> - интеллектуальной системе для автоматизации работы с договорами.</p>
 
                     {demo_info}

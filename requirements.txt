@@ -18,8 +18,9 @@ pydantic[email]==2.5.3
 pydantic-settings==2.1.0
 
 # Database
-sqlalchemy==2.0.25
+sqlalchemy[asyncio]==2.0.25
 psycopg2-binary==2.9.9
+asyncpg==0.29.0
 alembic==1.13.1
 
 # Vector DB and Embeddings
@@ -65,7 +66,7 @@ sse-starlette==1.6.5  # Server-Sent Events for streaming
 # Authentication & Security
 bcrypt==4.1.2
 pyjwt==2.8.0
-python-jose[cryptography]==3.3.0
+# python-jose removed — unused, has known CVEs (CVE-2024-33663/33664). Using pyjwt instead.
 passlib[bcrypt]==1.7.4
 qrcode[pil]==7.4.2  # For demo link QR codes
 

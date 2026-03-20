@@ -397,7 +397,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def get_db():
     """
-    Dependency for FastAPI to get database session
+    Dependency for FastAPI to get database session (sync).
 
     Usage:
     ```python
@@ -412,6 +412,71 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+# ==================== ASYNC DATABASE (PostgreSQL only) ====================
+# Non-blocking DB access via asyncpg. Falls back to sync for SQLite.
+
+async_engine = None
+AsyncSessionLocal = None
+
+if not DATABASE_URL.startswith("sqlite"):
+    try:
+        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+
+        # Convert postgresql:// → postgresql+asyncpg://
+        ASYNC_DATABASE_URL = DATABASE_URL.replace(
+            "postgresql://", "postgresql+asyncpg://"
+        ).replace(
+            "postgresql+psycopg2://", "postgresql+asyncpg://"
+        )
+
+        async_engine = create_async_engine(
+            ASYNC_DATABASE_URL,
+            echo=False,
+            pool_size=20,
+            max_overflow=40,
+            pool_pre_ping=True,
+            pool_recycle=300,
+        )
+
+        AsyncSessionLocal = async_sessionmaker(
+            async_engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+    except ImportError:
+        pass  # asyncpg not installed — async features disabled
+
+
+async def get_async_db():
+    """
+    Dependency for FastAPI async endpoints (PostgreSQL only).
+
+    Falls back to sync session wrapped in a thread if async engine is unavailable.
+
+    Usage:
+    ```python
+    @app.get("/users")
+    async def get_users(db: AsyncSession = Depends(get_async_db)):
+        result = await db.execute(select(User))
+        return result.scalars().all()
+    ```
+    """
+    if AsyncSessionLocal is None:
+        # Fallback: yield sync session (SQLite dev mode)
+        db = SessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+        return
+
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
 
 
 # Re-export User from auth_models for backwards compatibility

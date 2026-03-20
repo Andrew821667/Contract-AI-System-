@@ -64,10 +64,10 @@ async def compare_versions(
 
     try:
         result = await svc.compare_versions(body, user_id=current_user.id)
-    except PermissionError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except PermissionError:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа")
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Документ или версия не найдены")
 
     return result
 
@@ -107,8 +107,8 @@ async def get_material_changes(
 
     try:
         return await svc.detect_material_changes(comparison_id, user_id=current_user.id)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Сравнение не найдено")
 
 
 # ──────────────────────────────────────────────
@@ -145,8 +145,8 @@ async def get_recommendations(
 
     try:
         return await svc.get_change_recommendations(comparison_id, user_id=current_user.id)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Сравнение не найдено")
 
 
 # ──────────────────────────────────────────────
