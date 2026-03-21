@@ -208,7 +208,6 @@ async def get_run_plan(
 # ──────────────────────────────────────────────
 @router.get(
     "/orchestrator/runs/{run_id}/steps",
-    response_model=List[PlanStepRead],
     summary="Список шагов оркестрации с статусами",
 )
 async def list_run_steps(
@@ -229,7 +228,7 @@ async def list_run_steps(
         .first()
     )
     if not plan:
-        return []
+        return {"steps": []}
 
     steps = (
         db.query(PlanStep)
@@ -237,4 +236,4 @@ async def list_run_steps(
         .order_by(PlanStep.order.asc())
         .all()
     )
-    return steps
+    return {"steps": [PlanStepRead.model_validate(s) for s in steps]}

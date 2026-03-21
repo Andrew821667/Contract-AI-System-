@@ -22,8 +22,10 @@ from src.core.workflow.schemas import (
     WorkflowDefinitionCreate,
     WorkflowDefinitionRead,
     WorkflowTaskRead,
+    WorkflowExecutionRead,
+    WorkflowStartRequest,
 )
-from src.core.workflow.models import WorkflowDefinition, WorkflowTask
+from src.core.workflow.models import WorkflowDefinition, WorkflowExecution, WorkflowTask
 
 router = APIRouter(tags=["Workflow"])
 
@@ -76,6 +78,112 @@ async def create_workflow_definition(
     db.commit()
     db.refresh(definition)
     return WorkflowDefinitionRead.model_validate(definition)
+
+
+# ──────────────────────────────────────────────
+# GET /workflow/definitions
+# ──────────────────────────────────────────────
+@router.get(
+    "/workflow/definitions",
+    response_model=List[WorkflowDefinitionRead],
+    summary="Список маршрутов согласования",
+)
+async def list_workflow_definitions(
+    active_only: bool = Query(True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> List[WorkflowDefinitionRead]:
+    """Получить список маршрутов согласования."""
+    query = db.query(WorkflowDefinition)
+    if active_only:
+        query = query.filter(WorkflowDefinition.active.is_(True))
+    definitions = query.order_by(WorkflowDefinition.created_at.desc()).all()
+    return [WorkflowDefinitionRead.model_validate(d) for d in definitions]
+
+
+# ──────────────────────────────────────────────
+# POST /workflow/executions
+# ──────────────────────────────────────────────
+@router.post(
+    "/workflow/executions",
+    response_model=WorkflowExecutionRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Запустить маршрут согласования для документа",
+)
+async def start_workflow_execution(
+    body: WorkflowStartRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> WorkflowExecutionRead:
+    """Запустить маршрут согласования для документа."""
+    from src.api.v2.dependencies import verify_document_access
+    verify_document_access(body.document_id, current_user, db)
+
+    engine = WorkflowEngineService(db)
+    try:
+        execution = engine.start_workflow(
+            definition_id=body.definition_id,
+            document_id=body.document_id,
+            initiated_by=str(current_user.id),
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    db.commit()
+    db.refresh(execution)
+    return WorkflowExecutionRead.model_validate(execution)
+
+
+# ──────────────────────────────────────────────
+# GET /workflow/executions/{document_id}
+# ──────────────────────────────────────────────
+@router.get(
+    "/workflow/executions/{document_id}",
+    response_model=List[WorkflowExecutionRead],
+    summary="Workflow-процессы документа",
+)
+async def get_document_executions(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> List[WorkflowExecutionRead]:
+    """Получить workflow-процессы для документа."""
+    from src.api.v2.dependencies import verify_document_access
+    verify_document_access(document_id, current_user, db)
+
+    executions = (
+        db.query(WorkflowExecution)
+        .filter(WorkflowExecution.document_id == document_id)
+        .order_by(WorkflowExecution.started_at.desc())
+        .all()
+    )
+    return [WorkflowExecutionRead.model_validate(e) for e in executions]
+
+
+# ──────────────────────────────────────────────
+# GET /workflow/executions/{execution_id}/tasks
+# ──────────────────────────────────────────────
+@router.get(
+    "/workflow/executions/{execution_id}/tasks",
+    response_model=List[WorkflowTaskRead],
+    summary="Задачи workflow-процесса",
+)
+async def get_execution_tasks(
+    execution_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> List[WorkflowTaskRead]:
+    """Получить все задачи конкретного workflow-процесса."""
+    execution = db.query(WorkflowExecution).filter(WorkflowExecution.id == execution_id).first()
+    if not execution:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow-процесс не найден")
+
+    tasks = (
+        db.query(WorkflowTask)
+        .filter(WorkflowTask.execution_id == execution_id)
+        .order_by(WorkflowTask.step_order.asc())
+        .all()
+    )
+    return [WorkflowTaskRead.model_validate(t) for t in tasks]
 
 
 # ──────────────────────────────────────────────

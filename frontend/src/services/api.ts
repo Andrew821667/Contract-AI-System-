@@ -251,6 +251,283 @@ export interface ModelStatus {
   accuracy: number | null;
 }
 
+// AI Session types
+export interface AISession {
+  id: string;
+  document_id: string;
+  user_id: string;
+  stage: string;
+  status: 'active' | 'completed' | 'archived';
+  turns_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AIMessage {
+  id: string;
+  session_id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  metadata?: Record<string, any>;
+  created_at: string;
+}
+
+export interface AIContext {
+  session_id: string;
+  document: {
+    id: string;
+    file_name: string;
+    contract_type: string;
+    status: string;
+    risk_level?: string;
+  };
+  stage: string;
+  history_summary?: string;
+}
+
+export interface AIAction {
+  id: string;
+  session_id: string;
+  action_type: string;
+  description: string;
+  confidence: number;
+  status: 'pending' | 'approved' | 'rejected' | 'edited';
+  payload?: Record<string, any>;
+  result?: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+// Orchestrator types
+export interface OrchestratorRun {
+  id: string;
+  goal: string;
+  document_id?: string;
+  status: 'planning' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+  progress: number;
+  steps_total: number;
+  steps_completed: number;
+  current_step?: string;
+  result?: Record<string, any>;
+  error?: string;
+  tokens_used?: number;
+  model?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrchestratorStep {
+  id: string;
+  run_id: string;
+  step_number: number;
+  name: string;
+  tool_name?: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+  input?: Record<string, any>;
+  output?: Record<string, any>;
+  error?: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+// Negotiation types
+export interface Negotiation {
+  id: string;
+  document_id: string;
+  user_id: string;
+  analysis_id: string | null;
+  goal: string;
+  status: string;
+  objections_count: number;
+  by_priority: Record<string, number>;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface NegotiationStartResponse {
+  negotiation_id: string;
+  status: string;
+  objections_count: number;
+  by_priority: Record<string, number>;
+}
+
+export interface Objection {
+  objection_id: string;
+  issue_description: string;
+  legal_basis: string;
+  risk_explanation: string;
+  alternative_formulation: string;
+  alternative_reasoning: string;
+  priority: string;
+  auto_priority: number;
+  confidence: number;
+}
+
+export interface NegotiationPosition {
+  position_text: string;
+  key_arguments: string[];
+  concession_candidates: string[];
+  red_lines: string[];
+}
+
+// Comment types
+export interface Comment {
+  id: string;
+  document_id: string;
+  author_id: string;
+  content: string;
+  anchor_type: string;
+  anchor_id: string | null;
+  parent_comment_id: string | null;
+  status: string;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+// Version Intelligence types
+export interface VersionCompareResult {
+  comparison_id: string;
+  total_changes: number;
+  by_type: Record<string, number>;
+  by_category: Record<string, number>;
+  overall_assessment: string;
+  material_changes: MaterialChange[];
+  executive_summary: string;
+}
+
+export interface MaterialChange {
+  change_id: string;
+  change_type: string;
+  change_category: string;
+  section_name: string | null;
+  clause_number: string | null;
+  old_content: string | null;
+  new_content: string | null;
+  semantic_description: string | null;
+  impact_direction: string | null;
+  severity: string | null;
+  recommendation: string | null;
+  requires_review: boolean;
+}
+
+export interface VersionHistoryItem {
+  id: number;
+  version_number: number;
+  source: string;
+  file_hash: string | null;
+  is_current: boolean;
+  description: string | null;
+  uploaded_at: string | null;
+}
+
+// Organization types
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  settings: Record<string, any> | null;
+  active: boolean;
+  created_at: string;
+}
+
+export interface OrgMembership {
+  id: string;
+  user_id: string;
+  org_id: string;
+  unit_id: string | null;
+  company_role: string | null;
+  functional_role: string;
+  active: boolean;
+  joined_at: string;
+}
+
+// Policy types
+export interface Policy {
+  id: string;
+  name: string;
+  level: string;
+  action_type: string;
+  effect: string;
+  conditions: Record<string, any> | null;
+  priority: number;
+  active: boolean;
+  created_at: string;
+}
+
+// Tool & Agent types
+export interface ToolDefinition {
+  id: string;
+  name: string;
+  display_name: string | null;
+  description: string | null;
+  category: string | null;
+  input_schema: Record<string, any> | null;
+  output_schema: Record<string, any> | null;
+  active: boolean;
+  created_at: string;
+}
+
+export interface AgentDefinition {
+  id: string;
+  name: string;
+  display_name: string | null;
+  description: string | null;
+  agent_type: string | null;
+  capabilities: string[] | null;
+  tools: string[] | null;
+  active: boolean;
+  created_at: string;
+}
+
+// Workflow types
+export interface WorkflowDefinition {
+  id: string;
+  name: string;
+  description: string | null;
+  document_type: string | null;
+  jurisdiction: string | null;
+  org_id: string | null;
+  conditions: Record<string, any> | null;
+  steps: Array<{
+    name: string;
+    assignee_role?: string;
+    sla_hours?: number;
+    task_type?: string;
+  }>;
+  active: boolean;
+  version: number;
+  created_at: string;
+}
+
+export interface WorkflowExecution {
+  id: string;
+  definition_id: string | null;
+  document_id: string;
+  current_step: number;
+  status: 'active' | 'completed' | 'cancelled' | 'failed';
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface WorkflowTask {
+  id: string;
+  execution_id: string;
+  step_name: string;
+  step_order: number;
+  assignee_id: string | null;
+  task_type: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'escalated' | 'skipped';
+  decision: string | null;
+  comment: string | null;
+  sla_deadline: string | null;
+  sla_breached: boolean;
+  created_at: string;
+  completed_at: string | null;
+}
+
 // Contract Version Comparison types
 export interface ContractVersionInfo {
   id: number;
@@ -776,6 +1053,367 @@ class APIClient {
       `/api/v1/contracts/${contractId}/compare`,
       { from_version_id: fromVersionId, to_version_id: toVersionId }
     );
+    return response.data;
+  }
+  // ==================== AI Sessions (v2) ====================
+
+  async createAISession(documentId: string, stage: string = 'analysis'): Promise<AISession> {
+    const response = await this.client.post<AISession>(
+      `/api/v2/documents/${documentId}/ai/sessions`,
+      { stage }
+    );
+    return response.data;
+  }
+
+  async listAISessions(documentId: string): Promise<{ sessions: AISession[]; total: number }> {
+    const response = await this.client.get(`/api/v2/documents/${documentId}/ai/sessions`);
+    return response.data;
+  }
+
+  async sendAIMessage(sessionId: string, content: string): Promise<AIMessage> {
+    const response = await this.client.post<AIMessage>(
+      `/api/v2/ai/sessions/${sessionId}/messages`,
+      { content }
+    );
+    return response.data;
+  }
+
+  async getAIMessages(sessionId: string): Promise<{ messages: AIMessage[] }> {
+    const response = await this.client.get(`/api/v2/ai/sessions/${sessionId}/messages`);
+    return response.data;
+  }
+
+  async getAIContext(sessionId: string): Promise<AIContext> {
+    const response = await this.client.get<AIContext>(
+      `/api/v2/ai/sessions/${sessionId}/context`
+    );
+    return response.data;
+  }
+
+  // ==================== AI Actions (v2) ====================
+
+  async listAIActions(sessionId: string): Promise<{ actions: AIAction[] }> {
+    const response = await this.client.get(`/api/v2/ai/sessions/${sessionId}/actions`);
+    return response.data;
+  }
+
+  async approveAIAction(actionId: string, comment?: string): Promise<AIAction> {
+    const response = await this.client.post<AIAction>(
+      `/api/v2/ai/actions/${actionId}/approve`,
+      { comment }
+    );
+    return response.data;
+  }
+
+  async rejectAIAction(actionId: string, comment?: string): Promise<AIAction> {
+    const response = await this.client.post<AIAction>(
+      `/api/v2/ai/actions/${actionId}/reject`,
+      { comment }
+    );
+    return response.data;
+  }
+
+  async editAndApproveAction(actionId: string, payload: Record<string, any>): Promise<AIAction> {
+    const response = await this.client.post<AIAction>(
+      `/api/v2/ai/actions/${actionId}/edit-and-approve`,
+      payload
+    );
+    return response.data;
+  }
+
+  // ==================== Orchestrator (v2) ====================
+
+  async createRun(goal: string, documentId?: string): Promise<OrchestratorRun> {
+    const response = await this.client.post<OrchestratorRun>(
+      '/api/v2/orchestrator/runs',
+      { goal, document_id: documentId }
+    );
+    return response.data;
+  }
+
+  async getRun(runId: string): Promise<OrchestratorRun> {
+    const response = await this.client.get<OrchestratorRun>(
+      `/api/v2/orchestrator/runs/${runId}`
+    );
+    return response.data;
+  }
+
+  async continueRun(runId: string): Promise<OrchestratorRun> {
+    const response = await this.client.post<OrchestratorRun>(
+      `/api/v2/orchestrator/runs/${runId}/continue`
+    );
+    return response.data;
+  }
+
+  async cancelRun(runId: string): Promise<OrchestratorRun> {
+    const response = await this.client.post<OrchestratorRun>(
+      `/api/v2/orchestrator/runs/${runId}/cancel`
+    );
+    return response.data;
+  }
+
+  async getRunSteps(runId: string): Promise<{ steps: OrchestratorStep[] }> {
+    const response = await this.client.get(`/api/v2/orchestrator/runs/${runId}/steps`);
+    return response.data;
+  }
+
+  // ==================== Negotiations (v2) ====================
+
+  async startNegotiation(data: {
+    document_id: string;
+    goal: string;
+    analysis_id?: string;
+    auto_prioritize?: boolean;
+  }): Promise<NegotiationStartResponse> {
+    const response = await this.client.post<NegotiationStartResponse>(
+      '/api/v2/negotiations/start',
+      data
+    );
+    return response.data;
+  }
+
+  async getNegotiation(negotiationId: string): Promise<Negotiation> {
+    const response = await this.client.get<Negotiation>(
+      `/api/v2/negotiations/${negotiationId}`
+    );
+    return response.data;
+  }
+
+  async generateObjections(data: {
+    negotiation_id: string;
+    risk_ids?: string[];
+    custom_instructions?: string;
+  }): Promise<Objection[]> {
+    const response = await this.client.post<Objection[]>(
+      '/api/v2/negotiations/objections/generate',
+      data
+    );
+    return response.data;
+  }
+
+  async selectObjections(data: {
+    negotiation_id: string;
+    selected_objection_ids: string[];
+    priority_order?: string[];
+  }): Promise<{ status: string; selected_count: number }> {
+    const response = await this.client.post(
+      '/api/v2/negotiations/objections/select',
+      data
+    );
+    return response.data;
+  }
+
+  async preparePosition(data: {
+    negotiation_id: string;
+    strategy?: string;
+    focus_areas?: string[];
+  }): Promise<NegotiationPosition> {
+    const response = await this.client.post<NegotiationPosition>(
+      '/api/v2/negotiations/position',
+      data
+    );
+    return response.data;
+  }
+
+  // ==================== Comments (v2) ====================
+
+  async createComment(documentId: string, data: {
+    content: string;
+    anchor_type?: string;
+    anchor_id?: string;
+    parent_comment_id?: string;
+  }): Promise<Comment> {
+    const response = await this.client.post<Comment>(
+      `/api/v2/documents/${documentId}/comments`,
+      data
+    );
+    return response.data;
+  }
+
+  async listComments(documentId: string, params?: {
+    anchor_type?: string;
+    include_resolved?: boolean;
+  }): Promise<Comment[]> {
+    const response = await this.client.get<Comment[]>(
+      `/api/v2/documents/${documentId}/comments`,
+      { params }
+    );
+    return response.data;
+  }
+
+  async replyToComment(commentId: string, content: string): Promise<Comment> {
+    const response = await this.client.post<Comment>(
+      `/api/v2/comments/${commentId}/reply`,
+      { content }
+    );
+    return response.data;
+  }
+
+  async resolveComment(commentId: string): Promise<Comment> {
+    const response = await this.client.post<Comment>(
+      `/api/v2/comments/${commentId}/resolve`
+    );
+    return response.data;
+  }
+
+  // ==================== Version Intelligence (v2) ====================
+
+  async compareVersionsV2(data: {
+    document_id: string;
+    from_version_id: string;
+    to_version_id: string;
+    deep_analysis?: boolean;
+  }): Promise<VersionCompareResult> {
+    const response = await this.client.post<VersionCompareResult>(
+      '/api/v2/versions/compare',
+      data
+    );
+    return response.data;
+  }
+
+  async getMaterialChanges(comparisonId: string): Promise<MaterialChange[]> {
+    const response = await this.client.get<MaterialChange[]>(
+      `/api/v2/versions/compare/${comparisonId}/material-changes`
+    );
+    return response.data;
+  }
+
+  async getChangeRecommendations(comparisonId: string): Promise<Record<string, any>> {
+    const response = await this.client.get(
+      `/api/v2/versions/compare/${comparisonId}/recommendations`
+    );
+    return response.data;
+  }
+
+  async getVersionHistory(documentId: string): Promise<VersionHistoryItem[]> {
+    const response = await this.client.get<VersionHistoryItem[]>(
+      `/api/v2/versions/${documentId}/history`
+    );
+    return response.data;
+  }
+
+  // ==================== Workflow (v2) ====================
+
+  async listWorkflowDefinitions(activeOnly: boolean = true): Promise<WorkflowDefinition[]> {
+    const response = await this.client.get<WorkflowDefinition[]>(
+      '/api/v2/workflow/definitions',
+      { params: { active_only: activeOnly } }
+    );
+    return response.data;
+  }
+
+  async createWorkflowDefinition(data: {
+    name: string;
+    description?: string;
+    document_type?: string;
+    jurisdiction?: string;
+    org_id?: string;
+    conditions?: Record<string, any>;
+    steps: Array<{ name: string; assignee_role?: string; sla_hours?: number; task_type?: string }>;
+  }): Promise<WorkflowDefinition> {
+    const response = await this.client.post<WorkflowDefinition>(
+      '/api/v2/workflow/definitions',
+      data
+    );
+    return response.data;
+  }
+
+  async startWorkflow(definitionId: string, documentId: string): Promise<WorkflowExecution> {
+    const response = await this.client.post<WorkflowExecution>(
+      '/api/v2/workflow/executions',
+      { definition_id: definitionId, document_id: documentId }
+    );
+    return response.data;
+  }
+
+  async getDocumentWorkflows(documentId: string): Promise<WorkflowExecution[]> {
+    const response = await this.client.get<WorkflowExecution[]>(
+      `/api/v2/workflow/executions/${documentId}`
+    );
+    return response.data;
+  }
+
+  async getExecutionTasks(executionId: string): Promise<WorkflowTask[]> {
+    const response = await this.client.get<WorkflowTask[]>(
+      `/api/v2/workflow/executions/${executionId}/tasks`
+    );
+    return response.data;
+  }
+
+  async getMyWorkflowTasks(status: string = 'pending'): Promise<WorkflowTask[]> {
+    const response = await this.client.get<WorkflowTask[]>(
+      '/api/v2/workflow/tasks',
+      { params: { status_filter: status } }
+    );
+    return response.data;
+  }
+
+  async completeWorkflowTask(taskId: string, decision: string, comment?: string): Promise<WorkflowTask> {
+    const response = await this.client.post<WorkflowTask>(
+      `/api/v2/workflow/tasks/${taskId}/complete`,
+      { decision, comment }
+    );
+    return response.data;
+  }
+
+  async escalateWorkflowTask(taskId: string, reason?: string): Promise<WorkflowTask> {
+    const response = await this.client.post<WorkflowTask>(
+      `/api/v2/workflow/tasks/${taskId}/escalate`,
+      { reason }
+    );
+    return response.data;
+  }
+
+  // ==================== Organizations (v2) ====================
+
+  async listMyOrganizations(): Promise<Organization[]> {
+    const response = await this.client.get<Organization[]>('/api/v2/organizations');
+    return response.data;
+  }
+
+  async getOrganization(orgId: string): Promise<Organization> {
+    const response = await this.client.get<Organization>(`/api/v2/organizations/${orgId}`);
+    return response.data;
+  }
+
+  async createOrganization(data: {
+    name: string; slug: string; description?: string; settings?: Record<string, any>;
+  }): Promise<Organization> {
+    const response = await this.client.post<Organization>('/api/v2/organizations', data);
+    return response.data;
+  }
+
+  async listOrgMembers(orgId: string): Promise<OrgMembership[]> {
+    const response = await this.client.get<OrgMembership[]>(`/api/v2/organizations/${orgId}/members`);
+    return response.data;
+  }
+
+  async addOrgMember(orgId: string, data: {
+    user_id: string; functional_role?: string; company_role?: string;
+  }): Promise<OrgMembership> {
+    const response = await this.client.post<OrgMembership>(
+      `/api/v2/organizations/${orgId}/members`,
+      { ...data, org_id: orgId }
+    );
+    return response.data;
+  }
+
+  // ==================== Policies (v2) ====================
+
+  async listPolicies(level?: string): Promise<Policy[]> {
+    const response = await this.client.get<Policy[]>('/api/v2/policies', { params: { level } });
+    return response.data;
+  }
+
+  // ==================== Tools & Agents (v2) ====================
+
+  async listTools(): Promise<ToolDefinition[]> {
+    const response = await this.client.get<ToolDefinition[]>('/api/v2/tools');
+    return response.data;
+  }
+
+  async listAgents(): Promise<AgentDefinition[]> {
+    const response = await this.client.get<AgentDefinition[]>('/api/v2/agents');
     return response.data;
   }
 }

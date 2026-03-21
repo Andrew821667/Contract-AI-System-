@@ -50,3 +50,20 @@ class WorkflowTaskRead(BaseModel):
     completed_at: datetime | None
 
     model_config = {"from_attributes": True}
+
+
+class WorkflowExecutionRead(BaseModel):
+    id: str
+    definition_id: str | None
+    document_id: str
+    current_step: int
+    status: str
+    started_at: datetime
+    completed_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+class WorkflowStartRequest(BaseModel):
+    definition_id: str = Field(..., max_length=50)
+    document_id: str = Field(..., max_length=50)

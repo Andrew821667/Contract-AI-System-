@@ -28,6 +28,55 @@ router = APIRouter(tags=["Organizations"])
 
 
 # ──────────────────────────────────────────────
+# GET /organizations
+# ──────────────────────────────────────────────
+@router.get(
+    "/organizations",
+    response_model=List[OrganizationRead],
+    summary="Мои организации",
+)
+async def list_my_organizations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Организации, в которых состоит текущий пользователь."""
+    memberships = (
+        db.query(OrganizationMembership)
+        .filter(
+            OrganizationMembership.user_id == current_user.id,
+            OrganizationMembership.active == True,  # noqa: E712
+        )
+        .all()
+    )
+    org_ids = [m.org_id for m in memberships]
+    if not org_ids:
+        return []
+    orgs = db.query(Organization).filter(Organization.id.in_(org_ids)).all()
+    return orgs
+
+
+# ──────────────────────────────────────────────
+# GET /organizations/{org_id}
+# ──────────────────────────────────────────────
+@router.get(
+    "/organizations/{org_id}",
+    response_model=OrganizationRead,
+    summary="Информация об организации",
+)
+async def get_organization(
+    org_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Получить информацию об организации (требуется членство)."""
+    verify_org_membership(org_id, current_user, db)
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Организация не найдена")
+    return org
+
+
+# ──────────────────────────────────────────────
 # POST /organizations
 # ──────────────────────────────────────────────
 @router.post(
