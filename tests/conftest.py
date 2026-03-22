@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from src.models.database import Base
 from src.models.database import get_db as get_db_database
+from src.models.database import get_async_db
 from src.models import get_db as get_db_models
 from src.models.auth_models import User
 from src.main import app
@@ -74,6 +75,7 @@ def client(test_db):
     # Override BOTH get_db functions (models/__init__.py and models/database.py)
     app.dependency_overrides[get_db_database] = _get_test_db
     app.dependency_overrides[get_db_models] = _get_test_db
+    app.dependency_overrides[get_async_db] = _get_test_db
 
     # Clear ALL rate limiter buckets to prevent 429 in tests
     _clear_rate_limit_buckets(app)

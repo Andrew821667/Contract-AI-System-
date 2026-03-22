@@ -482,6 +482,36 @@ export interface AgentDefinition {
   created_at: string;
 }
 
+// Template Governance types
+export interface TemplateVersion {
+  id: string;
+  template_id: string;
+  version: number;
+  content: Record<string, unknown>;
+  variables: Record<string, unknown>[] | null;
+  validation_rules: Record<string, unknown> | null;
+  status: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface ClausePolicy {
+  id: string;
+  org_id: string | null;
+  clause_type: string;
+  status: string;
+  alternative_clause_id: string | null;
+  risk_explanation: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface ClauseCheckResult {
+  clause_type: string;
+  allowed: boolean;
+  policy: ClausePolicy | null;
+}
+
 // Workflow types
 export interface WorkflowDefinition {
   id: string;
@@ -1414,6 +1444,48 @@ class APIClient {
 
   async listAgents(): Promise<AgentDefinition[]> {
     const response = await this.client.get<AgentDefinition[]>('/api/v2/agents');
+    return response.data;
+  }
+
+  // ==================== Template Governance (v2) ====================
+
+  async listTemplateVersions(templateId: string): Promise<TemplateVersion[]> {
+    const response = await this.client.get<TemplateVersion[]>(`/api/v2/templates/${templateId}/versions`);
+    return response.data;
+  }
+
+  async createTemplateVersion(templateId: string, data: { content: Record<string, unknown>; variables?: Record<string, unknown>[] | null; validation_rules?: Record<string, unknown> | null }): Promise<TemplateVersion> {
+    const response = await this.client.post<TemplateVersion>(`/api/v2/templates/${templateId}/versions`, { ...data, template_id: templateId });
+    return response.data;
+  }
+
+  async activateTemplateVersion(versionId: string): Promise<TemplateVersion> {
+    const response = await this.client.post<TemplateVersion>(`/api/v2/templates/versions/${versionId}/activate`);
+    return response.data;
+  }
+
+  async getActiveTemplateVersion(templateId: string): Promise<TemplateVersion> {
+    const response = await this.client.get<TemplateVersion>(`/api/v2/templates/${templateId}/versions/active`);
+    return response.data;
+  }
+
+  async listClausePolicies(orgId?: string, statusFilter?: string): Promise<ClausePolicy[]> {
+    const response = await this.client.get<ClausePolicy[]>('/api/v2/clause-policies', { params: { org_id: orgId, status_filter: statusFilter } });
+    return response.data;
+  }
+
+  async createClausePolicy(data: { org_id?: string | null; clause_type: string; status: string; alternative_clause_id?: string | null; risk_explanation?: string | null }): Promise<ClausePolicy> {
+    const response = await this.client.post<ClausePolicy>('/api/v2/clause-policies', data);
+    return response.data;
+  }
+
+  async checkClauseAllowed(clauseType: string, orgId?: string): Promise<ClauseCheckResult> {
+    const response = await this.client.get<ClauseCheckResult>('/api/v2/clause-policies/check', { params: { clause_type: clauseType, org_id: orgId } });
+    return response.data;
+  }
+
+  async listProhibitedClauses(orgId?: string): Promise<ClausePolicy[]> {
+    const response = await this.client.get<ClausePolicy[]>('/api/v2/clause-policies/prohibited', { params: { org_id: orgId } });
     return response.data;
   }
 }

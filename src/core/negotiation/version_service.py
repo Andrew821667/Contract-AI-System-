@@ -51,6 +51,9 @@ class _BoundedCache:
         if len(self._data) > self._maxsize:
             self._data.popitem(last=False)
 
+    def __delitem__(self, key: str) -> None:
+        del self._data[key]
+
     def __contains__(self, key: str) -> bool:
         return key in self._data
 

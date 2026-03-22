@@ -11,3 +11,7 @@ npm-debug.log*
 .idea
 coverage
 .husky
+e2e
+test-results
+playwright-report
+playwright.config.ts

@@ -41,10 +41,12 @@ class IntegrityRecord(Base):
 
 
 class IntegrityService:
-    """Сервис отслеживания целостности данных (DB-backed)."""
+    """Сервис отслеживания целостности данных (DB-backed, in-memory fallback)."""
 
     def __init__(self, db: Session) -> None:
         self.db = db
+        # In-memory fallback when db=None (for testing)
+        self._mem_store: dict[tuple[str, str], dict[str, Any]] = {} if db is None else {}
 
     def compute_hash(self, content: str | bytes, algorithm: str = "sha256") -> str:
         """Вычислить hash содержимого."""
@@ -72,6 +74,26 @@ class IntegrityService:
             hash_value = self.compute_document_hash(content)
         else:
             hash_value = self.compute_hash(content, algorithm)
+
+        # In-memory fallback (db=None)
+        if self.db is None:
+            key = (entity_type, entity_id)
+            self._mem_store[key] = {
+                "hash_value": hash_value,
+                "algorithm": algorithm,
+                "metadata": metadata,
+            }
+            logger.info(
+                f"Integrity registered (in-memory): {entity_type}:{entity_id} → {hash_value[:16]}..."
+            )
+            record = IntegrityRecord(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                hash_value=hash_value,
+                algorithm=algorithm,
+                metadata_=metadata,
+            )
+            return record
 
         # Upsert: обновить если существует, создать если нет
         record = (
@@ -116,6 +138,23 @@ class IntegrityService:
         Returns:
             (is_valid, message)
         """
+        # In-memory fallback (db=None)
+        if self.db is None:
+            key = (entity_type, entity_id)
+            stored = self._mem_store.get(key)
+            if stored is None:
+                return False, f"Запись целостности не найдена: {entity_type}:{entity_id}"
+            if isinstance(content, dict):
+                current_hash = self.compute_document_hash(content)
+            else:
+                current_hash = self.compute_hash(content, stored["algorithm"])
+            if current_hash == stored["hash_value"]:
+                return True, "Целостность подтверждена"
+            return False, (
+                f"Нарушение целостности: ожидалось {stored['hash_value'][:16]}..., "
+                f"получено {current_hash[:16]}..."
+            )
+
         record = (
             self.db.query(IntegrityRecord)
             .filter(

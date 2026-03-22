@@ -13,9 +13,15 @@ import {
   useTools,
   useAgents,
 } from '@/hooks/useOrganization'
-import type { Organization, OrgMembership, Policy, ToolDefinition, AgentDefinition } from '@/services/api'
+import {
+  useClausePolicies,
+  useCreateClausePolicy,
+  useTemplateVersions,
+  useActivateTemplateVersion,
+} from '@/hooks/useTemplates'
+import type { Organization, OrgMembership, Policy, ToolDefinition, AgentDefinition, ClausePolicy, TemplateVersion } from '@/services/api'
 
-type Tab = 'orgs' | 'policies' | 'tools' | 'agents'
+type Tab = 'orgs' | 'policies' | 'tools' | 'agents' | 'templates'
 
 export default function AdminPage() {
   const { isReady } = useAuthGuard()
@@ -29,12 +35,23 @@ export default function AdminPage() {
   const [memberId, setMemberId] = useState('')
   const [memberRole, setMemberRole] = useState('member')
   const [policyLevel, setPolicyLevel] = useState<string | undefined>(undefined)
+  const [clausePolicyStatus, setClausePolicyStatus] = useState<string | undefined>(undefined)
+  const [showCreateClausePolicy, setShowCreateClausePolicy] = useState(false)
+  const [cpClauseType, setCpClauseType] = useState('')
+  const [cpStatus, setCpStatus] = useState('approved')
+  const [cpRiskExplanation, setCpRiskExplanation] = useState('')
+  const [templateIdInput, setTemplateIdInput] = useState('')
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
 
   const { data: orgs = [] } = useMyOrganizations()
   const { data: members = [] } = useOrgMembers(selectedOrgId)
   const { data: policies = [] } = usePolicies(policyLevel)
   const { data: tools = [] } = useTools()
   const { data: agents = [] } = useAgents()
+  const { data: clausePolicies = [] } = useClausePolicies(undefined, clausePolicyStatus)
+  const createClausePolicy = useCreateClausePolicy()
+  const { data: templateVersions = [] } = useTemplateVersions(selectedTemplateId)
+  const activateVersion = useActivateTemplateVersion()
   const createOrg = useCreateOrganization()
   const addMember = useAddOrgMember()
 
@@ -71,7 +88,27 @@ export default function AdminPage() {
     { key: 'policies', label: 'Политики', count: policies.length },
     { key: 'tools', label: 'Инструменты', count: tools.length },
     { key: 'agents', label: 'Агенты', count: agents.length },
+    { key: 'templates', label: 'Шаблоны' },
   ]
+
+  const handleCreateClausePolicy = async () => {
+    if (!cpClauseType.trim()) return
+    await createClausePolicy.mutateAsync({
+      clause_type: cpClauseType.trim(),
+      status: cpStatus,
+      risk_explanation: cpRiskExplanation.trim() || undefined,
+    })
+    setShowCreateClausePolicy(false)
+    setCpClauseType('')
+    setCpStatus('approved')
+    setCpRiskExplanation('')
+  }
+
+  const handleLoadVersions = () => {
+    if (templateIdInput.trim()) {
+      setSelectedTemplateId(templateIdInput.trim())
+    }
+  }
 
   return (
     <AppLayout title="Администрирование">
@@ -320,6 +357,167 @@ export default function AdminPage() {
                 <p className="text-xs text-gray-400">Нет зарегистрированных инструментов</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Templates tab */}
+        {activeTab === 'templates' && (
+          <div className="space-y-6">
+            {/* Clause Policies */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200">Политики клауз</h3>
+                <button
+                  onClick={() => setShowCreateClausePolicy(!showCreateClausePolicy)}
+                  className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                >
+                  {showCreateClausePolicy ? 'Отмена' : '+ Создать'}
+                </button>
+              </div>
+
+              {/* Status filter */}
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                {[undefined, 'approved', 'prohibited', 'risky', 'fallback'].map(s => (
+                  <button
+                    key={s || 'all'}
+                    onClick={() => setClausePolicyStatus(s)}
+                    className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
+                      clausePolicyStatus === s
+                        ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                        : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-dark-700'
+                    }`}
+                  >
+                    {s ? s : 'Все'}
+                  </button>
+                ))}
+              </div>
+
+              <AnimatePresence>
+                {showCreateClausePolicy && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-4 mb-3 overflow-hidden"
+                  >
+                    <input
+                      type="text"
+                      value={cpClauseType}
+                      onChange={(e) => setCpClauseType(e.target.value)}
+                      placeholder="Тип клаузы (financial, liability, termination...)"
+                      className="w-full bg-gray-50 dark:bg-dark-900 border border-gray-200 dark:border-dark-700 rounded-lg px-3 py-1.5 text-xs mb-2 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                    />
+                    <select
+                      value={cpStatus}
+                      onChange={(e) => setCpStatus(e.target.value)}
+                      className="w-full bg-gray-50 dark:bg-dark-900 border border-gray-200 dark:border-dark-700 rounded-lg px-3 py-1.5 text-xs mb-2 text-gray-800 dark:text-gray-200"
+                    >
+                      <option value="approved">Approved</option>
+                      <option value="prohibited">Prohibited</option>
+                      <option value="risky">Risky</option>
+                      <option value="fallback">Fallback</option>
+                    </select>
+                    <textarea
+                      value={cpRiskExplanation}
+                      onChange={(e) => setCpRiskExplanation(e.target.value)}
+                      placeholder="Пояснение риска (необязательно)"
+                      rows={2}
+                      className="w-full bg-gray-50 dark:bg-dark-900 border border-gray-200 dark:border-dark-700 rounded-lg px-3 py-1.5 text-xs mb-2 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500 resize-none"
+                    />
+                    <button
+                      onClick={handleCreateClausePolicy}
+                      disabled={!cpClauseType.trim() || createClausePolicy.isPending}
+                      className="w-full px-3 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white text-xs font-medium rounded-lg transition-colors"
+                    >
+                      {createClausePolicy.isPending ? 'Создание...' : 'Создать'}
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="space-y-2">
+                {clausePolicies.map((cp: ClausePolicy) => (
+                  <div key={cp.id} className="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <h4 className="text-sm font-medium text-gray-800 dark:text-gray-200">{cp.clause_type}</h4>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                        cp.status === 'approved' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                        cp.status === 'prohibited' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' :
+                        cp.status === 'risky' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' :
+                        'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                      }`}>
+                        {cp.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[10px] text-gray-400">
+                      {cp.org_id && <span>Орг: {cp.org_id.slice(0, 8)}...</span>}
+                      {!cp.org_id && <span>Платформенная</span>}
+                      {cp.risk_explanation && <span className="truncate max-w-[200px]">{cp.risk_explanation}</span>}
+                    </div>
+                  </div>
+                ))}
+                {clausePolicies.length === 0 && <p className="text-xs text-gray-400 text-center py-4">Нет политик клауз</p>}
+              </div>
+            </div>
+
+            {/* Template Versions */}
+            <div>
+              <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 mb-3">Версии шаблонов</h3>
+              <div className="flex items-center gap-2 mb-4">
+                <input
+                  type="text"
+                  value={templateIdInput}
+                  onChange={(e) => setTemplateIdInput(e.target.value)}
+                  placeholder="ID шаблона"
+                  className="flex-1 bg-gray-50 dark:bg-dark-900 border border-gray-200 dark:border-dark-700 rounded-lg px-3 py-1.5 text-xs text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500"
+                />
+                <button
+                  onClick={handleLoadVersions}
+                  disabled={!templateIdInput.trim()}
+                  className="px-4 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-40 text-white text-xs font-medium rounded-lg transition-colors"
+                >
+                  Загрузить
+                </button>
+              </div>
+
+              {selectedTemplateId && (
+                <div className="space-y-2">
+                  {templateVersions.map((v: TemplateVersion) => (
+                    <div key={v.id} className="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-4">
+                      <div className="flex items-center justify-between mb-1">
+                        <h4 className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                          Версия {v.version}
+                        </h4>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                            v.status === 'active' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                            v.status === 'draft' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300' :
+                            'bg-gray-100 text-gray-500'
+                          }`}>
+                            {v.status}
+                          </span>
+                          {v.status === 'draft' && (
+                            <button
+                              onClick={() => activateVersion.mutate(v.id)}
+                              disabled={activateVersion.isPending}
+                              className="text-[10px] px-2 py-0.5 bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white font-medium rounded-lg transition-colors"
+                            >
+                              Активировать
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 text-[10px] text-gray-400">
+                        <span>{new Date(v.created_at).toLocaleDateString('ru-RU')}</span>
+                        {v.created_by && <span>Автор: {v.created_by.slice(0, 8)}...</span>}
+                        {v.variables && <span>{v.variables.length} переменных</span>}
+                      </div>
+                    </div>
+                  ))}
+                  {templateVersions.length === 0 && <p className="text-xs text-gray-400 text-center py-4">Нет версий</p>}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

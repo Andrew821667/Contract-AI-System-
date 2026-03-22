@@ -1,656 +1,381 @@
-# 🤖 Contract AI System
+# Contract AI System
 
-**Интеллектуальная система автоматизации работы с договорами** на основе LLM, RAG и современных AI технологий.
+**AI-collaborative contract operating system** — интеллектуальная платформа для работы с договорами на основе мультимодельного LLM-каскада, агентной оркестрации и policy-driven AI.
 
-[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-blue.svg)](https://www.postgresql.org/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-## 📋 Содержание
-
-- [Возможности](#-возможности)
-- [Архитектура](#-архитектура)
-- [Установка](#-установка)
-- [Быстрый старт](#-быстрый-старт)
-- [API Документация](#-api-документация)
-- [Performance](#-performance)
-- [Roadmap](#-roadmap)
+[![Next.js](https://img.shields.io/badge/Next.js-14-black.svg)](https://nextjs.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+pgvector-blue.svg)](https://www.postgresql.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://docs.docker.com/compose/)
+[![Tests](https://img.shields.io/badge/Tests-387%20passed-brightgreen.svg)]()
 
 ---
 
-## 🎯 Возможности
+## Содержание
 
-### 🔍 **1. Onboarding Agent**
-Умный анализ входящих запросов и классификация задач
-
-- ✅ Классификация типов договоров (поставка, услуги, подряд, аренда, и т.д.)
-- ✅ Извлечение ключевых параметров (стороны, сроки, суммы)
-- ✅ Автоматическое определение следующего действия
-- ✅ Создание задач для генерации или анализа
-
-### 📝 **2. Contract Generator Agent**
-Генерация договоров по шаблонам с LLM
-
-- ✅ Генерация на основе XML шаблонов
-- ✅ LLM-заполнение переменных с учетом контекста
-- ✅ RAG для поиска аналогов и прецедентов
-- ✅ Валидация структуры и обязательных полей
-- ✅ Экспорт в DOCX, PDF с форматированием
-
-### 🔬 **3. Contract Analyzer Agent** (⭐ Модульная архитектура)
-Глубокий анализ договоров с выявлением рисков
-
-**Основные модули:**
-- `ClauseExtractor` - извлечение структуры и пунктов
-- `RiskAnalyzer` - идентификация рисков с batch processing
-- `RecommendationGenerator` - автоматические рекомендации
-- `MetadataAnalyzer` - проверка контрагентов, предсказание споров
-
-**Функции:**
-- ✅ Идентификация рисков: financial, legal, operational, reputational
-- ✅ Severity оценка: critical, high, medium, low
-- ✅ Batch анализ пунктов (15 clauses/batch) - **12.5x ускорение**
-- ✅ Генерация рекомендаций с приоритизацией
-- ✅ Автоматические предложения изменений текста
-- ✅ Аннотация проблемных пунктов с XPath
-- ✅ Интеграция с ФНС API для проверки контрагентов
-- ✅ Предсказание вероятности споров
-
-### ❌ **4. Disagreement Processor Agent**
-Генерация возражений на проблемные условия
-
-- ✅ Автоматическая генерация возражений через LLM + RAG
-- ✅ Правовые обоснования со ссылками на законы
-- ✅ Приоритизация возражений (critical → low)
-- ✅ Выбор пользователем финальных возражений
-- ✅ Экспорт в: DOCX, PDF, Email, XML
-- ✅ Трекинг эффективности (принято/отклонено контрагентом)
-- ✅ Интеграция с ЭДО (заглушка для будущей интеграции)
-
-### 🔄 **5. Changes Analyzer Agent**
-Анализ изменений между версиями договора
-
-- ✅ Структурное сравнение (diff по XML)
-- ✅ Семантическое сравнение через LLM
-- ✅ Анализ влияния изменений на риски
-- ✅ Связь с ранее отправленными возражениями
-- ✅ PDF-отчеты об изменениях
-- ✅ Автоматическое создание задач для юристов
-
-### 📤 **6. Quick Export Agent**
-Быстрый экспорт в различные форматы
-
-- ✅ Форматы: DOCX, PDF, TXT, JSON
-- ✅ Batch-режим для массового экспорта
-- ✅ Логирование всех экспортов
-- ✅ Email отправка (SMTP)
-- ✅ Шаблоны для писем о несогласии
-
-### 🎭 **7. Orchestrator Agent**
-Координация работы всех агентов
-
-- ✅ State machine для workflow управления
-- ✅ Обработка ошибок и fallback сценарии
-- ✅ Приостановка и возобновление workflow
-- ✅ История выполнения
-
-### 🔐 **8. Authentication & Authorization System** (NEW!)
-Полноценная система аутентификации с demo-доступом
-
-**Auth Features:**
-- ✅ **JWT токены** (access + refresh) с bcrypt password hashing
-- ✅ **Demo-доступ по ссылкам** - генерация уникальных ссылок для trial пользователей
-- ✅ **Админ-панель** (Streamlit) - управление пользователями, ролями, demo-токенами
-- ✅ **Роли**: admin, senior_lawyer, lawyer, junior_lawyer, demo
-- ✅ **Лимиты**: contracts/day, LLM requests/day по тарифам (demo, basic, pro, enterprise)
-- ✅ **Security**: Rate limiting, IP filtering, security headers, audit logs
-- ✅ **Email verification** & password reset (готово к интеграции)
-- ✅ **2FA support** (TOTP, backup codes)
-
-**API Endpoints:**
-```
-POST /api/v1/auth/register        # Регистрация
-POST /api/v1/auth/login           # Вход (JWT)
-POST /api/v1/auth/demo-activate   # Активация demo по ссылке
-POST /api/v1/auth/admin/demo-link # Генерация demo-ссылки (admin)
-GET  /api/v1/auth/admin/users     # Список пользователей (admin)
-GET  /api/v1/auth/admin/analytics # Аналитика системы (admin)
-```
-
-**Demo Link Flow:**
-```
-Admin → Генерирует ссылку → Пользователь переходит → Вводит email →
-→ Автоматически создается DEMO аккаунт → Мгновенный доступ на 24 часа
-```
-
-### ⚛️ **9. React Frontend** (NEW!)
-Современный веб-интерфейс на React/Next.js
-
-**Tech Stack:**
-- Next.js 14 (App Router)
-- TypeScript
-- Tailwind CSS
-- React Query (data fetching)
-- Zustand (state management)
-- Socket.io (real-time updates)
-
-**Features:**
-- 🎨 Modern UI/UX with Tailwind CSS
-- 📱 Mobile-first responsive design
-- ⚡ Fast page loads (SPA)
-- 🔄 Real-time updates via WebSocket
-- 🎯 TypeScript для type safety
-- 🧪 Jest + Testing Library
+- [Архитектура](#архитектура)
+- [Возможности](#возможности)
+- [Технологический стек](#технологический-стек)
+- [Установка](#установка)
+- [Docker Deployment](#docker-deployment)
+- [Тестирование](#тестирование)
+- [API](#api)
+- [Roadmap](#roadmap)
 
 ---
 
-## 🏗️ Архитектура
+## Архитектура
 
-### Компоненты системы
+```
+hierarchical LLM cascade + AI collaborator layer + agent orchestrator layer
++ specialized agents + controlled tool ecosystem + user/org-aware policy system
+```
+
+Архитектурные принципы:
+
+1. **AI-first** — AI в каждом этапе lifecycle документа
+2. **Policy-first** — ни один AI action без policy check + audit
+3. **Tool-first** — оркестратор через tools/agents, никогда напрямую
+4. **Deterministic orchestration** — планы детерминированные, LLM для creative work
+5. **Org/user-aware** — AI ведёт себя по-разному для разных пользователей/ролей
+
+### Структура проекта
 
 ```
 Contract-AI-System/
-│
 ├── src/
-│   ├── agents/                    # AI Агенты
+│   ├── core/                        # Phase 12: AI-collaborative OS ядро
+│   │   ├── identity_org/            # Организации, пользователи, роли
+│   │   ├── policies/                # Policy engine (AI action policies)
+│   │   ├── tools/                   # Tool registry (typed tools)
+│   │   ├── agents/                  # Agent registry + capabilities
+│   │   ├── ai_collaboration/        # AI collaborator sessions
+│   │   ├── orchestrator/            # Deterministic orchestration (runs/plans/steps)
+│   │   ├── workflow/                # Workflow definitions + executions + tasks
+│   │   ├── collaboration/           # Comments, annotations, assignments
+│   │   ├── templates/               # Template governance + versioning
+│   │   ├── negotiation/             # AI-driven negotiation engine
+│   │   ├── integrations/            # Webhooks + event bus
+│   │   └── enterprise/              # Integrity verification
+│   │
+│   ├── agents/                      # Specialized AI agents (v1)
 │   │   ├── onboarding_agent.py
-│   │   ├── contract_analyzer_agent.py  # Модульный (Phase 6)
+│   │   ├── contract_analyzer_agent.py
 │   │   ├── disagreement_processor_agent.py
 │   │   ├── changes_analyzer_agent.py
 │   │   └── orchestrator_agent.py
 │   │
-│   ├── services/                  # Бизнес-логика
-│   │   ├── llm_gateway.py         # LLM API integration
-│   │   ├── rag_system.py          # RAG with ChromaDB
-│   │   ├── document_parser.py     # DOCX/PDF parsing
-│   │   ├── template_manager.py
-│   │   │
-│   │   ├── # Phase 6: Модульная архитектура
-│   │   ├── clause_extractor.py    # Извлечение пунктов
-│   │   ├── risk_analyzer.py       # Batch анализ рисков
-│   │   ├── recommendation_generator.py
-│   │   ├── metadata_analyzer.py   # Контрагенты, споры
-│   │   │
-│   │   ├── # Phase 7: STUB Replacements
-│   │   ├── ocr_service.py         # OCR для сканов
-│   │   ├── fns_api.py             # ФНС ЕГРЮЛ API
-│   │   ├── tracked_changes_parser.py  # DOCX revisions
-│   │   │
-│   │   ├── # Phase 8: Performance
-│   │   ├── cache_service.py       # Redis + In-memory cache
-│   │   ├── async_api_client.py    # Async HTTP client
-│   │   └── optimized_queries.py   # N+1 query solutions
+│   ├── services/                    # Business logic
+│   │   ├── llm_gateway.py           # Multi-model LLM gateway (6 providers)
+│   │   ├── model_router.py          # Smart LLM cascade routing
+│   │   ├── rag_system.py            # RAG with ChromaDB
+│   │   ├── auth_service.py          # JWT auth + roles + demo access
+│   │   ├── payment_service.py       # Subscription tiers
+│   │   └── ...
 │   │
-│   ├── models/                    # SQLAlchemy models
-│   │   ├── database.py            # Core models
-│   │   ├── analyzer_models.py     # Risks, recommendations
-│   │   ├── disagreement_models.py
-│   │   └── enums.py               # Type-safe enums
+│   ├── api/
+│   │   ├── v1/                      # REST API v1 (64 endpoints)
+│   │   └── v2/                      # REST API v2 (64 endpoints) — Phase 12
 │   │
-│   ├── utils/                     # Утилиты
-│   │   ├── xml_security.py        # XXE protection
-│   │   ├── file_validator.py      # Path traversal protection
-│   │   ├── pdf_generator.py       # PDF reports
-│   │   └── rate_limiter.py        # API rate limiting
-│   │
-│   └── api/                       # FastAPI endpoints
-│       ├── contracts.py
-│       ├── analysis.py
-│       └── export.py
+│   └── models/                      # SQLAlchemy models
 │
-├── tests/                         # Phase 5: Test suite (2245 lines)
-│   ├── test_file_validator.py     # Security tests
-│   ├── test_xml_security.py       # XXE protection
-│   ├── test_rate_limiter.py       # Cost control
-│   ├── test_pdf_generator.py      # PDF generation
-│   └── test_export_integration.py # E2E tests
+├── frontend/                        # Next.js 14 React frontend
+│   ├── src/
+│   │   ├── app/                     # App Router pages (16 routes)
+│   │   ├── components/              # React components
+│   │   ├── hooks/                   # Custom hooks (React Query)
+│   │   ├── services/                # API client
+│   │   └── stores/                  # Zustand state management
+│   └── e2e/                         # Playwright E2E tests (33 tests)
 │
-├── database/                      # Phase 8: DB optimization
-│   └── performance_indexes.sql    # 20+ indexes
-│
-└── docs/                          # Documentation
-    ├── api/                       # API docs
-    ├── architecture/              # System design
-    └── performance/               # Optimization guides
+├── docker-compose.yml               # Production: 6 services
+├── docker-compose.dev.yml           # Dev: postgres + redis
+├── nginx/nginx.conf                 # Reverse proxy
+└── tests/                           # Backend tests (387 tests)
 ```
-
-### Технологический стек
-
-**Backend:**
-- Python 3.9+
-- FastAPI (async web framework)
-- SQLAlchemy 2.0 (ORM)
-- PostgreSQL / SQLite
-
-**AI/ML:**
-- OpenAI GPT-5.1 / GPT-5 / GPT-4o (ноябрь 2025 - новейшие модели)
-- Anthropic Claude (Sonnet, Opus)
-- ChromaDB (vector database для RAG)
-- LangChain (RAG orchestration)
-- Sentence Transformers (embeddings)
-
-**Document Processing:**
-- python-docx (DOCX generation/parsing)
-- ReportLab (PDF generation)
-- lxml (XML parsing с безопасностью)
-- pytesseract + pdf2image (OCR, optional)
-
-**Performance:**
-- Redis (distributed caching, optional)
-- aiohttp (async HTTP client)
-- Connection pooling
-- Batch processing
-
-**Security:**
-- XXE attack protection (lxml)
-- Path traversal protection
-- Rate limiting (RPM, TPM, cost limits)
-- Input validation
 
 ---
 
-## 🚀 Установка
+## Возможности
+
+### LLM Smart Routing
+
+Мультимодельный каскад с автоматическим роутингом:
+
+| Модель | Роль | Стоимость |
+|--------|------|-----------|
+| DeepSeek-V3 | Primary worker (90% задач) | $0.14/1M tokens |
+| Claude Sonnet | Expert fallback (сложные задачи) | $3.00/1M tokens |
+| GPT-4o | Reserve channel | $2.50/1M tokens |
+
+### AI-Collaborative Features (Phase 12)
+
+- **AI Workspace** — интерактивные AI-сессии с контекстом документа
+- **Negotiation Engine** — AI-driven переговоры с генерацией возражений
+- **Workflow Automation** — определения, исполнения, задачи с эскалацией
+- **Template Governance** — версионирование шаблонов, clause policies
+- **Organization Management** — мультитенантность, роли, политики
+- **Tool & Agent Registry** — typed tools, agent capabilities
+- **Webhook Integrations** — event bus, webhook deliveries с retry
+- **Collaboration** — комментарии, аннотации, назначения
+
+### Contract Management (v1)
+
+- Загрузка и парсинг договоров (DOCX, PDF, XML)
+- Глубокий анализ с выявлением рисков (financial, legal, operational)
+- Генерация договоров по шаблонам с LLM
+- Генерация возражений с правовыми обоснованиями
+- Сравнение версий (структурное + семантическое)
+- Экспорт в DOCX, PDF, TXT, JSON
+
+### Authentication & Security
+
+- JWT access + refresh tokens с bcrypt
+- 5 ролей: admin, senior_lawyer, lawyer, junior_lawyer, demo
+- 4 тарифа: demo, basic, pro, enterprise (с лимитами)
+- Demo-доступ по уникальным ссылкам
+- Rate limiting, security headers, audit logs
+- Email verification, 2FA (TOTP)
+
+### Frontend
+
+- 16 страниц: dashboard, contracts, AI workspace, negotiations, workflow, admin и др.
+- Real-time обновления через WebSocket
+- Mobile-first responsive design
+- Admin panel с 5 вкладками (пользователи, политики, инструменты, агенты, шаблоны)
+
+---
+
+## Технологический стек
+
+| Слой | Технологии |
+|------|-----------|
+| **Backend** | Python 3.11, FastAPI, SQLAlchemy, Pydantic v2, Alembic |
+| **Frontend** | Next.js 14 (App Router), TypeScript, Tailwind CSS, React Query, Zustand |
+| **Database** | PostgreSQL 16 + pgvector / SQLite (dev) |
+| **LLM** | DeepSeek-V3, Claude Sonnet, GPT-4o, GPT-4o-mini + Perplexity, Qwen |
+| **Vector DB** | ChromaDB |
+| **Cache** | Redis |
+| **Infra** | Docker Compose (6 сервисов), Nginx, GitHub Actions |
+| **Testing** | pytest (387 backend), Playwright (33 E2E) |
+
+---
+
+## Установка
 
 ### Требования
 
-- Python 3.9+
-- PostgreSQL 14+ (или SQLite для разработки)
-- Redis (optional, для distributed cache)
-- Tesseract OCR (optional, для сканов)
+- Python 3.11+
+- Node.js 18+
+- PostgreSQL 16+ (или SQLite для dev)
 
-### 1. Клонирование репозитория
+### Локальная разработка
 
 ```bash
+# 1. Клонирование
 git clone https://github.com/Andrew821667/Contract-AI-System.git
 cd Contract-AI-System
-```
 
-### 2. Создание виртуального окружения
-
-```bash
+# 2. Backend
 python3 -m venv venv
-source venv/bin/activate  # Linux/Mac
-# или
-venv\Scripts\activate  # Windows
-```
-
-### 3. Установка зависимостей
-
-```bash
-# Основные зависимости
+source venv/bin/activate
 pip install -r requirements.txt
 
-# Опциональные зависимости для OCR
-pip install pytesseract pdf2image Pillow
+# 3. Frontend
+cd frontend
+npm install
+cd ..
 
-# Системные зависимости (Ubuntu/Debian)
-sudo apt-get install tesseract-ocr tesseract-ocr-rus poppler-utils
-```
-
-### 4. Настройка конфигурации
-
-Создайте `.env` файл:
-
-```bash
+# 4. Конфигурация
 cp .env.example .env
-```
+# Отредактируйте .env — минимально: DEEPSEEK_API_KEY или OPENAI_API_KEY
 
-Отредактируйте `.env`:
+# 5. Dev-инфраструктура (PostgreSQL + Redis)
+docker-compose -f docker-compose.dev.yml up -d
 
-```ini
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/contract_ai
-# или для SQLite:
-# DATABASE_URL=sqlite:///./contract_ai.db
-
-# LLM API Keys
-OPENAI_API_KEY=sk-...
-# или
-ANTHROPIC_API_KEY=...
-
-# Redis (optional)
-REDIS_URL=redis://localhost:6379/0
-
-# FNS API (optional, для премиум доступа)
-DADATA_API_KEY=...
-
-# Email (для отправки возражений)
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=your-email@gmail.com
-SMTP_PASSWORD=your-app-password
-```
-
-### 5. Инициализация базы данных
-
-```bash
-# Создание таблиц
-python -m src.database.init_db
-
-# Применение performance indexes (Phase 8)
-psql -U user -d contract_ai -f database/performance_indexes.sql
-
-# Или через Python
-python scripts/run_migrations.py
-```
-
-### 6. Запуск сервера
-
-```bash
-# Development
+# 6. Запуск backend
 uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 
-# Production
-gunicorn src.main:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+# 7. Запуск frontend (в отдельном терминале)
+cd frontend && npm run dev
 ```
+
+Backend: http://localhost:8000 | Frontend: http://localhost:3000
 
 ---
 
-## ⚡ Быстрый старт
+## Docker Deployment
 
-### Пример 1: Анализ договора
-
-```python
-from src.agents.contract_analyzer_agent import ContractAnalyzerAgent
-from src.services.llm_gateway import LLMGateway
-
-# Инициализация
-llm = LLMGateway(model="gpt-4")
-analyzer = ContractAnalyzerAgent(llm_gateway=llm, db_session=db)
-
-# Анализ
-result = analyzer.execute({
-    'contract_id': 'contract-123',
-    'parsed_xml': xml_content,
-    'metadata': {'contract_type': 'supply'},
-    'check_counterparty': True
-})
-
-# Результаты
-print(f"Найдено рисков: {len(result.data['risks'])}")
-print(f"Рекомендаций: {len(result.data['recommendations'])}")
-print(f"Следующее действие: {result.next_action}")
-```
-
-### Пример 2: Генерация возражений
-
-```python
-from src.agents.disagreement_processor_agent import DisagreementProcessorAgent
-
-processor = DisagreementProcessorAgent(llm_gateway=llm, db_session=db)
-
-result = processor.execute({
-    'contract_id': 'contract-123',
-    'analysis_id': 'analysis-456',
-    'generate_objections': True,
-    'selected_risk_ids': [1, 2, 3],  # Выбранные риски
-    'export_format': 'pdf'
-})
-
-# Скачать PDF
-pdf_path = result.data['export_path']
-```
-
-### Пример 3: Использование кэширования (Phase 8)
-
-```python
-from src.services.cache_service import get_cache
-
-cache = get_cache(use_redis=True)
-
-# Декоратор для кэширования
-@cache.cached(ttl=3600, key_prefix="fns")
-def get_company_info(inn: str):
-    # Дорогой API вызов
-    return fns_api.get_company(inn)
-
-# Первый вызов: API запрос
-result1 = get_company_info("1234567890")  # ~2 секунды
-
-# Второй вызов: из кэша
-result2 = get_company_info("1234567890")  # ~0.001 секунды!
-```
-
-### Пример 4: Параллельная обработка (Phase 8)
-
-```python
-from src.services.async_api_client import AsyncAPIClient, run_async
-
-async def process_multiple_contracts():
-    async with AsyncAPIClient(max_connections=10) as client:
-        # Параллельная проверка 100 контрагентов
-        inns = ["1234567890", "0987654321", ...]  # 100 ИНН
-
-        urls = [f"https://api.fns.ru/company/{inn}" for inn in inns]
-        results = await client.batch_get(urls)
-
-        return results
-
-# Запуск из sync кода
-results = run_async(process_multiple_contracts())
-# 100 запросов за ~2 секунды вместо 200 секунд!
-```
-
----
-
-## 📚 API Документация
-
-После запуска сервера:
-
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
-- **OpenAPI spec**: http://localhost:8000/openapi.json
-
-### Основные эндпоинты
-
-```
-POST   /api/v1/contracts/upload          # Загрузка договора
-POST   /api/v1/contracts/{id}/analyze    # Анализ договора
-GET    /api/v1/contracts/{id}/risks      # Получить риски
-POST   /api/v1/disagreements/generate    # Генерация возражений
-POST   /api/v1/export/pdf                # Экспорт в PDF
-GET    /api/v1/analytics/dashboard       # Аналитика
-```
-
-Подробнее: [docs/api/README.md](docs/api/README.md)
-
----
-
-## ⚡ Performance
-
-### Оптимизации (Phase 8)
-
-**До оптимизации:**
-- 10 contracts × 50 clauses: **~17 минут**
-- API calls: 500
-- Cost: $5.00
-
-**После Phase 8 (Full Optimization):**
-- 10 contracts × 50 clauses: **~8 секунд** ✨
-- API calls: 90 (with 40% cache hit)
-- Cost: $0.90
-
-**Ускорение: 125x! Экономия: 82%!** 🚀
-
-### Ключевые техники:
-
-1. **LLM Batch Processing** (Phase 2)
-   - 15 clauses per batch
-   - 12.5x faster analysis
-
-2. **Caching** (Phase 8)
-   - Redis + In-memory
-   - 40%+ cache hit rate
-   - Template clauses cached
-
-3. **Async API Calls** (Phase 8)
-   - Parallel counterparty checks
-   - 10x faster external API calls
-
-4. **Database Optimization** (Phase 8)
-   - 20+ composite indexes
-   - N+1 query elimination
-   - Aggregation queries
-
-5. **Connection Pooling**
-   - HTTP connection reuse
-   - Database connection pool
-
-Подробнее: [docs/performance/llm_batching_optimization.md](docs/performance/llm_batching_optimization.md)
-
----
-
-## 🔒 Безопасность
-
-### Реализованные меры (Phases 1-3)
-
-✅ **XXE Attack Protection**
-- Secure XML parsing с defusedxml
-- DTD отключены
-- Entity expansion защита
-
-✅ **Path Traversal Protection**
-- Filename sanitization
-- Path validation
-- Запрет на null bytes, "..", hidden files
-
-✅ **Rate Limiting**
-- Requests Per Minute (RPM)
-- Tokens Per Minute (TPM)
-- Cost per hour/day limits
-- Thread-safe implementation
-
-✅ **Input Validation**
-- File size limits
-- MIME type checking
-- Extension whitelist
-
-Подробнее: [docs/security/README.md](docs/security/README.md)
-
----
-
-## 🧪 Тестирование
-
-### Test Suite (Phase 5)
+Полный production-стек из 6 сервисов:
 
 ```bash
-# Запуск всех тестов
-pytest
+# 1. Конфигурация
+cp .env.example .env
+# Заполните API ключи, пароли, SECRET_KEY
 
-# С покрытием
-pytest --cov=src --cov-report=html
+# 2. Запуск
+docker-compose up -d --build
 
-# Только security тесты
-pytest tests/test_file_validator.py tests/test_xml_security.py
-
-# Только performance тесты
-pytest tests/test_rate_limiter.py -v
+# 3. Проверка
+docker-compose ps
+curl http://localhost/health
 ```
 
-**Статистика тестов:**
-- Total tests: 165+
-- Lines of code: 2,245
-- Coverage: 85%+
+### Сервисы
 
-Тесты включают:
-- ✅ Security (XXE, path traversal, size limits)
-- ✅ Rate limiting (RPM, TPM, cost limits, thread safety)
-- ✅ PDF generation (unicode, pagination)
-- ✅ Export integration (E2E workflows)
-- ✅ Real-world scenarios
+| Сервис | Порт | Описание |
+|--------|------|----------|
+| **postgres** | 5432 | PostgreSQL 16 + pgvector |
+| **redis** | 6379 | Cache + sessions |
+| **backend** | 8000 | FastAPI API (128 endpoints) |
+| **streamlit** | 8501 | Admin dashboard (legacy) |
+| **frontend** | 3000 | Next.js 14 UI |
+| **nginx** | 80 | Reverse proxy + SSL termination |
 
----
-
-## 🗺️ Roadmap
-
-### ✅ Completed (Phases 1-8)
-
-- [x] Phase 1: Security fixes (XXE, path traversal, rate limiting)
-- [x] Phase 2: Rate limiting implementation
-- [x] Phase 3: Code quality (enums, constants)
-- [x] Phase 4: Export functionality (PDF, DOCX, Email)
-- [x] Phase 5: Comprehensive test suite (165+ tests)
-- [x] Phase 6: Modular architecture refactoring
-- [x] Phase 7: STUB implementations (OCR, FNS API, tracked changes)
-- [x] Phase 8: Performance optimization (100x+ speedup)
-
-### 🚧 Phase 9: Documentation (Current)
-
-- [x] Main README update
-- [ ] API documentation
-- [ ] Architecture diagrams
-- [ ] Deployment guide
-- [ ] Usage examples
-
-### 🔮 Future Development
-
-**Phase 10: Advanced Analytics**
-- Dashboard with metrics (risk trends, efficiency)
-- Contract templates analytics
-- Cost tracking and optimization
-- ML-based risk prediction
-
-**Phase 11: Integration**
-- REST API для legal-ai-website
-- Webhook notifications
-- SSO authentication
-- Multi-tenancy support
-
-**Phase 12: AI Enhancements**
-- Fine-tuned models for specific contract types
-- Multi-language support (English contracts)
-- Voice interface for dictation
-- Automated negotiation recommendations
-
-**Phase 13: Collaboration Features**
-- Real-time collaborative editing
-- Comment system on clauses
-- Version control with git-like interface
-- Team workflows and approvals
+Nginx маршрутизирует:
+- `/api/*` и `/ws/*` → backend
+- `/streamlit/*` → streamlit
+- `/*` → frontend
 
 ---
 
-## 📖 Документация
+## Тестирование
 
-- [API Documentation](docs/api/README.md)
-- [Architecture Guide](docs/architecture/README.md)
-- [Deployment Guide](docs/deployment/README.md)
-- [Performance Optimization](docs/performance/llm_batching_optimization.md)
-- [Security Best Practices](docs/security/README.md)
-- [Contributing Guidelines](CONTRIBUTING.md)
+### Backend (pytest)
+
+```bash
+source venv/bin/activate
+
+# Все тесты
+python3 -m pytest tests/ -q
+
+# С verbose
+python3 -m pytest tests/ -v
+
+# Конкретный файл
+python3 -m pytest tests/test_api_auth.py -v
+```
+
+**Результат:** 387 passed, 4 skipped
+
+### Frontend E2E (Playwright)
+
+```bash
+cd frontend
+
+# Установка браузеров
+npx playwright install chromium
+
+# Запуск тестов
+npm run test:e2e
+
+# С UI
+npm run test:e2e:ui
+
+# Отчёт
+npm run test:e2e:report
+```
+
+**Результат:** 33/33 passed (6 spec files)
+
+Покрытие E2E:
+- Публичные страницы и редиректы авторизации
+- Форма логина и auth flow
+- Dashboard и навигация
+- Управление контрактами (список, загрузка, генерация)
+- Phase 12 страницы (AI, переговоры, workflow, admin)
+- Template Governance UI (политики, версии шаблонов)
 
 ---
 
-## 🤝 Вклад в проект
+## API
 
-Мы приветствуем вклад в развитие проекта! См. [CONTRIBUTING.md](CONTRIBUTING.md)
+128 endpoints: 64 v1 + 64 v2
+
+### V1 — Contract Management
+
+```
+POST   /api/v1/auth/login              # Аутентификация
+POST   /api/v1/auth/register           # Регистрация
+POST   /api/v1/contracts/upload        # Загрузка договора
+POST   /api/v1/contracts/analyze       # Анализ
+POST   /api/v1/contracts/generate      # Генерация
+GET    /api/v1/contracts/{id}          # Детали
+GET    /api/v1/analytics/dashboard     # Аналитика
+WS     /api/v1/ws/analysis/{id}       # Real-time анализ
+WS     /api/v1/ws/notifications       # Уведомления
+```
+
+### V2 — AI-Collaborative OS
+
+```
+# AI Collaboration
+POST   /api/v2/documents/{id}/ai/sessions          # Создать AI-сессию
+POST   /api/v2/ai/sessions/{id}/messages            # Отправить сообщение
+POST   /api/v2/ai/actions/{id}/approve              # Одобрить AI action
+
+# Negotiations
+POST   /api/v2/negotiations/start                   # Начать переговоры
+POST   /api/v2/negotiations/objections/generate     # Генерация возражений
+
+# Workflow
+POST   /api/v2/workflow/definitions                 # Создать workflow
+POST   /api/v2/workflow/tasks/{id}/complete          # Завершить задачу
+
+# Template Governance
+GET    /api/v2/templates/{id}/versions              # Версии шаблона
+POST   /api/v2/clause-policies                      # Создать политику клауз
+GET    /api/v2/clause-policies/check                # Проверка клаузы
+
+# Organizations & Policies
+POST   /api/v2/organizations                        # Создать организацию
+POST   /api/v2/policies                             # Создать политику
+
+# Integrations
+POST   /api/v2/integrations/webhooks               # Создать webhook
+```
 
 ---
 
-## 📝 Лицензия
+## Roadmap
 
-MIT License - см. [LICENSE](LICENSE)
+### Completed
+
+- [x] **Phases 1-8**: Security, rate limiting, export, tests, modular architecture, performance
+- [x] **Phase 9**: Auth system (JWT, roles, demo access, 2FA)
+- [x] **Phase 10**: React/Next.js frontend (16 pages, WebSocket)
+- [x] **Phase 11**: Analytics dashboard, cost tracking
+- [x] **Phase 12**: AI-collaborative OS core (13 sub-modules, 64 v2 endpoints)
+  - Identity & organizations, policy engine, tool/agent registry
+  - AI collaboration sessions, orchestrator, workflow engine
+  - Negotiation engine, template governance, integrations
+  - Collaboration (comments/annotations), enterprise integrity
+- [x] **Template Governance UI** (admin panel)
+- [x] **E2E test suite** (33 Playwright tests)
+- [x] **Docker production stack** (6 services)
+
+### In Progress
+
+- [ ] Production deployment и мониторинг
+- [ ] CI/CD pipeline (GitHub Actions)
+- [ ] API documentation (OpenAPI/Swagger)
+
+### Future
+
+- [ ] Fine-tuned модели для типов договоров
+- [ ] Multi-language support
+- [ ] Mobile app
+- [ ] SSO интеграция (SAML/OIDC)
+- [ ] Audit trail UI
 
 ---
 
-## 👨‍💻 Автор
+## Автор
 
-Andrew821667
-
-- GitHub: [@Andrew821667](https://github.com/Andrew821667)
-- Проекты: [legal-ai-website](https://github.com/Andrew821667/legal-ai-website)
+**Andrew821667** — [@Andrew821667](https://github.com/Andrew821667)
 
 ---
 
-## 🙏 Благодарности
+## Лицензия
 
-- OpenAI за GPT API
-- Anthropic за Claude API
-- FastAPI team
-- SQLAlchemy team
-- Сообщество open-source разработчиков
-
----
-
-**Contract AI System** - автоматизация договорной работы с помощью AI 🚀
+MIT License — см. [LICENSE](LICENSE)

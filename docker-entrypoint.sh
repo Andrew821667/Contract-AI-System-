@@ -13,11 +13,22 @@ echo "==> Creating database tables (SQLAlchemy)..."
 python -c "
 from src.models.database import Base, engine
 from src.models.auth_models import *
-# changes_models imported if exists
 try:
     from src.models.changes_models import *
 except ImportError:
     pass
+# Phase 12 core models
+import src.core.identity_org.models
+import src.core.policies.models
+import src.core.tools.models
+import src.core.agents.models
+import src.core.ai_collaboration.models
+import src.core.orchestrator.models
+import src.core.workflow.models
+import src.core.collaboration.models
+import src.core.templates.models
+import src.core.integrations.models
+import src.core.enterprise.integrity
 Base.metadata.create_all(bind=engine)
 print('All tables created successfully')
 " || echo "WARNING: Table creation failed, continuing..."
