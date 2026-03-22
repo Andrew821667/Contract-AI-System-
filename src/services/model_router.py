@@ -189,7 +189,12 @@ class ModelRouter:
             logger.debug("Routing to Claude: high complexity score")
             return self.config.ANTHROPIC_MODEL
 
-        # Rule 3: Default to DeepSeek (90% of cases)
+        # Rule 3: Simple tasks → Ollama (local, бесплатно) если доступен
+        if doc_complexity_score < 0.4 and self.config.is_model_available(self.config.OLLAMA_MODEL):
+            logger.debug("Routing to Ollama: simple task, using local model")
+            return self.config.OLLAMA_MODEL
+
+        # Rule 4: Default to DeepSeek (medium complexity)
         logger.debug("Routing to DeepSeek: standard document")
         return self.config.DEEPSEEK_MODEL
 

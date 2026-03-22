@@ -24,6 +24,10 @@ _MODEL_TO_PROVIDER: dict[str, str] = {
     "claude-sonnet-4-20250514": "claude",
     "gpt-4o": "openai",
     "gpt-4o-mini": "openai",
+    "qwen2.5:7b": "ollama",
+    "llama3.1:8b": "ollama",
+    "mistral:7b": "ollama",
+    "gemma2:9b": "ollama",
 }
 
 # Маппинг task_type → complexity score для ModelRouter
@@ -52,6 +56,8 @@ def _provider_for_model(model: str) -> str:
         return "openai"
     if "deepseek" in lower:
         return "deepseek"
+    if any(tag in lower for tag in ("qwen", "llama", "mistral", "gemma", "phi")):
+        return "ollama"
     return "openai"
 
 

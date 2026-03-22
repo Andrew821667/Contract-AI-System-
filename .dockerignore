@@ -97,6 +97,12 @@ logs/
 *.sqlite
 *.sqlite3
 
+# Frontend (built separately via frontend/Dockerfile)
+frontend/node_modules/
+frontend/.next/
+frontend/test-results/
+frontend/playwright-report/
+
 # Git
 .git/
 .gitignore

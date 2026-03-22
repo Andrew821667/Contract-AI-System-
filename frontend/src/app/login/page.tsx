@@ -171,12 +171,39 @@ export default function LoginPage() {
               </a>
             </div>
 
+            {/* Quick Login */}
+            <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.6 }}
+                className="mt-6 p-4 bg-amber-50 rounded-xl border border-amber-200"
+              >
+                <p className="text-xs font-semibold text-amber-700 mb-3 text-center">Быстрый вход (dev)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { label: 'Админ', email: 'admin@contractai.ru', pwd: 'Admin123' },
+                    { label: 'Юрист', email: 'lawyer@contractai.ru', pwd: 'Lawyer123' },
+                    { label: 'VIP', email: 'vip@contractai.ru', pwd: 'Vip123' },
+                    { label: 'Демо', email: 'demo@contractai.ru', pwd: 'Demo123' },
+                  ].map((u) => (
+                    <button
+                      key={u.email}
+                      type="button"
+                      onClick={() => { setEmail(u.email); setPassword(u.pwd) }}
+                      className="px-3 py-2 text-xs bg-white border border-amber-200 rounded-lg hover:bg-amber-100 transition text-stone-700 font-medium"
+                    >
+                      {u.label}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+
             {/* Demo Access */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.6 }}
-              className="mt-6 p-4 bg-stone-50 rounded-xl border border-stone-200 text-center"
+              className="mt-4 p-4 bg-stone-50 rounded-xl border border-stone-200 text-center"
             >
               <p className="text-sm text-stone-600">
                 Хотите попробовать?{' '}

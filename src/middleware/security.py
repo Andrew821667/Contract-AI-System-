@@ -73,11 +73,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             'last_update': time.time()
         })
 
-        # Specific limits for endpoints
+        # Specific limits for endpoints (per minute per IP)
+        import os
+        is_dev = os.getenv("APP_ENV", "development") != "production"
+        multiplier = 10 if is_dev else 1  # Relaxed limits for development
         self.endpoint_limits = {
-            '/api/v1/auth/login': 10,
-            '/api/v1/auth/register': 5,
-            '/api/v1/auth/demo-activate': 10,
+            '/api/v1/auth/login': 10 * multiplier,
+            '/api/v1/auth/register': 5 * multiplier,
+            '/api/v1/auth/demo-activate': 10 * multiplier,
         }
 
     async def dispatch(self, request: Request, call_next):

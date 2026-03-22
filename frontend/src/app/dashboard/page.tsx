@@ -379,6 +379,34 @@ export default function DashboardPage() {
           className="card-modern mb-8"
         >
           <h2 className="text-2xl font-bold text-stone-800 mb-6">Быстрые действия</h2>
+
+          {/* AI Assistant Banner */}
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35 }}
+            whileHover={{ y: -2 }}
+            onClick={() => router.push('/ai')}
+            className="mb-6 p-5 bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 rounded-2xl cursor-pointer shadow-lg hover:shadow-xl transition-shadow"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
+                  <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714a2.25 2.25 0 00.659 1.591L19 14.5M14.25 3.104c.251.023.501.05.75.082M19 14.5l-2.47 2.47a3.375 3.375 0 01-4.06.54M5 14.5l2.47 2.47a3.375 3.375 0 004.06.54m0 0v3.24m0-3.24a3.375 3.375 0 00-4.06-.54" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">AI Ассистент</h3>
+                  <p className="text-sm text-white/80">Анализ договоров, генерация клаузул, проверка рисков — в диалоге с AI</p>
+                </div>
+              </div>
+              <svg className="h-6 w-6 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </motion.div>
+
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             {[
               { icon: <svg className="h-8 w-8 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>, label: 'Загрузить договор', route: '/contracts/upload', color: 'border-l-primary-500', permission: 'canAnalyze' },

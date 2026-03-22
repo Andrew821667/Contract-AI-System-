@@ -113,19 +113,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return;
     }
 
-    // Migration cleanup: remove stale localStorage tokens (security: prevent XSS theft)
+    // Second check: recover from localStorage (survives page reload)
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
+      const savedToken = localStorage.getItem('access_token');
+      if (savedToken) {
+        set({ accessToken: savedToken, isAuthenticated: true, isLoading: false });
+        // Also recover user data
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+          try {
+            set({ user: JSON.parse(userStr) });
+          } catch { /* ignore */ }
+        }
+        return;
+      }
     }
 
-    // No in-memory token — try refresh via httpOnly cookie
+    // No in-memory or localStorage token — try refresh via httpOnly cookie
     try {
       const { default: api } = await import('../services/api');
       const refreshed = await api.refreshToken();
       if (refreshed) {
-        // api.refreshToken() will have called setAuth/setAccessToken via the store
-        // Also fetch full user profile
         await get().refreshUser();
         set({ isAuthenticated: true, isLoading: false });
       } else {

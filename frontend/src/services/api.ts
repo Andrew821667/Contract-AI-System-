@@ -589,6 +589,40 @@ export interface CompareResult {
   executive_summary: string | null;
 }
 
+// LLM Settings types
+export interface LLMModel {
+  id: string;
+  name: string;
+  provider: string;
+  cost_input: number;
+  cost_output: number;
+  description: string;
+}
+
+export interface LLMStageSetting {
+  stage_id: string;
+  stage_name: string;
+  stage_description: string;
+  model: string;
+  temperature: number;
+  max_tokens: number;
+  enabled: boolean;
+  is_default: boolean;
+}
+
+export interface LLMSettingsResponse {
+  stages: LLMStageSetting[];
+  available_models: LLMModel[];
+  router_mode: string;
+}
+
+export interface LLMStageSettingUpdate {
+  model: string;
+  temperature: number;
+  max_tokens: number;
+  enabled: boolean;
+}
+
 // API Client
 class APIClient {
   private client: AxiosInstance;
@@ -674,7 +708,9 @@ class APIClient {
    */
   private setAccessToken(accessToken: string) {
     if (typeof window === 'undefined') return;
-    // Update Zustand store (in-memory only — not vulnerable to XSS)
+    // Store in localStorage (used by AppLayout, dashboard, hooks for auth checks)
+    localStorage.setItem('access_token', accessToken);
+    // Update Zustand store
     try {
       const { useAuthStore } = require('../stores/authStore');
       useAuthStore.getState().setAccessToken(accessToken);
@@ -1487,6 +1523,29 @@ class APIClient {
   async listProhibitedClauses(orgId?: string): Promise<ClausePolicy[]> {
     const response = await this.client.get<ClausePolicy[]>('/api/v2/clause-policies/prohibited', { params: { org_id: orgId } });
     return response.data;
+  }
+
+  // ==================== Admin LLM Settings ====================
+
+  async getLLMSettings(): Promise<LLMSettingsResponse> {
+    const response = await this.client.get<LLMSettingsResponse>('/api/v2/admin/llm/settings');
+    return response.data;
+  }
+
+  async updateLLMStageSetting(stageId: string, data: LLMStageSettingUpdate): Promise<void> {
+    await this.client.put(`/api/v2/admin/llm/settings/${stageId}`, data);
+  }
+
+  async updateAllLLMSettings(data: Record<string, LLMStageSettingUpdate>): Promise<void> {
+    await this.client.put('/api/v2/admin/llm/settings', data);
+  }
+
+  async updateLLMRouterMode(mode: string): Promise<void> {
+    await this.client.put('/api/v2/admin/llm/router-mode', { mode });
+  }
+
+  async resetLLMSettings(): Promise<void> {
+    await this.client.post('/api/v2/admin/llm/reset');
   }
 }
 

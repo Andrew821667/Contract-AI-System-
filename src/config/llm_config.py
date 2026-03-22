@@ -83,6 +83,26 @@ class LLMConfig(BaseSettings):
     )
 
     # ========================================
+    # Ollama (Local LLM) Configuration
+    # ========================================
+    OLLAMA_BASE_URL: str = Field(
+        default="http://localhost:11434",
+        description="Ollama API base URL"
+    )
+    OLLAMA_MODEL: str = Field(
+        default="qwen2.5:7b",
+        description="Default Ollama model"
+    )
+    OLLAMA_MAX_TOKENS: int = Field(
+        default=4096,
+        description="Maximum tokens for Ollama responses"
+    )
+    OLLAMA_TEMPERATURE: float = Field(
+        default=0.1,
+        description="Temperature for Ollama"
+    )
+
+    # ========================================
     # Smart Router Configuration
     # ========================================
     ROUTER_DEFAULT_MODEL: str = Field(
@@ -154,6 +174,7 @@ class LLMConfig(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = True
+        extra = "ignore"
 
     def get_model_credentials(self, model: str) -> Tuple[str, Optional[str]]:
         """
@@ -168,6 +189,8 @@ class LLMConfig(BaseSettings):
             return self.ANTHROPIC_API_KEY, None
         elif model in (self.OPENAI_MODEL, self.OPENAI_MODEL_MINI, "gpt-4o", "gpt-4o-mini"):
             return self.OPENAI_API_KEY, None
+        elif model == self.OLLAMA_MODEL or model.startswith("qwen") or model.startswith("llama") or model.startswith("mistral") or model.startswith("gemma"):
+            return "ollama", f"{self.OLLAMA_BASE_URL}/v1"
         else:
             # Default to DeepSeek
             return self.DEEPSEEK_API_KEY, self.DEEPSEEK_BASE_URL
@@ -175,6 +198,8 @@ class LLMConfig(BaseSettings):
     def is_model_available(self, model: str) -> bool:
         """Check if a model has a valid API key configured."""
         api_key, _ = self.get_model_credentials(model)
+        if api_key == "ollama":
+            return True  # Ollama не требует API ключа
         return bool(api_key) and not api_key.startswith("your_")
 
     def get_available_models(self):
@@ -184,6 +209,7 @@ class LLMConfig(BaseSettings):
             self.ANTHROPIC_MODEL,
             self.OPENAI_MODEL,
             self.OPENAI_MODEL_MINI,
+            self.OLLAMA_MODEL,
         ]
         return [m for m in all_models if self.is_model_available(m)]
 
@@ -202,6 +228,7 @@ class LLMConfig(BaseSettings):
             "claude-sonnet-4-20250514": (self.COST_CLAUDE_INPUT, self.COST_CLAUDE_OUTPUT),
             "gpt-4o": (self.COST_GPT4O_INPUT, self.COST_GPT4O_OUTPUT),
             "gpt-4o-mini": (self.COST_GPT4O_MINI_INPUT, self.COST_GPT4O_MINI_OUTPUT),
+            self.OLLAMA_MODEL: (0.0, 0.0),  # Локальная модель — бесплатно
         }
         return costs.get(model, (0.0, 0.0))
 

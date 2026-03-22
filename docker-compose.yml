@@ -72,6 +72,8 @@ services:
       - YANDEX_FOLDER_ID=${YANDEX_FOLDER_ID:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - QWEN_API_KEY=${QWEN_API_KEY:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b}
       - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-deepseek}
       - SEED_ADMIN_PASSWORD=${SEED_ADMIN_PASSWORD:-}
       - SEED_LAWYER_PASSWORD=${SEED_LAWYER_PASSWORD:-}
@@ -108,7 +110,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: contract-ai-streamlit
-    command: ["streamlit", "run", "admin/streamlit_dashboard.py", "--server.port=8502", "--server.address=0.0.0.0", "--server.baseUrlPath=admin"]
+    command: ["streamlit", "run", "admin/streamlit_dashboard.py", "--server.port=8502", "--server.address=0.0.0.0", "--server.baseUrlPath=streamlit-admin"]
     environment:
       - DATABASE_URL=postgresql://contract_user:${POSTGRES_PASSWORD:-changeme_in_production}@postgres:5432/contract_ai
       - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme_in_production}@redis:6379/0

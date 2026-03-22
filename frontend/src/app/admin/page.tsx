@@ -20,12 +20,13 @@ import {
   useActivateTemplateVersion,
 } from '@/hooks/useTemplates'
 import type { Organization, OrgMembership, Policy, ToolDefinition, AgentDefinition, ClausePolicy, TemplateVersion } from '@/services/api'
+import LLMSettings from '@/components/admin/LLMSettings'
 
-type Tab = 'orgs' | 'policies' | 'tools' | 'agents' | 'templates'
+type Tab = 'orgs' | 'policies' | 'tools' | 'agents' | 'templates' | 'llm'
 
 export default function AdminPage() {
   const { isReady } = useAuthGuard()
-  const [activeTab, setActiveTab] = useState<Tab>('orgs')
+  const [activeTab, setActiveTab] = useState<Tab>('llm')
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null)
   const [showCreateOrg, setShowCreateOrg] = useState(false)
   const [orgName, setOrgName] = useState('')
@@ -84,6 +85,7 @@ export default function AdminPage() {
   }
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: 'llm', label: 'LLM Модели' },
     { key: 'orgs', label: 'Организации', count: orgs.length },
     { key: 'policies', label: 'Политики', count: policies.length },
     { key: 'tools', label: 'Инструменты', count: tools.length },
@@ -134,6 +136,9 @@ export default function AdminPage() {
             </button>
           ))}
         </div>
+
+        {/* LLM Settings tab */}
+        {activeTab === 'llm' && <LLMSettings />}
 
         {/* Organizations tab */}
         {activeTab === 'orgs' && (

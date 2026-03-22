@@ -99,8 +99,20 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 markAllAsRead={notif.markAllAsRead}
                 clearAll={notif.clearAll}
               />
-              <div className="hidden sm:block text-sm text-gray-500 dark:text-gray-400">
-                {user?.name}
+              <div className="hidden sm:flex items-center space-x-3">
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  {user?.name}
+                </span>
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 text-sm text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200"
+                  title="Выйти из системы"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  <span>Выйти</span>
+                </button>
               </div>
             </div>
           </div>

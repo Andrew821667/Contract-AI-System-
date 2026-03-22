@@ -75,6 +75,14 @@ class LLMGateway:
             dashscope.api_key = settings.qwen_api_key
             self._client = dashscope
 
+        elif self.provider == "ollama":
+            from openai import OpenAI
+            ollama_base_url = getattr(settings, 'ollama_base_url', 'http://localhost:11434')
+            self._client = OpenAI(
+                api_key="ollama",  # Ollama не требует ключа, но OpenAI client требует непустое значение
+                base_url=f"{ollama_base_url}/v1",
+            )
+
         else:
             raise ValueError(f"Unknown provider: {self.provider}")
 
@@ -196,6 +204,7 @@ class LLMGateway:
         MODEL_CONTEXT_LIMITS = {
             "deepseek-chat": 128000, "gpt-4o-mini": 128000, "gpt-4o": 128000,
             "gpt-4": 8192, "claude-sonnet-4-20250514": 200000, "qwen-max": 32000,
+            "qwen2.5:7b": 32768, "llama3.1:8b": 131072, "mistral:7b": 32768, "gemma2:9b": 8192,
         }
         context_limit = MODEL_CONTEXT_LIMITS.get(self.model or "", 128000)
         if estimated_input_tokens + max_tokens > context_limit:
@@ -287,7 +296,7 @@ class LLMGateway:
         """Execute actual API call to LLM provider"""
         if self.provider == "claude":
             return self._call_claude(prompt, system_prompt, temperature, max_tokens, **kwargs)
-        elif self.provider in ["openai", "perplexity", "deepseek"]:
+        elif self.provider in ["openai", "perplexity", "deepseek", "ollama"]:
             return self._call_openai_compatible(prompt, system_prompt, temperature, max_tokens, **kwargs)
         elif self.provider == "yandex":
             return self._call_yandex(prompt, system_prompt, temperature, max_tokens, **kwargs)
@@ -346,6 +355,8 @@ class LLMGateway:
             model = "llama-3.1-sonar-large-128k-online"
         elif self.provider == "deepseek":
             model = "deepseek-chat"
+        elif self.provider == "ollama":
+            model = getattr(settings, 'ollama_model', 'qwen2.5:7b')
         else:
             model = "gpt-4"
 

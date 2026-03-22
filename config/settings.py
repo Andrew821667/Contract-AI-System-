@@ -23,8 +23,12 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     qwen_api_key: str = ""
 
+    # Ollama (Local LLM)
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "qwen2.5:7b"
+
     # Default LLM Provider
-    default_llm_provider: Literal["claude", "openai", "perplexity", "yandex", "deepseek", "qwen"] = "deepseek"
+    default_llm_provider: Literal["claude", "openai", "perplexity", "yandex", "deepseek", "qwen", "ollama"] = "deepseek"
 
     # ChromaDB
     chroma_persist_directory: str = "./chroma_data"
