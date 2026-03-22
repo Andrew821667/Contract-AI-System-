@@ -49,7 +49,7 @@ class LLMConfig(BaseSettings):
     # ========================================
     ANTHROPIC_API_KEY: str = Field(default="", description="Anthropic API key")
     ANTHROPIC_MODEL: str = Field(
-        default="claude-sonnet-4-20250514",
+        default="claude-sonnet-4-6-20250227",
         description="Claude model name"
     )
     ANTHROPIC_MAX_TOKENS: int = Field(
@@ -66,12 +66,12 @@ class LLMConfig(BaseSettings):
     # ========================================
     OPENAI_API_KEY: str = Field(default="", description="OpenAI API key")
     OPENAI_MODEL: str = Field(
-        default="gpt-4o",
-        description="GPT-4o model name"
+        default="gpt-5.4",
+        description="GPT-5.4 flagship model"
     )
     OPENAI_MODEL_MINI: str = Field(
-        default="gpt-4o-mini",
-        description="GPT-4o-mini model name for testing"
+        default="gpt-5.4-mini",
+        description="GPT-5.4 Mini model for budget tasks"
     )
     OPENAI_MAX_TOKENS: int = Field(
         default=4096,
@@ -90,7 +90,7 @@ class LLMConfig(BaseSettings):
         description="Ollama API base URL"
     )
     OLLAMA_MODEL: str = Field(
-        default="qwen2.5:7b",
+        default="qwen3:7b",
         description="Default Ollama model"
     )
     OLLAMA_MAX_TOKENS: int = Field(
@@ -158,17 +158,21 @@ class LLMConfig(BaseSettings):
         description="Enable cost tracking for LLM usage"
     )
 
-    # Costs per 1M tokens (input)
-    COST_DEEPSEEK_INPUT: float = Field(default=0.14, description="DeepSeek cost per 1M input tokens")
-    COST_CLAUDE_INPUT: float = Field(default=3.00, description="Claude cost per 1M input tokens")
-    COST_GPT4O_INPUT: float = Field(default=2.50, description="GPT-4o cost per 1M input tokens")
-    COST_GPT4O_MINI_INPUT: float = Field(default=0.15, description="GPT-4o-mini cost per 1M input tokens")
+    # Costs per 1M tokens (input) — March 2026
+    COST_DEEPSEEK_INPUT: float = Field(default=0.28, description="DeepSeek V3.2 cost per 1M input tokens")
+    COST_CLAUDE_INPUT: float = Field(default=3.00, description="Claude Sonnet 4.6 cost per 1M input tokens")
+    COST_GPT_INPUT: float = Field(default=2.50, description="GPT-5.4 cost per 1M input tokens")
+    COST_GPT_MINI_INPUT: float = Field(default=0.75, description="GPT-5.4 Mini cost per 1M input tokens")
+    COST_GEMINI_FLASH_INPUT: float = Field(default=0.30, description="Gemini 2.5 Flash cost per 1M input tokens")
+    COST_GEMINI_PRO_INPUT: float = Field(default=1.25, description="Gemini 2.5 Pro cost per 1M input tokens")
 
-    # Costs per 1M tokens (output)
-    COST_DEEPSEEK_OUTPUT: float = Field(default=0.28, description="DeepSeek cost per 1M output tokens")
-    COST_CLAUDE_OUTPUT: float = Field(default=15.00, description="Claude cost per 1M output tokens")
-    COST_GPT4O_OUTPUT: float = Field(default=10.00, description="GPT-4o cost per 1M output tokens")
-    COST_GPT4O_MINI_OUTPUT: float = Field(default=0.60, description="GPT-4o-mini cost per 1M output tokens")
+    # Costs per 1M tokens (output) — March 2026
+    COST_DEEPSEEK_OUTPUT: float = Field(default=0.42, description="DeepSeek V3.2 cost per 1M output tokens")
+    COST_CLAUDE_OUTPUT: float = Field(default=15.00, description="Claude Sonnet 4.6 cost per 1M output tokens")
+    COST_GPT_OUTPUT: float = Field(default=20.00, description="GPT-5.4 cost per 1M output tokens")
+    COST_GPT_MINI_OUTPUT: float = Field(default=4.50, description="GPT-5.4 Mini cost per 1M output tokens")
+    COST_GEMINI_FLASH_OUTPUT: float = Field(default=2.50, description="Gemini 2.5 Flash cost per 1M output tokens")
+    COST_GEMINI_PRO_OUTPUT: float = Field(default=10.00, description="Gemini 2.5 Pro cost per 1M output tokens")
 
     class Config:
         env_file = ".env"
@@ -183,13 +187,15 @@ class LLMConfig(BaseSettings):
         Returns:
             Tuple of (api_key, base_url). base_url is None for OpenAI/Anthropic.
         """
-        if model in (self.DEEPSEEK_MODEL, "deepseek-chat", "deepseek-v3"):
+        if model in (self.DEEPSEEK_MODEL, "deepseek-chat", "deepseek-v3", "deepseek-v3.2"):
             return self.DEEPSEEK_API_KEY, self.DEEPSEEK_BASE_URL
-        elif model in (self.ANTHROPIC_MODEL, "claude-sonnet-4-20250514"):
+        elif "claude" in model:
             return self.ANTHROPIC_API_KEY, None
-        elif model in (self.OPENAI_MODEL, self.OPENAI_MODEL_MINI, "gpt-4o", "gpt-4o-mini"):
+        elif "gpt-" in model or "o3" in model:
             return self.OPENAI_API_KEY, None
-        elif model == self.OLLAMA_MODEL or model.startswith("qwen") or model.startswith("llama") or model.startswith("mistral") or model.startswith("gemma"):
+        elif "gemini" in model:
+            return self.GOOGLE_API_KEY if hasattr(self, 'GOOGLE_API_KEY') else "", None
+        elif model == self.OLLAMA_MODEL or model.startswith("qwen") or model.startswith("llama") or model.startswith("mistral") or model.startswith("gemma") or model.startswith("deepseek-v3.2-exp"):
             return "ollama", f"{self.OLLAMA_BASE_URL}/v1"
         else:
             # Default to DeepSeek
@@ -207,8 +213,11 @@ class LLMConfig(BaseSettings):
         all_models = [
             self.DEEPSEEK_MODEL,
             self.ANTHROPIC_MODEL,
+            "claude-haiku-4-5-20251001",
             self.OPENAI_MODEL,
             self.OPENAI_MODEL_MINI,
+            "gemini-2.5-flash",
+            "gemini-2.5-pro",
             self.OLLAMA_MODEL,
         ]
         return [m for m in all_models if self.is_model_available(m)]
@@ -218,16 +227,20 @@ class LLMConfig(BaseSettings):
         Get input and output costs per 1M tokens for a given model.
 
         Args:
-            model: Model name (deepseek-v3, claude-4-5-sonnet, gpt-4o, gpt-4o-mini)
+            model: Model name (deepseek-chat, claude-sonnet-4-6-20250227, gpt-5.4, gpt-5.4-mini)
 
         Returns:
             Tuple of (input_cost, output_cost) per 1M tokens
         """
         costs = {
-            "deepseek-v3": (self.COST_DEEPSEEK_INPUT, self.COST_DEEPSEEK_OUTPUT),
-            "claude-sonnet-4-20250514": (self.COST_CLAUDE_INPUT, self.COST_CLAUDE_OUTPUT),
-            "gpt-4o": (self.COST_GPT4O_INPUT, self.COST_GPT4O_OUTPUT),
-            "gpt-4o-mini": (self.COST_GPT4O_MINI_INPUT, self.COST_GPT4O_MINI_OUTPUT),
+            "deepseek-chat": (self.COST_DEEPSEEK_INPUT, self.COST_DEEPSEEK_OUTPUT),
+            "deepseek-v3.2": (self.COST_DEEPSEEK_INPUT, self.COST_DEEPSEEK_OUTPUT),
+            "claude-sonnet-4-6-20250227": (self.COST_CLAUDE_INPUT, self.COST_CLAUDE_OUTPUT),
+            "claude-haiku-4-5-20251001": (1.00, 5.00),
+            "gpt-5.4": (self.COST_GPT_INPUT, self.COST_GPT_OUTPUT),
+            "gpt-5.4-mini": (self.COST_GPT_MINI_INPUT, self.COST_GPT_MINI_OUTPUT),
+            "gemini-2.5-flash": (self.COST_GEMINI_FLASH_INPUT, self.COST_GEMINI_FLASH_OUTPUT),
+            "gemini-2.5-pro": (self.COST_GEMINI_PRO_INPUT, self.COST_GEMINI_PRO_OUTPUT),
             self.OLLAMA_MODEL: (0.0, 0.0),  # Локальная модель — бесплатно
         }
         return costs.get(model, (0.0, 0.0))

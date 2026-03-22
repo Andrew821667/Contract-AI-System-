@@ -23,12 +23,15 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
     qwen_api_key: str = ""
 
+    # Google Gemini
+    google_api_key: str = ""
+
     # Ollama (Local LLM)
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = "qwen2.5:7b"
+    ollama_model: str = "qwen3:7b"
 
     # Default LLM Provider
-    default_llm_provider: Literal["claude", "openai", "perplexity", "yandex", "deepseek", "qwen", "ollama"] = "deepseek"
+    default_llm_provider: Literal["claude", "openai", "perplexity", "yandex", "deepseek", "qwen", "ollama", "google"] = "deepseek"
 
     # ChromaDB
     chroma_persist_directory: str = "./chroma_data"
@@ -61,8 +64,8 @@ class Settings(BaseSettings):
     llm_test_mode: bool = False  # Переключатель: True = тестовый режим, False = продакшн
 
     # Two-level analysis system
-    llm_quick_model: str = "gpt-4o-mini"  # Быстрый анализ (Уровень 1)
-    llm_deep_model: str = "gpt-4o"         # Глубокий анализ (Уровень 2)
+    llm_quick_model: str = "gpt-5.4-mini"  # Быстрый анализ (Уровень 1)
+    llm_deep_model: str = "gpt-5.4"        # Глубокий анализ (Уровень 2)
 
     # Batch analysis settings (оптимизировано для производительности)
     llm_batch_size: int = 15  # Сколько пунктов анализировать в одном запросе (оптимально для gpt-4o-mini)
@@ -72,14 +75,16 @@ class Settings(BaseSettings):
     llm_test_max_tokens: int = 800       # Для тестового режима
     llm_test_max_clauses: int = 20       # Макс. пунктов для анализа в тесте (увеличено для эффективности)
 
-    # Model pricing (per 1M tokens) для расчёта стоимости
+    # Model pricing (per 1M tokens) для расчёта стоимости — актуально на март 2026
     llm_pricing: dict = {
-        "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-        "gpt-4o": {"input": 2.50, "output": 10.00},
-        "gpt-5": {"input": 5.00, "output": 15.00},
-        "gpt-5.1": {"input": 6.00, "output": 18.00},
-        "o1-preview": {"input": 15.00, "output": 60.00},
-        "o1-mini": {"input": 3.00, "output": 12.00},
+        "deepseek-chat": {"input": 0.28, "output": 0.42},
+        "claude-sonnet-4-6-20250227": {"input": 3.00, "output": 15.00},
+        "claude-haiku-4-5-20251001": {"input": 1.00, "output": 5.00},
+        "gpt-5.4": {"input": 2.50, "output": 20.00},
+        "gpt-5.4-mini": {"input": 0.75, "output": 4.50},
+        "gemini-2.5-flash": {"input": 0.30, "output": 2.50},
+        "gemini-2.5-pro": {"input": 1.25, "output": 10.00},
+        "qwen3:7b": {"input": 0.0, "output": 0.0},
     }
 
     # RAG Settings

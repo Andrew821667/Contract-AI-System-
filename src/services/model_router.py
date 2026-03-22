@@ -48,9 +48,9 @@ class ModelRouter:
 
     Strategy:
     - DeepSeek-V3: Primary worker for 90% of tasks
-    - Claude 4.5: Expert fallback for complex scans/documents
-    - GPT-4o: Reserve channel if primary/fallback unavailable
-    - GPT-4o-mini: Testing and validation
+    - Claude 4.6 Sonnet: Expert fallback for complex scans/documents
+    - GPT-5.4: Reserve channel if primary/fallback unavailable
+    - GPT-5.4 Mini: Testing and validation
     """
 
     def __init__(
@@ -90,12 +90,12 @@ class ModelRouter:
                 - 0.5-0.8: Medium (complex tables, multiple parties)
                 - 0.8-1.0: Complex (poor scan, handwritten notes, nested tables)
             is_scanned_image: True if document is a scan/photo (not native PDF/DOCX)
-            force_model: Force specific model (deepseek-v3, claude-sonnet-4-20250514, gpt-4o, gpt-4o-mini)
+            force_model: Force specific model (deepseek-chat, claude-sonnet-4-6-20250227, gpt-5.4, gpt-5.4-mini)
             use_rag_context: Use RAG to check similar documents' processing history
             user_mode: User preference mode
                 - 'optimal': Auto-select (DeepSeek by default) - recommended
-                - 'expert': Always use Claude 4.5 Sonnet
-                - 'testing': Use GPT-4o-mini for cost-effective testing
+                - 'expert': Always use Claude 4.6 Sonnet
+                - 'testing': Use GPT-5.4 Mini for cost-effective testing
 
         Returns:
             Model name to use
@@ -137,11 +137,11 @@ class ModelRouter:
 
         # User mode override
         if user_mode == "expert":
-            logger.info("Expert mode: using Claude 4.5 Sonnet")
+            logger.info("Expert mode: using Claude 4.6 Sonnet")
             return self.config.ANTHROPIC_MODEL
 
         if user_mode == "testing":
-            logger.info("Testing mode: using GPT-4o-mini")
+            logger.info("Testing mode: using GPT-5.4 Mini")
             return self.config.OPENAI_MODEL_MINI
 
         # RAG-assisted routing (if available)
@@ -270,12 +270,15 @@ class ModelRouter:
         model_map = {
             "deepseek": self.config.DEEPSEEK_MODEL,
             "deepseek-v3": self.config.DEEPSEEK_MODEL,
+            "deepseek-chat": self.config.DEEPSEEK_MODEL,
             "claude": self.config.ANTHROPIC_MODEL,
-            "claude-4-5-sonnet": self.config.ANTHROPIC_MODEL,
-            "claude-sonnet-4-20250514": self.config.ANTHROPIC_MODEL,
-            "gpt-4o": self.config.OPENAI_MODEL,
-            "gpt-4o-mini": self.config.OPENAI_MODEL_MINI,
+            "claude-4-6-sonnet": self.config.ANTHROPIC_MODEL,
+            "claude-sonnet-4-6-20250227": self.config.ANTHROPIC_MODEL,
+            "gpt-5.4": self.config.OPENAI_MODEL,
+            "gpt-5.4-mini": self.config.OPENAI_MODEL_MINI,
             "openai": self.config.OPENAI_MODEL,
+            "gemini-2.5-flash": "gemini-2.5-flash",
+            "gemini-2.5-pro": "gemini-2.5-pro",
         }
 
         return model_map.get(model.lower(), model)
@@ -286,8 +289,8 @@ class ModelRouter:
 
         Fallback chain:
         - DeepSeek fails → Claude
-        - Claude fails → GPT-4o
-        - GPT-4o fails → None (no more fallbacks)
+        - Claude fails → GPT-5.4
+        - GPT-5.4 fails → None (no more fallbacks)
 
         When CascadeManager (v2) is available, the fallback chain is built
         from the policy-aware cascade instead of the hardcoded map.
@@ -393,15 +396,15 @@ class ModelRouter:
             },
             self.config.OPENAI_MODEL: {
                 "role": "Reserve Channel",
-                "cost_per_1m_input": self.config.COST_GPT4O_INPUT,
-                "cost_per_1m_output": self.config.COST_GPT4O_OUTPUT,
+                "cost_per_1m_input": self.config.COST_GPT_INPUT,
+                "cost_per_1m_output": self.config.COST_GPT_OUTPUT,
                 "strengths": ["Reliable", "Good balance", "Wide availability"],
                 "weaknesses": ["Mid-tier cost", "Not specialized"],
             },
             self.config.OPENAI_MODEL_MINI: {
                 "role": "Testing & Validation",
-                "cost_per_1m_input": self.config.COST_GPT4O_MINI_INPUT,
-                "cost_per_1m_output": self.config.COST_GPT4O_MINI_OUTPUT,
+                "cost_per_1m_input": self.config.COST_GPT_MINI_INPUT,
+                "cost_per_1m_output": self.config.COST_GPT_MINI_OUTPUT,
                 "strengths": ["Very cheap", "Fast", "Good for testing"],
                 "weaknesses": ["Lower accuracy", "Limited capabilities"],
             },

@@ -131,7 +131,7 @@ class LLMGateway:
             cache_entry = LLMCache(
                 prompt_hash=cache_key,
                 provider=self.provider,
-                model=self.model or "gpt-4o-mini",
+                model=self.model or "gpt-5.4-mini",
                 prompt=prompt[:5000],  # Truncate prompt for storage (cache key uses full hash)
                 system_prompt=system_prompt[:2000] if system_prompt else None,
                 response=response if isinstance(response, str) else json.dumps(response),  # Store full response
@@ -202,9 +202,10 @@ class LLMGateway:
         # Token limit check — warn/truncate if prompt exceeds model context
         estimated_input_tokens = len(prompt) // 4 + (len(system_prompt) // 4 if system_prompt else 0)
         MODEL_CONTEXT_LIMITS = {
-            "deepseek-chat": 128000, "gpt-4o-mini": 128000, "gpt-4o": 128000,
-            "gpt-4": 8192, "claude-sonnet-4-20250514": 200000, "qwen-max": 32000,
-            "qwen2.5:7b": 32768, "llama3.1:8b": 131072, "mistral:7b": 32768, "gemma2:9b": 8192,
+            "deepseek-chat": 128000, "gpt-5.4": 128000, "gpt-5.4-mini": 128000,
+            "claude-sonnet-4-6-20250227": 200000, "claude-haiku-4-5-20251001": 200000,
+            "gemini-2.5-flash": 1000000, "gemini-2.5-pro": 1000000,
+            "qwen3:7b": 32768, "llama4:8b": 131072,
         }
         context_limit = MODEL_CONTEXT_LIMITS.get(self.model or "", 128000)
         if estimated_input_tokens + max_tokens > context_limit:
@@ -307,7 +308,7 @@ class LLMGateway:
 
     def _estimate_cost(self, tokens: int) -> float:
         """Estimate cost based on tokens (rough approximation)"""
-        model = self.model or "gpt-4o-mini"
+        model = self.model or "gpt-5.4-mini"
         pricing = settings.llm_pricing.get(model, {"input": 0.15, "output": 0.60})
 
         # Assume 60% input, 40% output split
@@ -324,7 +325,7 @@ class LLMGateway:
         messages = [{"role": "user", "content": prompt}]
 
         params = {
-            "model": "claude-sonnet-4-20250514",
+            "model": self.model or "claude-sonnet-4-6-20250227",
             "max_tokens": max_tokens,
             "temperature": temperature,
             "messages": messages
@@ -350,15 +351,17 @@ class LLMGateway:
         if self.model:
             model = self.model
         elif self.provider == "openai":
-            model = "gpt-4o-mini"  # По умолчанию дешёвая модель
+            model = "gpt-5.4-mini"  # По умолчанию бюджетная модель
         elif self.provider == "perplexity":
             model = "llama-3.1-sonar-large-128k-online"
         elif self.provider == "deepseek":
             model = "deepseek-chat"
         elif self.provider == "ollama":
-            model = getattr(settings, 'ollama_model', 'qwen2.5:7b')
+            model = getattr(settings, 'ollama_model', 'qwen3:7b')
+        elif self.provider == "google":
+            model = "gemini-2.5-flash"
         else:
-            model = "gpt-4"
+            model = "gpt-5.4-mini"
 
         logger.info(f"🔍 DEBUG: API call with model = {model}, self.model = {self.model}")
         response = self._client.chat.completions.create(
@@ -433,7 +436,7 @@ class LLMGateway:
             from anthropic import Anthropic
             messages = [{"role": "user", "content": prompt}]
             params = {
-                "model": self.model or "claude-sonnet-4-20250514",
+                "model": self.model or "claude-sonnet-4-6-20250227",
                 "max_tokens": max_tokens,
                 "temperature": temperature,
                 "messages": messages,
@@ -455,13 +458,13 @@ class LLMGateway:
             model = self.model
             if not model:
                 if self.provider == "openai":
-                    model = "gpt-4o-mini"
+                    model = "gpt-5.4-mini"
                 elif self.provider == "perplexity":
                     model = "llama-3.1-sonar-large-128k-online"
                 elif self.provider == "deepseek":
                     model = "deepseek-chat"
                 else:
-                    model = "gpt-4"
+                    model = "gpt-5.4-mini"
 
             response = self._client.chat.completions.create(
                 model=model,
@@ -501,7 +504,7 @@ class LLMGateway:
             Словарь с информацией о токенах и стоимости
         """
         # Определяем текущую модель
-        current_model = self.model or "gpt-4o-mini"
+        current_model = self.model or "gpt-5.4-mini"
         
         # Получаем цены из настроек
         pricing = settings.llm_pricing.get(current_model, {"input": 0, "output": 0})

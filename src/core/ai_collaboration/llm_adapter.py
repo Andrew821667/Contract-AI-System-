@@ -21,11 +21,14 @@ from src.services.model_router import ModelRouter
 _MODEL_TO_PROVIDER: dict[str, str] = {
     "deepseek-v3": "deepseek",
     "deepseek-chat": "deepseek",
-    "claude-sonnet-4-20250514": "claude",
-    "gpt-4o": "openai",
-    "gpt-4o-mini": "openai",
-    "qwen2.5:7b": "ollama",
-    "llama3.1:8b": "ollama",
+    "claude-sonnet-4-6-20250227": "claude",
+    "claude-haiku-4-5-20251001": "claude",
+    "gpt-5.4": "openai",
+    "gpt-5.4-mini": "openai",
+    "gemini-2.5-flash": "google",
+    "gemini-2.5-pro": "google",
+    "qwen3:7b": "ollama",
+    "llama4:8b": "ollama",
     "mistral:7b": "ollama",
     "gemma2:9b": "ollama",
 }
@@ -56,6 +59,8 @@ def _provider_for_model(model: str) -> str:
         return "openai"
     if "deepseek" in lower:
         return "deepseek"
+    if "gemini" in lower:
+        return "google"
     if any(tag in lower for tag in ("qwen", "llama", "mistral", "gemma", "phi")):
         return "ollama"
     return "openai"

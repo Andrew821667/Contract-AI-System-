@@ -67,11 +67,11 @@ class LLMExtractor:
 
         # Стоимость токенов (на 1M токенов)
         self.costs = {
-            "deepseek-chat": {"input": 0.14, "output": 0.28},
-            "deepseek-v3": {"input": 0.14, "output": 0.28},
-            "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-            "gpt-4o": {"input": 2.50, "output": 10.00},
-            "gpt-4": {"input": 30.00, "output": 60.00}
+            "deepseek-chat": {"input": 0.28, "output": 0.42},
+            "gpt-5.4-mini": {"input": 0.75, "output": 4.50},
+            "gpt-5.4": {"input": 2.50, "output": 20.00},
+            "claude-sonnet-4-6-20250227": {"input": 3.00, "output": 15.00},
+            "gemini-2.5-flash": {"input": 0.30, "output": 2.50},
         }
 
         logger.info(f"LLMExtractor initialized with model: {self.model}, base_url: {base_url or 'default'}")
