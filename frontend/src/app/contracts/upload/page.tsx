@@ -27,6 +27,7 @@ export default function ContractUploadPage() {
   })
 
   const contractTypes = [
+    'Автоопределение',
     'Договор подряда',
     'Договор поставки',
     'Договор аренды',
@@ -43,8 +44,8 @@ export default function ContractUploadPage() {
   }
 
   const handleUpload = async () => {
-    if (!selectedFile || !formData.contractType) {
-      toast.error('Пожалуйста, загрузите файл и выберите тип договора')
+    if (!selectedFile) {
+      toast.error('Пожалуйста, загрузите файл')
       return
     }
 
@@ -252,7 +253,7 @@ export default function ContractUploadPage() {
                     className="w-full"
                     onClick={handleUpload}
                     loading={uploading}
-                    disabled={!selectedFile || !formData.contractType}
+                    disabled={!selectedFile}
                   >
                     {uploading ? 'Загрузка...' : 'Загрузить и проанализировать'}
                   </Button>

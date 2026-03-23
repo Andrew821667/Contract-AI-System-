@@ -49,12 +49,28 @@ async def analyze_contract_background(
             logger.error(f"Contract {contract_id} not found for background analysis")
             return
 
-        # Update status to analyzing
-        contract.status = 'analyzing'
+        def _set_progress(pct: int, msg: str = ""):
+            """Update analysis_progress on contract for WebSocket to pick up."""
+            try:
+                meta = contract.meta_info or {}
+                if not isinstance(meta, dict):
+                    import json
+                    meta = json.loads(meta) if meta else {}
+                meta["_progress"] = pct
+                meta["_progress_msg"] = msg
+                contract.meta_info = meta
+                db.commit()
+            except Exception:
+                pass
+
+        # Update status to parsing
+        contract.status = 'parsing'
+        _set_progress(5, "Загрузка документа...")
         db.commit()
 
         # Parse document
         parser = DocumentParser()
+        _set_progress(10, "Парсинг документа...")
         parsed_xml = parser.parse(contract.file_path)
 
         if not parsed_xml:
@@ -63,8 +79,19 @@ async def analyze_contract_background(
             logger.error(f"Failed to parse contract {contract_id}")
             return
 
-        # Store XML and analyze — single transaction for all results
-        contract.meta_info = {'xml': parsed_xml}
+        _set_progress(20, "Документ распознан, подготовка к анализу...")
+
+        # Store XML and analyze
+        meta = contract.meta_info or {}
+        if not isinstance(meta, dict):
+            import json
+            meta = json.loads(meta) if meta else {}
+        meta['xml'] = parsed_xml
+        contract.meta_info = meta
+        contract.status = 'analyzing'
+        db.commit()
+
+        _set_progress(30, "AI анализ: выявление рисков...")
 
         llm_gateway = LLMGateway(model=settings.llm_quick_model)
         agent = ContractAnalyzerAgent(llm_gateway=llm_gateway, db_session=db)
@@ -80,7 +107,7 @@ async def analyze_contract_background(
         })
 
         if result.success:
-            contract.status = 'completed'
+            _set_progress(70, "Анализ завершён, извлечение клауз...")
             logger.info(f"Contract {contract_id} analyzed successfully")
 
             # Auto-save extracted clauses to library
@@ -100,6 +127,8 @@ async def analyze_contract_background(
             except Exception as clause_err:
                 logger.warning(f"Auto clause extraction failed for {contract_id}: {clause_err}")
 
+            _set_progress(85, "Цифровизация документа...")
+
             # Auto-digitalize after successful analysis
             try:
                 if contract.file_path and os.path.exists(contract.file_path):
@@ -110,6 +139,9 @@ async def analyze_contract_background(
                     logger.info(f"Contract {contract_id} auto-digitalized")
             except Exception as dig_err:
                 logger.warning(f"Auto-digitalization failed for {contract_id}: {dig_err}")
+
+            contract.status = 'completed'
+            _set_progress(100, "Анализ завершён!")
         else:
             contract.status = 'error'
             logger.error(f"Contract {contract_id} analysis failed: {result.error}")

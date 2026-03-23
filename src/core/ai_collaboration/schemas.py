@@ -9,13 +9,13 @@ from pydantic import BaseModel, Field
 
 
 class AISessionCreate(BaseModel):
-    document_id: str = Field(..., max_length=50)
-    stage: str = Field("intake", max_length=50)
+    document_id: str | None = Field(None, max_length=50)
+    stage: str = Field("general", max_length=50)
 
 
 class AISessionRead(BaseModel):
     id: str
-    document_id: str
+    document_id: str | None
     user_id: str
     organization_id: str | None
     stage: str

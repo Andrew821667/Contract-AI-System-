@@ -102,9 +102,11 @@ async def list_contracts(
         if current_user.role not in ['admin']:
             stmt = stmt.where(Contract.assigned_to == current_user.id)
 
-        # Apply filters
+        # Apply filters (exclude deleted by default)
         if status:
             stmt = stmt.where(Contract.status == status)
+        else:
+            stmt = stmt.where(Contract.status != 'deleted')
         if contract_type:
             stmt = stmt.where(Contract.contract_type == contract_type)
         if search:

@@ -33,7 +33,7 @@ class AISession(Base):
     __tablename__ = "ai_sessions"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    document_id = Column(String(36), ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id = Column(String(36), ForeignKey("contracts.id", ondelete="CASCADE"), nullable=True, index=True)
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     organization_id = Column(String(36), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
 
@@ -59,7 +59,7 @@ class AISession(Base):
 
     __table_args__ = (
         CheckConstraint(
-            stage.in_(["intake", "classification", "analysis", "review", "negotiation", "approval", "generation", "export"]),
+            stage.in_(["intake", "classification", "analysis", "review", "negotiation", "approval", "generation", "export", "general"]),
             name="check_ai_session_stage",
         ),
         CheckConstraint(

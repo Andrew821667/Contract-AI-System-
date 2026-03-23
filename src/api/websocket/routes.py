@@ -194,7 +194,7 @@ async def websocket_analysis_updates(
             finally:
                 poll_db.close()
 
-            # Calculate progress based on status
+            # Calculate progress — use granular progress from meta_info if available
             progress_map = {
                 'uploaded': 0,
                 'parsing': 10,
@@ -203,6 +203,20 @@ async def websocket_analysis_updates(
                 'error': 0
             }
             progress = progress_map.get(current_status, 0)
+            progress_msg = f"Статус: {current_status}"
+
+            # Read granular progress from contract meta_info
+            try:
+                meta = contract.meta_info
+                if meta and isinstance(meta, dict):
+                    granular = meta.get("_progress")
+                    if granular is not None and isinstance(granular, (int, float)):
+                        progress = int(granular)
+                    msg = meta.get("_progress_msg")
+                    if msg:
+                        progress_msg = msg
+            except Exception:
+                pass
 
             # Send status update
             update_message = {
@@ -210,7 +224,7 @@ async def websocket_analysis_updates(
                 "contract_id": contract_id,
                 "status": current_status,
                 "progress": progress,
-                "message": f"Status: {current_status}",
+                "message": progress_msg,
                 "data": {
                     "risks_count": risks_count,
                     "recommendations_count": recs_count,

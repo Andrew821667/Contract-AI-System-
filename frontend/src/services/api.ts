@@ -629,7 +629,8 @@ class APIClient {
   private refreshing = false;
 
   constructor() {
-    const baseURL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    // Use relative URL so requests go to the same origin (works with ngrok, localhost, etc.)
+    const baseURL = process.env.NEXT_PUBLIC_API_URL || '';
 
     this.client = axios.create({
       baseURL,
@@ -637,6 +638,7 @@ class APIClient {
       withCredentials: true,  // Send httpOnly cookies (refresh_token) with every request
       headers: {
         'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
       },
     });
 
@@ -1121,12 +1123,29 @@ class APIClient {
     );
     return response.data;
   }
+  // ==================== Admin: Contract Deletion ====================
+
+  async deleteContract(contractId: string, reason: string): Promise<{ contract_id: string; status: string; message: string }> {
+    const response = await this.client.delete(`/api/v1/contracts/${contractId}`, {
+      data: { reason }
+    });
+    return response.data;
+  }
+
   // ==================== AI Sessions (v2) ====================
 
-  async createAISession(documentId: string, stage: string = 'analysis'): Promise<AISession> {
+  async createAISession(documentId: string | null, stage: string = 'analysis'): Promise<AISession> {
+    if (documentId) {
+      const response = await this.client.post<AISession>(
+        `/api/v2/documents/${documentId}/ai/sessions`,
+        { stage }
+      );
+      return response.data;
+    }
+    // General session without document
     const response = await this.client.post<AISession>(
-      `/api/v2/documents/${documentId}/ai/sessions`,
-      { stage }
+      `/api/v2/ai/sessions`,
+      { stage: 'general' }
     );
     return response.data;
   }
@@ -1146,7 +1165,12 @@ class APIClient {
 
   async getAIMessages(sessionId: string): Promise<{ messages: AIMessage[] }> {
     const response = await this.client.get(`/api/v2/ai/sessions/${sessionId}/messages`);
-    return response.data;
+    // Backend returns array directly, wrap it
+    const data = response.data;
+    if (Array.isArray(data)) {
+      return { messages: data };
+    }
+    return data;
   }
 
   async getAIContext(sessionId: string): Promise<AIContext> {

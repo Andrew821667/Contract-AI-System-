@@ -48,10 +48,12 @@ export function useAIContext(sessionId: string | null) {
 export function useCreateAISession() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ documentId, stage }: { documentId: string; stage?: string }) =>
+    mutationFn: ({ documentId, stage }: { documentId: string | null; stage?: string }) =>
       api.createAISession(documentId, stage),
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['ai-sessions', variables.documentId] })
+      if (variables.documentId) {
+        queryClient.invalidateQueries({ queryKey: ['ai-sessions', variables.documentId] })
+      }
     },
   })
 }

@@ -11,6 +11,7 @@ import Badge from '@/components/ui/Badge'
 import api, { DigitalContract, VerificationResult, RiskPredictionResponse, ContractVersionInfo, CompareChange, CompareResult } from '@/services/api'
 import { useAnalysisWebSocket, WSMessage } from '@/hooks/useAnalysisWebSocket'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
+import { useAuthStore } from '@/stores/authStore'
 import AppLayout from '@/components/AppLayout'
 import AIPanel from '@/components/ai/AIPanel'
 import { useAIPanelStore } from '@/stores/aiPanelStore'
@@ -35,10 +36,14 @@ interface Recommendation {
 
 export default function ContractDetailPage() {
   const { isReady } = useAuthGuard()
+  const currentUser = useAuthStore((s) => s.user)
+  const isAdmin = currentUser?.role === 'admin'
   const params = useParams()
   const router = useRouter()
   const queryClient = useQueryClient()
   const contractId = params.id as string
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [deleteReason, setDeleteReason] = useState('')
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['contract', contractId],
@@ -54,7 +59,7 @@ export default function ContractDetailPage() {
     queryClient.invalidateQueries({ queryKey: ['contract', contractId] })
   }, [queryClient, contractId])
 
-  const wsEnabled = data?.contract?.status === 'analyzing'
+  const wsEnabled = data?.contract?.status === 'analyzing' || data?.contract?.status === 'parsing'
 
   const {
     progress: wsProgress,
@@ -74,6 +79,18 @@ export default function ContractDetailPage() {
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Ошибка запуска анализа')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.deleteContract(contractId, deleteReason),
+    onSuccess: () => {
+      toast.success('Документ удалён')
+      setShowDeleteModal(false)
+      router.push('/contracts')
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Ошибка удаления')
     },
   })
 
@@ -253,13 +270,61 @@ export default function ContractDetailPage() {
                     Переговоры
                   </span>
                 </Button>
+                {isAdmin && contract?.status !== 'deleted' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="!text-red-600 !border-red-200 hover:!bg-red-50"
+                    onClick={() => setShowDeleteModal(true)}
+                  >
+                    Удалить
+                  </Button>
+                )}
               </div>
             </div>
           </Card>
         </motion.div>
 
+        {/* Delete Confirmation Modal */}
+        {showDeleteModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl"
+            >
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Удаление документа</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Укажите причину удаления. Документ будет скрыт, но информация сохранится в истории.
+              </p>
+              <textarea
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="Причина удаления (обязательно, мин. 5 символов)..."
+                rows={3}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-red-400 focus:outline-none resize-none mb-4"
+              />
+              <div className="flex gap-3 justify-end">
+                <Button variant="outline" size="sm" onClick={() => { setShowDeleteModal(false); setDeleteReason('') }}>
+                  Отмена
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="!bg-red-600 hover:!bg-red-700"
+                  disabled={deleteReason.length < 5}
+                  loading={deleteMutation.isPending}
+                  onClick={() => deleteMutation.mutate()}
+                >
+                  Удалить
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
         {/* Analyzing Progress */}
-        {contract?.status === 'analyzing' && (
+        {(contract?.status === 'analyzing' || contract?.status === 'parsing') && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

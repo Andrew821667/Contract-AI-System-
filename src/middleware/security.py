@@ -291,6 +291,8 @@ def setup_cors(app):
     """
     from config.settings import settings
 
+    import os
+
     allowed_origins = [
         "http://localhost:3000",  # Next.js frontend (dev)
         "http://localhost:8090",  # Nginx proxy (Docker)
@@ -300,9 +302,22 @@ def setup_cors(app):
     if hasattr(settings, 'allowed_origins'):
         allowed_origins.extend(settings.allowed_origins)
 
+    # Allow ngrok/tunnel URLs for testing
+    ngrok_url = os.getenv("NGROK_URL", "")
+    if ngrok_url:
+        allowed_origins.append(ngrok_url)
+
+    # In development, allow any ngrok/cloudflare tunnel origins dynamically
+    is_dev = os.getenv("APP_ENV", "development") != "production"
+    if is_dev:
+        allow_origin_regex = r"https://.*\.(ngrok-free\.dev|ngrok\.io|trycloudflare\.com)"
+    else:
+        allow_origin_regex = None
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins,
+        allow_origin_regex=allow_origin_regex,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=[

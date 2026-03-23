@@ -105,7 +105,7 @@ class Contract(Base):
             name='check_document_type'
         ),
         CheckConstraint(
-            status.in_(['pending', 'uploaded', 'parsing', 'analyzing', 'reviewing', 'completed', 'error']),
+            status.in_(['pending', 'uploaded', 'parsing', 'analyzing', 'reviewing', 'completed', 'error', 'deleted']),
             name='check_contract_status'
         ),
         CheckConstraint(

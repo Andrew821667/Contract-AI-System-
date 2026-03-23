@@ -57,13 +57,11 @@ function AIWorkspacePage() {
 
   const handleSend = (content: string) => {
     if (!sessionId) {
-      // Auto-create session if none exists
-      if (selectedDocId) {
-        createSession.mutateAsync({ documentId: selectedDocId }).then((session) => {
-          setSessionId(session.id)
-          sendMessage.mutate({ sessionId: session.id, content })
-        })
-      }
+      // Auto-create session (with or without document)
+      createSession.mutateAsync({ documentId: selectedDocId || null }).then((session) => {
+        setSessionId(session.id)
+        sendMessage.mutate({ sessionId: session.id, content })
+      })
       return
     }
     sendMessage.mutate({ sessionId, content })
@@ -126,17 +124,18 @@ function AIWorkspacePage() {
           {/* Messages area */}
           <div className="flex-1 overflow-y-auto px-4 py-4">
             {!sessionId && !selectedDocId ? (
-              /* Empty state — no doc selected */
+              /* Empty state — no doc selected, general assistant */
               <div className="h-full flex flex-col items-center justify-center text-center px-8">
                 <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center mb-4 shadow-lg">
                   <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                   </svg>
                 </div>
-                <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-2">AI Workspace</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm">
-                  Выберите документ в левой панели или используйте оркестратор для запуска AI-задач
+                <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-2">AI Ассистент</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm mb-4">
+                  Задайте вопрос или выберите документ в левой панели для анализа
                 </p>
+                <QuickActions onSelect={handleSend} />
               </div>
             ) : !sessionId && selectedDocId ? (
               /* Doc selected, no session */
@@ -200,8 +199,8 @@ function AIWorkspacePage() {
           <div className="flex-shrink-0 px-4 pb-4 pt-2 border-t border-gray-100 dark:border-dark-800">
             <ChatInput
               onSend={handleSend}
-              disabled={sendMessage.isPending || (!sessionId && !selectedDocId)}
-              placeholder={!selectedDocId ? 'Сначала выберите документ...' : undefined}
+              disabled={sendMessage.isPending || createSession.isPending}
+              placeholder={!selectedDocId ? 'Задайте вопрос AI-ассистенту...' : undefined}
             />
           </div>
         </div>

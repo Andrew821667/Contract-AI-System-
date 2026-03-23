@@ -17,6 +17,7 @@ from .generation_routes import router as generation_router
 from .export_routes import router as export_router
 from .listing_routes import router as listing_router
 from .version_routes import router as version_router
+from .admin_routes import router as admin_router
 
 
 # Build combined router by including sub-routers
@@ -29,6 +30,7 @@ router.include_router(analysis_router)
 router.include_router(generation_router)
 router.include_router(export_router)
 router.include_router(version_router)
+router.include_router(admin_router)
 
 # listing_router has a GET "" endpoint — register its routes directly
 for route in listing_router.routes:
