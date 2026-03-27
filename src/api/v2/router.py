@@ -19,10 +19,12 @@ from src.api.v2.versions import router as versions_router
 from src.api.v2.integrations import router as integrations_router
 from src.api.v2.templates import router as templates_router
 from src.api.v2.admin_llm import router as admin_llm_router
+from src.api.v2.graph import router as graph_router
 
 v2_router = APIRouter()
 
 v2_router.include_router(admin_llm_router)
+v2_router.include_router(graph_router)
 v2_router.include_router(ai_sessions_router)
 v2_router.include_router(ai_actions_router)
 v2_router.include_router(orchestrator_router)

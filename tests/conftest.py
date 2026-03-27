@@ -9,15 +9,19 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from fastapi.testclient import TestClient
+try:
+    from fastapi.testclient import TestClient
+    from src.models.database import get_db as get_db_database
+    from src.models.database import get_async_db
+    from src.models import get_db as get_db_models
+    from src.models.auth_models import User
+    from src.main import app
+    from src.services.auth_service import AuthService
+    _FULL_APP_AVAILABLE = True
+except ImportError:
+    _FULL_APP_AVAILABLE = False
 
 from src.models.database import Base
-from src.models.database import get_db as get_db_database
-from src.models.database import get_async_db
-from src.models import get_db as get_db_models
-from src.models.auth_models import User
-from src.main import app
-from src.services.auth_service import AuthService
 
 # Import core models so Base.metadata sees them
 import src.core.identity_org.models
@@ -30,6 +34,7 @@ import src.core.workflow.models
 import src.core.collaboration.models
 import src.core.templates.models
 import src.core.integrations.models
+import src.core.graph_rag.models
 
 # Module-level state shared between fixtures within one test
 _current_engine = None
@@ -69,66 +74,58 @@ def _get_test_db():
         db.close()
 
 
-@pytest.fixture()
-def client(test_db):
-    """FastAPI TestClient with overridden DB dependency."""
-    # Override BOTH get_db functions (models/__init__.py and models/database.py)
-    app.dependency_overrides[get_db_database] = _get_test_db
-    app.dependency_overrides[get_db_models] = _get_test_db
-    app.dependency_overrides[get_async_db] = _get_test_db
+if _FULL_APP_AVAILABLE:
+    @pytest.fixture()
+    def client(test_db):
+        """FastAPI TestClient with overridden DB dependency."""
+        app.dependency_overrides[get_db_database] = _get_test_db
+        app.dependency_overrides[get_db_models] = _get_test_db
+        app.dependency_overrides[get_async_db] = _get_test_db
+        _clear_rate_limit_buckets(app)
+        with TestClient(app) as c:
+            yield c
+        app.dependency_overrides.clear()
 
-    # Clear ALL rate limiter buckets to prevent 429 in tests
-    _clear_rate_limit_buckets(app)
+    def _clear_rate_limit_buckets(application):
+        """Walk the entire ASGI middleware stack and clear any rate limiter buckets."""
+        visited = set()
+        stack = [application]
+        while stack:
+            obj = stack.pop()
+            obj_id = id(obj)
+            if obj_id in visited:
+                continue
+            visited.add(obj_id)
+            if hasattr(obj, 'buckets') and isinstance(getattr(obj, 'buckets', None), dict):
+                obj.buckets.clear()
+            if hasattr(obj, 'app'):
+                stack.append(obj.app)
+            if hasattr(obj, 'middleware_stack') and obj.middleware_stack:
+                stack.append(obj.middleware_stack)
 
-    with TestClient(app) as c:
-        yield c
-    app.dependency_overrides.clear()
+    @pytest.fixture()
+    def test_user(test_db) -> "User":
+        """Create and return a test user."""
+        auth = AuthService(test_db)
+        user, error = auth.register_user(
+            email="test@example.com",
+            name="Test User",
+            password="TestPass123!",
+            role="lawyer",
+            subscription_tier="pro",
+            send_verification=False,
+        )
+        assert user is not None, f"Failed to create test user: {error}"
+        test_db.commit()
+        return user
 
-
-def _clear_rate_limit_buckets(application):
-    """Walk the entire ASGI middleware stack and clear any rate limiter buckets."""
-    visited = set()
-    stack = [application]
-    while stack:
-        obj = stack.pop()
-        obj_id = id(obj)
-        if obj_id in visited:
-            continue
-        visited.add(obj_id)
-        if hasattr(obj, 'buckets') and isinstance(getattr(obj, 'buckets', None), dict):
-            obj.buckets.clear()
-        # Starlette wraps middleware: obj.app is the next layer
-        if hasattr(obj, 'app'):
-            stack.append(obj.app)
-        # Also check middleware_stack for FastAPI
-        if hasattr(obj, 'middleware_stack') and obj.middleware_stack:
-            stack.append(obj.middleware_stack)
-
-
-@pytest.fixture()
-def test_user(test_db) -> User:
-    """Create and return a test user."""
-    auth = AuthService(test_db)
-    user, error = auth.register_user(
-        email="test@example.com",
-        name="Test User",
-        password="TestPass123!",
-        role="lawyer",
-        subscription_tier="pro",
-        send_verification=False,
-    )
-    assert user is not None, f"Failed to create test user: {error}"
-    test_db.commit()
-    return user
-
-
-@pytest.fixture()
-def auth_headers(client, test_user) -> dict:
-    """Login test_user and return Bearer auth headers."""
-    resp = client.post(
-        "/api/v1/auth/login",
-        data={"username": "test@example.com", "password": "TestPass123!"},
-    )
-    assert resp.status_code == 200, f"Login failed: {resp.text}"
-    token = resp.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    @pytest.fixture()
+    def auth_headers(client, test_user) -> dict:
+        """Login test_user and return Bearer auth headers."""
+        resp = client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@example.com", "password": "TestPass123!"},
+        )
+        assert resp.status_code == 200, f"Login failed: {resp.text}"
+        token = resp.json()["access_token"]
+        return {"Authorization": f"Bearer {token}"}
