@@ -590,6 +590,51 @@ export interface CompareResult {
 }
 
 // LLM Settings types
+// ==================== Integration Types ====================
+
+export interface WebhookConfig {
+  id: string;
+  name: string;
+  integration_type: string;
+  config: {
+    url: string;
+    secret?: string;
+    event_filter?: string[];
+  };
+  active: boolean;
+  org_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  config_id: string;
+  event_type: string;
+  status: 'pending' | 'delivered' | 'failed';
+  response_code?: number | null;
+  attempts: number;
+  delivered_at?: string | null;
+  created_at: string;
+}
+
+export interface DomainEvent {
+  id: string;
+  event_type: string;
+  entity_type: string;
+  entity_id: string;
+  payload?: Record<string, any> | null;
+  emitted_by?: string | null;
+  created_at: string;
+}
+
+export interface EventTypeInfo {
+  name: string;
+  entity_type: string;
+  description: string;
+  severity: 'info' | 'warning' | 'critical';
+}
+
 export interface LLMModel {
   id: string;
   name: string;
@@ -1577,6 +1622,72 @@ class APIClient {
 
   async resetLLMSettings(): Promise<void> {
     await this.client.post('/api/v2/admin/llm/reset');
+  }
+
+  // ==================== Integrations (v2) ====================
+
+  async listWebhooks(orgId?: string): Promise<WebhookConfig[]> {
+    const response = await this.client.get<WebhookConfig[]>(
+      '/api/v2/integrations/webhooks',
+      { params: orgId ? { org_id: orgId } : undefined }
+    );
+    return response.data;
+  }
+
+  async createWebhook(data: {
+    name: string;
+    url: string;
+    secret?: string;
+    event_filter?: string[];
+    org_id?: string;
+  }): Promise<WebhookConfig> {
+    const response = await this.client.post<WebhookConfig>(
+      '/api/v2/integrations/webhooks',
+      data
+    );
+    return response.data;
+  }
+
+  async deactivateWebhook(configId: string): Promise<void> {
+    await this.client.delete(`/api/v2/integrations/webhooks/${configId}`);
+  }
+
+  async getWebhookDeliveries(configId: string, limit: number = 50): Promise<WebhookDelivery[]> {
+    const response = await this.client.get<WebhookDelivery[]>(
+      `/api/v2/integrations/webhooks/${configId}/deliveries`,
+      { params: { limit } }
+    );
+    return response.data;
+  }
+
+  async retryFailedDeliveries(limit: number = 50): Promise<{ retried: number }> {
+    const response = await this.client.post<{ retried: number }>(
+      '/api/v2/integrations/webhooks/retry',
+      null,
+      { params: { limit } }
+    );
+    return response.data;
+  }
+
+  async listDomainEvents(params?: {
+    entity_type?: string;
+    entity_id?: string;
+    event_type?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<DomainEvent[]> {
+    const response = await this.client.get<DomainEvent[]>(
+      '/api/v2/integrations/events',
+      { params }
+    );
+    return response.data;
+  }
+
+  async listEventTypes(): Promise<EventTypeInfo[]> {
+    const response = await this.client.get<EventTypeInfo[]>(
+      '/api/v2/integrations/events/types'
+    );
+    return response.data;
   }
 }
 

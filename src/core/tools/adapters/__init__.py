@@ -16,6 +16,7 @@ from .analytics_tool import AnalyticsTool
 from .template_manager_tool import TemplateManagerTool
 from .validation_tool import ValidationTool
 from .ocr_tool import OCRTool
+from .workflow_tool import WorkflowTool
 
 __all__ = [
     "DocumentParserTool",
@@ -34,4 +35,5 @@ __all__ = [
     "TemplateManagerTool",
     "ValidationTool",
     "OCRTool",
+    "WorkflowTool",
 ]

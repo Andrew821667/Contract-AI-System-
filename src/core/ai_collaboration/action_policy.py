@@ -23,6 +23,8 @@ _DEFAULT_TOOL_MAP: dict[str, str] = {
     "search_knowledge": "rag_search",
     "parse_document": "document_parser",
     "generate_contract": "contract_generator",
+    "change_workflow_status": "workflow_manager",
+    "start_workflow": "workflow_manager",
 }
 
 _DEFAULT_DIRECT_ACTIONS: set[str] = {
@@ -34,7 +36,7 @@ _DEFAULT_DIRECT_ACTIONS: set[str] = {
 
 _DEFAULT_ALWAYS_APPROVE: set[str] = {
     "modify_clause", "generate_contract", "assign_reviewer",
-    "change_workflow_status", "send_notification",
+    "change_workflow_status", "start_workflow", "send_notification",
 }
 
 _DEFAULT_RISK_LEVELS: dict[str, str] = {
@@ -55,6 +57,7 @@ _DEFAULT_RISK_LEVELS: dict[str, str] = {
     "generate_contract": "high",
     "assign_reviewer": "medium",
     "change_workflow_status": "high",
+    "start_workflow": "high",
     "send_notification": "medium",
 }
 

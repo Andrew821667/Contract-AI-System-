@@ -116,9 +116,9 @@ async def create_checkout_session(
     Create Stripe checkout session for subscription
 
     **Tiers:**
-    - basic: 1,990 руб/месяц
-    - professional: 4,990 руб/месяц
-    - enterprise: 19,990 руб/месяц
+    - basic (Персональный): 1 990 руб/месяц
+    - pro (Команда): 4 990 руб/месяц
+    - enterprise (Бизнес): 14 990 руб/месяц
 
     **Returns:** Checkout URL to redirect user to Stripe payment page
     """

@@ -279,6 +279,7 @@ def _register_tools(registry: ToolRegistryService) -> None:
         SmartComposerTool,
         TemplateManagerTool,
         ValidationTool,
+        WorkflowTool,
     )
 
     # Регистрируем без реального сервиса (lazy init при первом вызове)
@@ -299,6 +300,7 @@ def _register_tools(registry: ToolRegistryService) -> None:
         TemplateManagerTool(None),
         ValidationTool(None),
         OCRTool(None),
+        WorkflowTool(None),
     ]
 
     for tool in tools:

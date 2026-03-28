@@ -52,7 +52,7 @@ hierarchical LLM cascade + AI collaborator layer + agent orchestrator layer
 
 - **Backend:** FastAPI, SQLAlchemy, Pydantic v2, Python 3.11 (`python3`)
 - **Frontend:** Next.js 14, React 18, TypeScript, Tailwind CSS, Zustand
-- **DB:** SQLite (dev) / PostgreSQL 16 + pgvector (prod)
+- **DB:** PostgreSQL 16 + pgvector (dev & prod), SQLite only in tests
 - **LLM:** DeepSeek (primary), Claude (expert), GPT-4o (fallback), + 3 more
 - **Infra:** Docker Compose (6 services), Nginx, Redis, GitHub Actions
 

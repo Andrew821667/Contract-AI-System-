@@ -42,11 +42,13 @@ class PaymentService:
     """
 
     # Subscription tiers (must match DB CHECK constraint: demo, basic, pro, enterprise)
+    # Mapping to frontend names: demo=Бесплатный, basic=Персональный, pro=Команда, enterprise=Бизнес
+    # Enterprise on-premise (39 990 ₽) is handled separately via custom agreements
     TIERS = {
         'demo': {
-            'name': 'Демо',
-            'max_contracts_per_day': 1,
-            'max_llm_requests_per_day': 5,
+            'name': 'Бесплатный',
+            'max_contracts_per_day': 3,
+            'max_llm_requests_per_day': 10,
             'can_export_pdf': False,
             'can_use_disagreements': False,
             'can_use_changes_analyzer': False,
@@ -54,8 +56,8 @@ class PaymentService:
             'stripe_price_id': None
         },
         'basic': {
-            'name': 'Базовый',
-            'max_contracts_per_day': 5,
+            'name': 'Персональный',
+            'max_contracts_per_day': 10,
             'max_llm_requests_per_day': 50,
             'can_export_pdf': True,
             'can_use_disagreements': True,
@@ -64,8 +66,8 @@ class PaymentService:
             'stripe_price_id': os.getenv('STRIPE_PRICE_BASIC', 'price_basic')
         },
         'pro': {
-            'name': 'Профессиональный',
-            'max_contracts_per_day': 20,
+            'name': 'Команда',
+            'max_contracts_per_day': 50,
             'max_llm_requests_per_day': 200,
             'can_export_pdf': True,
             'can_use_disagreements': True,
@@ -74,13 +76,13 @@ class PaymentService:
             'stripe_price_id': os.getenv('STRIPE_PRICE_PRO', 'price_pro')
         },
         'enterprise': {
-            'name': 'Корпоративный',
+            'name': 'Бизнес',
             'max_contracts_per_day': 999999,
             'max_llm_requests_per_day': 999999,
             'can_export_pdf': True,
             'can_use_disagreements': True,
             'can_use_changes_analyzer': True,
-            'price_monthly': 19990,  # RUB
+            'price_monthly': 14990,  # RUB
             'stripe_price_id': os.getenv('STRIPE_PRICE_ENTERPRISE', 'price_enterprise')
         }
     }

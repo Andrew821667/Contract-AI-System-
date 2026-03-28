@@ -21,8 +21,9 @@ import {
 } from '@/hooks/useTemplates'
 import type { Organization, OrgMembership, Policy, ToolDefinition, AgentDefinition, ClausePolicy, TemplateVersion } from '@/services/api'
 import LLMSettings from '@/components/admin/LLMSettings'
+import IntegrationSettings from '@/components/admin/IntegrationSettings'
 
-type Tab = 'orgs' | 'policies' | 'tools' | 'agents' | 'templates' | 'llm'
+type Tab = 'orgs' | 'policies' | 'tools' | 'agents' | 'templates' | 'integrations' | 'llm'
 
 export default function AdminPage() {
   const { isReady } = useAuthGuard()
@@ -90,6 +91,7 @@ export default function AdminPage() {
     { key: 'policies', label: 'Политики', count: policies.length },
     { key: 'tools', label: 'Инструменты', count: tools.length },
     { key: 'agents', label: 'Агенты', count: agents.length },
+    { key: 'integrations', label: 'Интеграции' },
     { key: 'templates', label: 'Шаблоны' },
   ]
 
@@ -525,6 +527,9 @@ export default function AdminPage() {
             </div>
           </div>
         )}
+
+        {/* Integrations tab */}
+        {activeTab === 'integrations' && <IntegrationSettings />}
 
         {/* Agents tab */}
         {activeTab === 'agents' && (

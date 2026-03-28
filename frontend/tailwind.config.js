@@ -9,19 +9,19 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Modern Brand Colors - Vibrant & Professional
+        // Modern Brand Colors - Steel Gray Matte
         primary: {
-          50: '#faf8f5',
-          100: '#f5efe6',
-          200: '#e8dccb',
-          300: '#d6c5a5',
-          400: '#c4ad82',
-          500: '#b09368',  // Warm tan
-          600: '#967b52',  // Soft brown — buttons, logo
-          700: '#7d6744',
-          800: '#5c4c33',
-          900: '#3d3323',
-          950: '#241e15',
+          50: '#f8fafc',
+          100: '#f1f5f9',
+          200: '#e2e8f0',
+          300: '#cbd5e1',
+          400: '#94a3b8',
+          500: '#64748b',  // Steel gray
+          600: '#475569',  // Slate — buttons, logo
+          700: '#334155',
+          800: '#1e293b',
+          900: '#0f172a',
+          950: '#020617',
         },
         secondary: {
           50: '#fafaf9',
@@ -113,14 +113,14 @@ module.exports = {
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
         'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
-        'gradient-primary': 'linear-gradient(135deg, #967b52 0%, #b09368 100%)',
-        'gradient-secondary': 'linear-gradient(135deg, #7d6744 0%, #967b52 100%)',
+        'gradient-primary': 'linear-gradient(135deg, #475569 0%, #64748b 100%)',
+        'gradient-secondary': 'linear-gradient(135deg, #334155 0%, #475569 100%)',
         'gradient-success': 'linear-gradient(135deg, #15803d 0%, #22c55e 100%)',
         'gradient-dark': 'linear-gradient(135deg, #1f2937 0%, #111827 100%)',
       },
       boxShadow: {
-        'glow': '0 4px 14px rgba(150, 123, 82, 0.25)',
-        'glow-lg': '0 4px 20px rgba(150, 123, 82, 0.3)',
+        'glow': '0 4px 14px rgba(71, 85, 105, 0.25)',
+        'glow-lg': '0 4px 20px rgba(71, 85, 105, 0.3)',
         'card': '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
         'card-hover': '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
       },

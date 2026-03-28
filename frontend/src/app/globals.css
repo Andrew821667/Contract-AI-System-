@@ -5,12 +5,12 @@
 /* Modern CSS Variables */
 :root {
   --foreground-rgb: 15, 23, 42;
-  --background-start-rgb: 250, 248, 244;
-  --background-end-rgb: 245, 240, 232;
+  --background-start-rgb: 248, 250, 252;
+  --background-end-rgb: 241, 245, 249;
 
   /* Gradient colors */
-  --gradient-from: #967b52;
-  --gradient-to: #b09368;
+  --gradient-from: #475569;
+  --gradient-to: #64748b;
 
   /* Shadow colors */
   --shadow-color: rgba(0, 0, 0, 0.1);
@@ -23,6 +23,14 @@
   --background-end-rgb: 30, 41, 59;
   --shadow-color: rgba(0, 0, 0, 0.3);
   --shadow-color-lg: rgba(0, 0, 0, 0.4);
+}
+
+.steel {
+  --foreground-rgb: 30, 41, 59;
+  --background-start-rgb: 148, 163, 184;
+  --background-end-rgb: 100, 116, 139;
+  --shadow-color: rgba(0, 0, 0, 0.15);
+  --shadow-color-lg: rgba(0, 0, 0, 0.25);
 }
 
 /* Smooth scrolling */
@@ -57,13 +65,13 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d6d3d1;
+  background: #cbd5e1;
   border-radius: 10px;
   transition: background 0.3s ease;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #a8a29e;
+  background: #94a3b8;
 }
 
 .dark ::-webkit-scrollbar-track {
@@ -101,7 +109,7 @@ body {
 
   /* Gradient text */
   .gradient-text {
-    background: linear-gradient(135deg, #7d6744, #b09368);
+    background: linear-gradient(135deg, #334155, #64748b);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -271,4 +279,64 @@ body {
 .dark .shadow-xl,
 .dark .shadow-2xl {
   --tw-shadow-color: rgba(0, 0, 0, 0.3);
+}
+
+/* ── Steel Matte Theme ── */
+.steel .bg-white {
+  --tw-bg-opacity: 1;
+  background-color: rgb(203 213 225 / var(--tw-bg-opacity));
+}
+
+.steel .bg-white\/80 {
+  background-color: rgb(203 213 225 / 0.85);
+}
+
+.steel .text-stone-800,
+.steel .text-stone-900,
+.steel .text-slate-800,
+.steel .text-slate-900,
+.steel .text-gray-900,
+.steel .text-gray-800 {
+  --tw-text-opacity: 1;
+  color: rgb(15 23 42 / var(--tw-text-opacity));
+}
+
+.steel .text-stone-600,
+.steel .text-gray-600,
+.steel .text-stone-500,
+.steel .text-gray-500 {
+  --tw-text-opacity: 1;
+  color: rgb(51 65 85 / var(--tw-text-opacity));
+}
+
+.steel .border-gray-100,
+.steel .border-gray-200 {
+  --tw-border-opacity: 1;
+  border-color: rgb(148 163 184 / var(--tw-border-opacity));
+}
+
+.steel .bg-stone-50,
+.steel .bg-gray-50,
+.steel .bg-slate-50 {
+  --tw-bg-opacity: 1;
+  background-color: rgb(186 199 213 / var(--tw-bg-opacity));
+}
+
+.steel .hover\:bg-gray-50:hover {
+  background-color: rgb(174 188 204);
+}
+
+.steel .gradient-text {
+  background: linear-gradient(135deg, #334155, #64748b);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.steel .shadow-sm,
+.steel .shadow-md,
+.steel .shadow-lg,
+.steel .shadow-xl,
+.steel .shadow-2xl {
+  --tw-shadow-color: rgba(0, 0, 0, 0.15);
 }
