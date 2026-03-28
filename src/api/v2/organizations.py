@@ -185,7 +185,7 @@ async def add_member(
     if not org:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Организация с id={org_id} не найдена",
+            detail="Запрашиваемая организация не найдена",
         )
 
     # Проверяем, что текущий пользователь — org_admin
@@ -235,7 +235,7 @@ async def add_member(
     if not target_user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Пользователь с id={body.user_id} не найден",
+            detail="Указанный пользователь не найден",
         )
 
     membership = OrganizationMembership(

@@ -32,7 +32,7 @@ def _verify_action_access(action_id: str, user: User, db: Session) -> AIAction:
     if not action:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Действие с id={action_id} не найдено",
+            detail="Запрашиваемое действие не найдено",
         )
     # Проверяем ownership через сессию
     ai_session = db.query(AISession).filter(AISession.id == action.session_id).first()
@@ -113,7 +113,7 @@ async def approve_action(
     if not result:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Действие с id={action_id} не в статусе 'pending'",
+            detail="Действие не в статусе 'pending'",
         )
 
     db.commit()
@@ -156,7 +156,7 @@ async def reject_action(
     if not result:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Действие с id={action_id} не в статусе 'pending'",
+            detail="Действие не в статусе 'pending'",
         )
 
     db.commit()
@@ -207,7 +207,7 @@ async def edit_and_approve_action(
     if not result:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Действие с id={action_id} не в статусе 'pending'",
+            detail="Действие не в статусе 'pending'",
         )
 
     db.commit()

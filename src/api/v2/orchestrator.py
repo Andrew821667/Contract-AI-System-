@@ -197,7 +197,7 @@ async def get_run_plan(
     if not plan:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"План выполнения для оркестрации с id={run_id} не найден",
+            detail="План выполнения не найден",
         )
 
     return plan

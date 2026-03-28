@@ -237,7 +237,7 @@ async def deactivate_webhook(
     if not config:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Webhook конфигурация с id={config_id} не найдена",
+            detail="Webhook конфигурация не найдена",
         )
     config.active = False
     db.commit()
@@ -265,7 +265,7 @@ async def list_deliveries(
     if not config:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Webhook конфигурация с id={config_id} не найдена",
+            detail="Webhook конфигурация не найдена",
         )
     # AuthZ: проверяем доступ к организации webhook'а
     if current_user.role != "admin":

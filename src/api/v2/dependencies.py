@@ -160,7 +160,7 @@ def verify_document_access(
     if not contract:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Документ с id={document_id} не найден",
+            detail="Запрашиваемый документ не найден",
         )
     # Admin видит всё; assigned_to — владелец документа
     if user.role != "admin" and contract.assigned_to != user.id:
@@ -183,7 +183,7 @@ def verify_ai_session_ownership(
     if not ai_session:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"AI-сессия с id={session_id} не найдена",
+            detail="Запрашиваемая AI-сессия не найдена",
         )
     if user.role != "admin" and ai_session.user_id != user.id:
         raise HTTPException(
@@ -205,7 +205,7 @@ def verify_orchestrator_run_ownership(
     if not run:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Оркестрация с id={run_id} не найдена",
+            detail="Запрашиваемая оркестрация не найдена",
         )
     if user.role != "admin" and run.initiated_by != user.id:
         raise HTTPException(
@@ -231,7 +231,7 @@ def verify_negotiation_ownership(
     if not negotiation:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Переговоры с id={negotiation_id} не найдены",
+            detail="Запрашиваемые переговоры не найдены",
         )
     if user.role != "admin" and negotiation.user_id != user.id:
         raise HTTPException(
@@ -253,7 +253,7 @@ def verify_workflow_task_ownership(
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Задача с id={task_id} не найдена",
+            detail="Запрашиваемая задача не найдена",
         )
     if user.role != "admin" and task.assignee_id != str(user.id):
         raise HTTPException(
@@ -275,7 +275,7 @@ def verify_org_membership(
         if not org:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Организация с id={org_id} не найдена",
+                detail="Запрашиваемая организация не найдена",
             )
         # Return a synthetic membership for admin
         return None  # type: ignore[return-value]
