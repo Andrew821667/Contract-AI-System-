@@ -97,11 +97,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 1G
     networks:
       - contract-ai-network
     restart: always

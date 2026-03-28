@@ -181,10 +181,10 @@ export default function LoginPage() {
                 <p className="text-xs font-semibold text-amber-700 mb-3 text-center">Быстрый вход (dev)</p>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { label: 'Админ', email: 'admin@contractai.ru', pwd: 'Admin123' },
-                    { label: 'Юрист', email: 'lawyer@contractai.ru', pwd: 'Lawyer123' },
-                    { label: 'VIP', email: 'vip@contractai.ru', pwd: 'Vip123' },
-                    { label: 'Демо', email: 'demo@contractai.ru', pwd: 'Demo123' },
+                    { label: 'Админ', email: 'admin@contractai.ru', pwd: 'Admin123!' },
+                    { label: 'Юрист', email: 'lawyer@contractai.ru', pwd: 'Lawyer123!' },
+                    { label: 'VIP', email: 'vip@contractai.ru', pwd: 'Vip12345!' },
+                    { label: 'Демо', email: 'demo@contractai.ru', pwd: 'Demo1234!' },
                   ].map((u) => (
                     <button
                       key={u.email}
