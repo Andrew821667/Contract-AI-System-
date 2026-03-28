@@ -12,6 +12,7 @@ Graph-RAG Write Tools
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Optional, Dict
 
 from sqlalchemy.orm import Session
@@ -54,8 +55,18 @@ class GraphWriteTools:
         Returns:
             {document_id, nodes_count, edges_count, entities_count, errors}
         """
+        # Security: prevent path traversal
+        real_path = os.path.realpath(file_path)
+        ALLOWED_DIRS = [
+            os.path.realpath("uploads"),
+            os.path.realpath("data"),
+            os.path.realpath("/tmp"),
+        ]
+        if not any(real_path.startswith(d) for d in ALLOWED_DIRS):
+            return {"error": f"Доступ к файлу запрещён: путь вне разрешённых директорий"}
+
         result = self.pipeline.ingest_file(
-            file_path=file_path,
+            file_path=real_path,
             layer=layer,
             contract_id=contract_id,
             legal_document_id=legal_document_id,

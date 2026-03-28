@@ -283,8 +283,11 @@ class GraphRetriever:
         if query.node_types:
             q = q.filter(GraphNode.node_type.in_(query.node_types))
 
-        # Ищем узлы, содержащие хотя бы одно ключевое слово
-        word_filters = [GraphNode.text.ilike(f"%{w}%") for w in words]
+        # Escape LIKE special characters to prevent wildcard injection
+        def _escape_like(s: str) -> str:
+            return s.replace('%', r'\%').replace('_', r'\_')
+
+        word_filters = [GraphNode.text.ilike(f"%{_escape_like(w)}%") for w in words]
         q = q.filter(or_(*word_filters))
 
         nodes = q.limit(query.top_k * 3).all()

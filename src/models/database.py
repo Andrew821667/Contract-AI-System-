@@ -61,7 +61,7 @@ class Template(Base):
     meta_info = Column(JSON, nullable=True)  # renamed from metadata to avoid SQLAlchemy reserved word
     version = Column(String(20), nullable=False)
     active = Column(Boolean, default=True, index=True)
-    created_by = Column(String(36), ForeignKey('users.id'))
+    created_by = Column(String(36), ForeignKey('users.id', ondelete='SET NULL'))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -87,7 +87,7 @@ class Contract(Base):
     contract_type = Column(String(50))
     upload_date = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     status = Column(String(50), default='pending', index=True)
-    assigned_to = Column(String(36), ForeignKey('users.id'), index=True)
+    assigned_to = Column(String(36), ForeignKey('users.id', ondelete='SET NULL'), index=True)
     risk_level = Column(String(20), index=True)
     meta_info = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -145,8 +145,8 @@ class ReviewTask(Base):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     contract_id = Column(String(36), ForeignKey('contracts.id', ondelete='CASCADE'), nullable=False, index=True)
-    assigned_to = Column(String(36), ForeignKey('users.id'), index=True)
-    assigned_by = Column(String(36), ForeignKey('users.id'))
+    assigned_to = Column(String(36), ForeignKey('users.id', ondelete='SET NULL'), index=True)
+    assigned_by = Column(String(36), ForeignKey('users.id', ondelete='SET NULL'))
     status = Column(String(50), default='pending', index=True)
     priority = Column(String(20), default='medium', index=True)
     deadline = Column(DateTime, index=True)
@@ -228,7 +228,7 @@ class ExportLog(Base):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     contract_id = Column(String(36), ForeignKey('contracts.id', ondelete='SET NULL'))
-    exported_by = Column(String(36), ForeignKey('users.id'))
+    exported_by = Column(String(36), ForeignKey('users.id', ondelete='SET NULL'))
     export_type = Column(String(50))  # "full_review", "quick_export"
     exported_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     meta_info = Column(JSON, nullable=True)

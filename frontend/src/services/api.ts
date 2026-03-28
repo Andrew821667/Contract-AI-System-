@@ -710,8 +710,8 @@ class APIClient {
    */
   private setAccessToken(accessToken: string) {
     if (typeof window === 'undefined') return;
-    // Store in localStorage (used by AppLayout, dashboard, hooks for auth checks)
-    localStorage.setItem('access_token', accessToken);
+    // Security: do NOT store token in localStorage (XSS risk).
+    // Token lives only in Zustand in-memory store.
     // Update Zustand store
     try {
       const { useAuthStore } = require('../stores/authStore');

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { toast } from 'react-hot-toast'
+import { useAuthStore } from '../stores/authStore'
 
 export interface Notification {
   id: string
@@ -99,10 +100,7 @@ export function useNotifications(): UseNotificationsReturn {
   const connect = useCallback(() => {
     if (unmountedRef.current) return
 
-    const token =
-      typeof window !== 'undefined'
-        ? localStorage.getItem('access_token')
-        : null
+    const token = useAuthStore.getState().accessToken
     if (!token) return
 
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'

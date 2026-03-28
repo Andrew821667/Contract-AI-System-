@@ -41,6 +41,27 @@ class LLMGateway:
 
     def _initialize_client(self):
         """Инициализирует клиента для выбранного провайдера"""
+        # Mapping provider -> (settings attribute for API key, human-readable name)
+        _KEY_ATTRS = {
+            "claude": "anthropic_api_key",
+            "openai": "openai_api_key",
+            "perplexity": "perplexity_api_key",
+            "yandex": "yandex_api_key",
+            "deepseek": "deepseek_api_key",
+            "qwen": "qwen_api_key",
+        }
+
+        # Validate API key for providers that require one (ollama is excluded)
+        if self.provider in _KEY_ATTRS:
+            key_value = getattr(settings, _KEY_ATTRS[self.provider], None)
+            if not key_value or not str(key_value).strip():
+                logger.warning(
+                    f"API key for provider '{self.provider}' is empty or missing "
+                    f"(settings.{_KEY_ATTRS[self.provider]}). Skipping initialization."
+                )
+                self._client = None
+                return
+
         if self.provider == "claude":
             from anthropic import Anthropic
             self._client = Anthropic(api_key=settings.anthropic_api_key)
@@ -252,17 +273,24 @@ class LLMGateway:
                 logger.error(f"Failed to parse JSON response: {e}")
                 logger.debug(f"Raw response (truncated): {response[:500]}")
 
-                # Попытка извлечь JSON из текста
-                import re
-                json_match = re.search(r'(\[.*\]|\{.*\})', response, re.DOTALL)
-                if json_match:
+                # Попытка извлечь JSON из текста — ищем первый { или [
+                # и пытаемся распарсить от него до конца
+                logger.info("Attempting to extract JSON from text response...")
+                for start_char, end_char in [('{', '}'), ('[', ']')]:
+                    start_idx = response.find(start_char)
+                    if start_idx == -1:
+                        continue
+                    # Ищем с конца строки подходящую закрывающую скобку
+                    end_idx = response.rfind(end_char)
+                    if end_idx == -1 or end_idx <= start_idx:
+                        continue
+                    candidate = response[start_idx:end_idx + 1]
                     try:
-                        logger.info("Attempting to extract JSON from text response...")
-                        return json.loads(json_match.group(1))
-                    except (json.JSONDecodeError, ValueError) as e2:
-                        logger.error(f"JSON extraction fallback also failed: {e2}")
+                        return json.loads(candidate)
+                    except (json.JSONDecodeError, ValueError):
+                        continue
 
-                raise ValueError("LLM returned invalid JSON")
+                raise ValueError("LLM returned invalid JSON — could not extract valid JSON from response")
 
         return response
 

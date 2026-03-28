@@ -16,6 +16,7 @@ Graph-RAG Ingestion Pipeline
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict
@@ -155,44 +156,65 @@ class GraphRAGPipeline:
         result = IngestionResult(document=None)  # type: ignore
         result.parse_errors = parse_result.parse_errors
 
-        # Step 1: Build graph (document + nodes + structural edges)
-        doc = self.builder.build(
-            parse_result,
-            source_file=source_file,
-            contract_id=contract_id,
-            legal_document_id=legal_document_id,
-        )
-        result.document = doc
-        result.nodes_count = parse_result.nodes_count
+        # Re-ingestion protection: check if document already exists
+        if source_file:
+            existing = (self.db.query(GraphDocument)
+                        .filter(GraphDocument.source_file == source_file,
+                                GraphDocument.status == 'active')
+                        .first())
+            if existing:
+                logger.warning(f"Document already ingested: {source_file} (id={existing.id})")
+                result.document = existing
+                result.extraction_warnings.append(
+                    f"Документ уже загружен (id={existing.id}). Повторная загрузка пропущена."
+                )
+                return result
 
-        logger.info(f"Graph built: doc={doc.id}, nodes={result.nodes_count}")
+        # Wrap entire pipeline in try/except for atomicity
+        try:
+            # Step 1: Build graph (document + nodes + structural edges)
+            doc = self.builder.build(
+                parse_result,
+                source_file=source_file,
+                contract_id=contract_id,
+                legal_document_id=legal_document_id,
+            )
+            result.document = doc
+            result.nodes_count = parse_result.nodes_count
 
-        # Step 2: Collect all leaf/text nodes for extraction
-        db_nodes = self.repo.nodes.get_by_document(doc.id)
-        node_texts = [
-            {'node_id': n.id, 'text': n.text, 'number': n.number, 'node_type': n.node_type}
-            for n in db_nodes
-            if n.text and n.node_type not in ('document',)
-        ]
+            logger.info(f"Graph built: doc={doc.id}, nodes={result.nodes_count}")
 
-        # Step 3: Extract references → fact edges
-        fact_edges = self._extract_and_create_edges(doc, node_texts, db_nodes)
-        result.fact_edges_count = fact_edges
+            # Step 2: Collect all leaf/text nodes for extraction
+            db_nodes = self.repo.nodes.get_by_document(doc.id)
+            node_texts = [
+                {'node_id': n.id, 'text': n.text, 'number': n.number, 'node_type': n.node_type}
+                for n in db_nodes
+                if n.text and n.node_type not in ('document',)
+            ]
 
-        # Step 4: Extract entities → GraphEntity
-        entities = self._extract_and_create_entities(node_texts)
-        result.entities_count = entities
+            # Step 3: Extract references → fact edges
+            fact_edges = self._extract_and_create_edges(doc, node_texts, db_nodes)
+            result.fact_edges_count = fact_edges
 
-        # Step 5: Update stats
-        self.repo.documents.update_stats(doc.id)
+            # Step 4: Extract entities → GraphEntity
+            entities = self._extract_and_create_entities(node_texts)
+            result.entities_count = entities
 
-        # Refresh counts from DB
-        doc_refreshed = self.repo.documents.get_by_id(doc.id)
-        if doc_refreshed:
-            result.edges_count = doc_refreshed.edges_count
+            # Step 5: Update stats
+            self.repo.documents.update_stats(doc.id)
 
-        # Commit
-        self.repo.commit()
+            # Refresh counts from DB
+            doc_refreshed = self.repo.documents.get_by_id(doc.id)
+            if doc_refreshed:
+                result.edges_count = doc_refreshed.edges_count
+
+            # Commit
+            self.repo.commit()
+
+        except Exception as e:
+            logger.error(f"Ingestion failed, rolling back: {e}")
+            self.db.rollback()
+            raise
 
         logger.info(
             f"Ingestion complete: doc={doc.id}, nodes={result.nodes_count}, "

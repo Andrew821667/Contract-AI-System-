@@ -28,8 +28,8 @@ from ..enums import LayerType, NodeType, ParseStatus
 # Для однокомпонентных номеров точка обязательна: "1. Текст"
 # Для многокомпонентных (1.1, 2.3.1) точка опциональна: "1.1 Текст" или "1.1. Текст"
 RE_NUMBERED = re.compile(
-    r'^(\d+\.\d+(?:\.\d+)*)\.?\s+(.*)'  # 1.1, 1.1.1, ... — точка опциональна
-    r'|^(\d+)\.\s+(.*)',                  # 1. 2. 3. — точка обязательна
+    r'^(\d+\.\d+(?:\.\d+){0,8})\.?\s+(.*)'  # 1.1, 1.1.1, ... — точка опциональна, макс 10 уровней
+    r'|^(\d+)\.\s+(.*)',                      # 1. 2. 3. — точка обязательна
     re.MULTILINE
 )
 
@@ -182,7 +182,10 @@ class ContractGraphParser(BaseDocumentGraphParser):
         """
         try:
             # Безопасный парсинг XML
-            parser = etree.XMLParser(resolve_entities=False, no_network=True)
+            parser = etree.XMLParser(
+                resolve_entities=False, no_network=True,
+                dtd_validation=False, load_dtd=False,
+            )
             tree = etree.fromstring(xml_content.encode('utf-8') if isinstance(xml_content, str) else xml_content,
                                     parser=parser)
         except etree.XMLSyntaxError as e:

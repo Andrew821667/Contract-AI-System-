@@ -123,12 +123,20 @@ class BaseAgent(ABC):
         """
         return "You are a helpful AI assistant for legal contract processing." + self.PROMPT_INJECTION_GUARD
 
+    @staticmethod
+    def wrap_document_content(content: str) -> str:
+        """Wrap document content in safe tags to prevent prompt injection."""
+        # Escape any existing closing tags to prevent tag breakout
+        safe = content.replace("</user_document>", "&lt;/user_document&gt;")
+        return f"<user_document>\n{safe}\n</user_document>"
+
     def call_llm(
         self,
         prompt: str,
         temperature: float = 0.3,
         max_tokens: Optional[int] = None,
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        document_content: Optional[str] = None,
     ) -> str:
         """
         Call LLM with error handling
@@ -138,6 +146,7 @@ class BaseAgent(ABC):
             temperature: Sampling temperature
             max_tokens: Maximum tokens to generate
             system_prompt: System prompt (uses default if not provided)
+            document_content: Optional document content (auto-wrapped in safe tags)
 
         Returns:
             LLM response text
@@ -145,6 +154,10 @@ class BaseAgent(ABC):
         try:
             if system_prompt is None:
                 system_prompt = self.get_system_prompt()
+
+            # Auto-wrap document content in safe tags
+            if document_content:
+                prompt = f"{prompt}\n\n{self.wrap_document_content(document_content)}"
 
             response = self.llm.call(
                 prompt=prompt,

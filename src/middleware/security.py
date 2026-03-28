@@ -307,10 +307,11 @@ def setup_cors(app):
     if ngrok_url:
         allowed_origins.append(ngrok_url)
 
-    # In development, allow any ngrok/cloudflare tunnel origins dynamically
+    # In development, allow ngrok/cloudflare tunnel origins (strict pattern)
     is_dev = os.getenv("APP_ENV", "development") != "production"
     if is_dev:
-        allow_origin_regex = r"https://.*\.(ngrok-free\.dev|ngrok\.io|trycloudflare\.com)"
+        # Only match direct subdomains, not arbitrary prefixes
+        allow_origin_regex = r"https://[a-z0-9\-]+\.(ngrok-free\.dev|ngrok\.io|trycloudflare\.com)"
     else:
         allow_origin_regex = None
 

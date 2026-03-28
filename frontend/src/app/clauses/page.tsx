@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import api, { ExtractedClause, ClauseStats } from '@/services/api'
+import { useAuthStore } from '@/stores/authStore'
 import AppLayout from '@/components/AppLayout'
 
 const CLAUSE_TYPES = [
@@ -53,7 +54,7 @@ export default function ClauseLibraryPage() {
 
   // Check auth
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
+    const token = useAuthStore.getState().accessToken
     if (!token) router.push('/login')
   }, [router])
 

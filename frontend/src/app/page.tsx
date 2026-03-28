@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
+import { useAuthStore } from '../stores/authStore'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 
@@ -11,7 +12,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
+    const token = useAuthStore.getState().accessToken
     if (token) {
       router.push('/dashboard')
     } else {

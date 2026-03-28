@@ -6,8 +6,11 @@ CRUD-операции + graph traversal через recursive CTE.
 Soft delete (архивация) вместо физического удаления.
 Все изменения логируются в RAGAuditLog.
 """
+import logging
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any, Tuple
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import text, and_, or_, func, literal_column
 from sqlalchemy.orm import Session, joinedload
@@ -38,6 +41,9 @@ def _audit(
     context: Optional[Dict] = None,
 ):
     """Создать запись аудита."""
+    if not entity_id:
+        logger.warning(f"Audit skipped: entity_id is None for action={action}, entity_type={entity_type}")
+        return
     log = RAGAuditLog(
         action=action,
         entity_type=entity_type,
@@ -168,6 +174,7 @@ class GraphNodeRepository:
                 .all())
 
     def get_ancestors(self, node_id: str, max_depth: int = 10) -> List[GraphNode]:
+        max_depth = min(max_depth, 50)  # Safety limit
         """
         Получить всех предков узла (от непосредственного родителя до корня).
         Использует recursive CTE для эффективного обхода.
@@ -198,6 +205,7 @@ class GraphNodeRepository:
         return nodes
 
     def get_subtree(self, node_id: str, max_depth: int = 5) -> List[GraphNode]:
+        max_depth = min(max_depth, 50)  # Safety limit
         """
         Получить поддерево узла (все потомки до max_depth).
         Recursive CTE.
@@ -242,18 +250,28 @@ class GraphNodeRepository:
                 .all())
 
     def archive(self, node_id: str, reason: str, actor: str = "system",
-                user_id: Optional[str] = None) -> Optional[GraphNode]:
+                user_id: Optional[str] = None, cascade: bool = True) -> Optional[GraphNode]:
         """Архивировать узел (soft delete). Физическое удаление запрещено."""
         node = self.get_by_id(node_id)
         if not node:
             return None
+        now = datetime.now(timezone.utc)
         node.is_archived = True
-        node.archived_at = datetime.now(timezone.utc)
+        node.archived_at = now
         node.archived_reason = reason
         self.db.flush()
         _audit(self.db, AuditAction.NODE_ARCHIVED, "graph_node", node_id,
                actor=actor, user_id=user_id, reason=reason,
                context={"document_id": node.document_id})
+
+        # Cascade: archive children to prevent orphans
+        if cascade:
+            children = self.get_children(node_id)
+            for child in children:
+                if not child.is_archived:
+                    self.archive(child.id, reason=f"Каскадная архивация (родитель: {node_id})",
+                                 actor=actor, user_id=user_id, cascade=True)
+
         return node
 
     def update_text(self, node_id: str, new_text: str, reason: str,
@@ -375,10 +393,11 @@ class GraphEdgeRepository:
         if not allowed_statuses:
             allowed_statuses = [EdgeStatus.VERIFIED, EdgeStatus.MACHINE_EXTRACTED]
 
-        # Для MVP: итеративное расширение (без CTE для рёбер,
-        # т.к. CTE для графа рёбер сложнее в SQLAlchemy)
+        max_depth = min(max_depth, 10)  # Limit to prevent resource exhaustion
+
         visited_nodes = set(node_ids)
-        all_edges = []
+        seen_edge_ids: set = set()
+        all_edges: List[GraphEdge] = []
         frontier = set(node_ids)
 
         for depth in range(max_depth):
@@ -398,7 +417,8 @@ class GraphEdgeRepository:
 
             new_frontier = set()
             for edge in edges:
-                if edge not in all_edges:
+                if edge.id not in seen_edge_ids:
+                    seen_edge_ids.add(edge.id)
                     all_edges.append(edge)
                 if edge.source_id not in visited_nodes:
                     new_frontier.add(edge.source_id)
@@ -435,7 +455,15 @@ class CandidateEdgeRepository:
     def __init__(self, db: Session):
         self.db = db
 
+    ALLOWED_CLASSES = ('analytical', 'risk_signal')
+
     def create(self, **kwargs) -> CandidateEdge:
+        proposed_class = kwargs.get('proposed_class', '')
+        if proposed_class not in self.ALLOWED_CLASSES:
+            raise ValueError(
+                f"CandidateEdge proposed_class must be one of {self.ALLOWED_CLASSES}, "
+                f"got '{proposed_class}'"
+            )
         candidate = CandidateEdge(**kwargs)
         self.db.add(candidate)
         self.db.flush()

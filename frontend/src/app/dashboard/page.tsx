@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import api, { User, DashboardData, ModelStatus } from '@/services/api'
 import toast from 'react-hot-toast'
+import { useAuthStore } from '@/stores/authStore'
 import { getUserRole, getRolePermissions, getRoleColor, getRoleLabel } from '@/utils/roles'
 import ChangePasswordModal from '@/components/ChangePasswordModal'
 import AppLayout from '@/components/AppLayout'
@@ -61,7 +62,7 @@ export default function DashboardPage() {
 
   // Check authentication and default password
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
+    const token = useAuthStore.getState().accessToken
     if (!token) {
       router.push('/login')
     } else {

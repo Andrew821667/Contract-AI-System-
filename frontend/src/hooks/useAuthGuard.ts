@@ -56,14 +56,7 @@ export function useAuthGuard() {
         return
       }
 
-      // Fallback: check localStorage (legacy)
-      const legacyToken = localStorage.getItem('access_token')
-      if (legacyToken && !isTokenExpired(legacyToken)) {
-        setIsReady(true)
-        return
-      }
-
-      // No valid in-memory or legacy token — try refresh via httpOnly cookie
+      // No valid in-memory token — try refresh via httpOnly cookie
       await initAuth()
 
       // After initAuth, check store state

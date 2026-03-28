@@ -10,6 +10,7 @@ Handles all authentication operations:
 - Audit logging
 """
 
+import hashlib
 import secrets
 import uuid
 import bcrypt
@@ -203,11 +204,12 @@ class AuthService:
         ).delete()
 
         token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
 
         verification = EmailVerification(
             user_id=user_id,
             email=email,
-            token=token,
+            token=token_hash,
             expires_at=datetime.now(timezone.utc) + timedelta(hours=24)
         )
         self.db.add(verification)
@@ -216,6 +218,10 @@ class AuthService:
         from loguru import logger
         verification_url = f"/api/v1/auth/verify-email?token={token}"
         logger.info(f"[EMAIL VERIFICATION] URL для {email}: {verification_url}")
+
+        # Store unhashed token on the object so the caller can send it to the user,
+        # but only the hash is persisted in the database.
+        verification._raw_token = token
 
         return verification
 
@@ -229,8 +235,10 @@ class AuthService:
         Returns:
             (success, error_message)
         """
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+
         verification = self.db.query(EmailVerification).filter(
-            EmailVerification.token == token
+            EmailVerification.token == token_hash
         ).first()
 
         if not verification:
@@ -1008,3 +1016,135 @@ class AuthService:
             "demo_converted": demo_converted,
             "conversion_rate": (demo_converted / demo_users * 100) if demo_users > 0 else 0
         }
+
+    # ==================== Password Reset ====================
+
+    def request_password_reset(
+        self,
+        email: str,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Create a password reset request.
+
+        Generates a secure token, stores its SHA-256 hash in the database,
+        and returns the raw (unhashed) token so it can be sent to the user.
+
+        Args:
+            email: User email
+            ip_address: Client IP address
+            user_agent: User agent string
+
+        Returns:
+            (raw_token or None, error_message or None)
+        """
+        user = self.db.query(User).filter(User.email == email).first()
+        if not user:
+            # Return success-like response to prevent email enumeration
+            return None, None
+
+        # Invalidate any existing unused reset requests for this user
+        self.db.query(PasswordResetRequest).filter(
+            PasswordResetRequest.user_id == user.id,
+            PasswordResetRequest.used == False
+        ).delete()
+
+        # Generate token and store only the hash
+        token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+        reset_request = PasswordResetRequest(
+            user_id=user.id,
+            token=token_hash,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+        self.db.add(reset_request)
+
+        self.log_action(
+            user_id=user.id,
+            action="password_reset_requested",
+            status="success",
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+
+        self.db.commit()
+
+        # Return the raw token — caller sends it to the user via email
+        return token, None
+
+    def reset_password(
+        self,
+        token: str,
+        new_password: str,
+        ip_address: Optional[str] = None
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Reset password using a reset token.
+
+        Hashes the incoming token and compares with the stored hash.
+
+        Args:
+            token: Raw reset token (as received by the user)
+            new_password: New password
+
+        Returns:
+            (success, error_message)
+        """
+        # Hash the incoming token to compare with stored hash
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+
+        reset_request = self.db.query(PasswordResetRequest).filter(
+            PasswordResetRequest.token == token_hash
+        ).first()
+
+        if not reset_request:
+            return False, "Неверный или просроченный токен сброса пароля"
+
+        if not reset_request.is_valid():
+            return False, "Токен сброса пароля истёк или уже использован"
+
+        # Validate new password strength
+        is_valid, error = self.validate_password_strength(new_password)
+        if not is_valid:
+            return False, error
+
+        # Find user
+        user = self.db.query(User).filter(User.id == reset_request.user_id).first()
+        if not user:
+            return False, "Пользователь не найден"
+
+        # Update password
+        user.password_hash = self.hash_password(new_password)
+
+        # Mark reset request as used
+        reset_request.used = True
+        reset_request.used_at = datetime.now(timezone.utc)
+
+        # Reset failed login attempts and unlock account
+        user.failed_login_attempts = 0
+        user.locked_until = None
+
+        # Revoke all existing sessions (force re-login with new password)
+        self.db.query(UserSession).filter(
+            UserSession.user_id == user.id,
+            UserSession.revoked == False
+        ).update({
+            "revoked": True,
+            "revoked_at": datetime.now(timezone.utc),
+            "revoke_reason": "password_reset"
+        })
+
+        self.log_action(
+            user_id=user.id,
+            action="password_reset_completed",
+            status="success",
+            ip_address=ip_address
+        )
+
+        self.db.commit()
+
+        return True, None

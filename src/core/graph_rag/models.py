@@ -137,9 +137,11 @@ class GraphNode(Base):
 
     # Рёбра (исходящие и входящие)
     outgoing_edges = relationship("GraphEdge", foreign_keys="GraphEdge.source_id",
-                                  back_populates="source_node", cascade="all, delete-orphan")
+                                  back_populates="source_node", cascade="all, delete-orphan",
+                                  lazy="select")
     incoming_edges = relationship("GraphEdge", foreign_keys="GraphEdge.target_id",
-                                  back_populates="target_node", cascade="all, delete-orphan")
+                                  back_populates="target_node", cascade="all, delete-orphan",
+                                  lazy="select")
 
     __table_args__ = (
         CheckConstraint(
@@ -205,6 +207,7 @@ class NodeVersion(Base):
             name="check_version_change_type"
         ),
         Index("ix_node_versions_node_version", "node_id", "version_number", unique=True),
+        Index("ix_node_versions_valid_to", "node_id", "valid_to"),
     )
 
     def __repr__(self):
@@ -259,8 +262,10 @@ class GraphEdge(Base):
                         onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
-    source_node = relationship("GraphNode", foreign_keys=[source_id], back_populates="outgoing_edges")
-    target_node = relationship("GraphNode", foreign_keys=[target_id], back_populates="incoming_edges")
+    source_node = relationship("GraphNode", foreign_keys=[source_id], back_populates="outgoing_edges",
+                               lazy="select")
+    target_node = relationship("GraphNode", foreign_keys=[target_id], back_populates="incoming_edges",
+                               lazy="select")
 
     __table_args__ = (
         CheckConstraint(
@@ -281,6 +286,7 @@ class GraphEdge(Base):
         ),
         Index("ix_graph_edges_source_type", "source_id", "edge_type"),
         Index("ix_graph_edges_target_type", "target_id", "edge_type"),
+        Index("ix_graph_edges_valid_from_to", "valid_from", "valid_to"),
     )
 
     def __repr__(self):

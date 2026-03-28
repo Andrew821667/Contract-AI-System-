@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import api from '@/services/api'
+import { useAuthStore } from '../stores/authStore'
 
 export interface WSMessage {
   type: string
@@ -125,7 +126,7 @@ export function useAnalysisWebSocket(
   const connect = useCallback(() => {
     if (unmountedRef.current) return
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
+    const token = useAuthStore.getState().accessToken
     if (!token) {
       startPolling()
       return

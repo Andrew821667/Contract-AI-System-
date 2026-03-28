@@ -98,6 +98,9 @@ class CoreServices:
         self.negotiation_service: NegotiationService | None = None
         self.version_intelligence: VersionIntelligenceService | None = None
 
+        # AI Action Policy
+        self.action_policy = None  # AIActionPolicyService, set during bootstrap
+
         # Audit
         self.audit_query: AuditQueryService | None = None
 

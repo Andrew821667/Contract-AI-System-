@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import toast from 'react-hot-toast'
 import api, { User } from '@/services/api'
+import { useAuthStore } from '../stores/authStore'
 import Sidebar from './Sidebar'
 import NotificationBell from './NotificationBell'
 import { useNotifications } from '@/hooks/useNotifications'
@@ -22,7 +23,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
 
   // Check auth
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
+    const token = useAuthStore.getState().accessToken
     if (!token) {
       router.push('/login')
     }

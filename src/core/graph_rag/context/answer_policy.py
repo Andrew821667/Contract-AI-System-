@@ -79,7 +79,9 @@ class AnswerPolicy:
         # Определяем confidence
         if primary_blocks:
             policy.has_direct_answer = True
-            if len(primary_blocks) >= 1 and not context.truncated:
+            # HIGH only if primary blocks have substantial content (>50 chars)
+            substantial = [b for b in primary_blocks if b.char_count > 50]
+            if substantial and not context.truncated:
                 policy.confidence = AnswerConfidence.HIGH
             else:
                 policy.confidence = AnswerConfidence.MEDIUM
