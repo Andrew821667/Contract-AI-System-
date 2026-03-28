@@ -367,21 +367,23 @@ from sqlalchemy.orm import sessionmaker
 # Load environment variables
 load_dotenv()
 
-# Get database URL from environment
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./contract_ai.db")
+# Get database URL from environment — PostgreSQL only
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://contract_user:dev_password@localhost:5432/contract_ai"
+)
 
-# Create engine
-# For SQLite, we need to enable check_same_thread=False to allow FastAPI to use it
+# Create engine — PostgreSQL with connection pooling
+# pool_size=20 + max_overflow=40 = 60 max connections
+# Accounts for: API requests, WebSocket polling, background tasks, bootstrap session
 if DATABASE_URL.startswith("sqlite"):
+    # SQLite allowed only in tests (via conftest.py override)
     engine = create_engine(
         DATABASE_URL,
         connect_args={"check_same_thread": False},
-        echo=False  # Set to True for SQL query logging
+        echo=False,
     )
 else:
-    # For PostgreSQL — with connection pooling
-    # pool_size=20 + max_overflow=40 = 60 max connections
-    # Accounts for: API requests, WebSocket polling, background tasks, bootstrap session
     engine = create_engine(
         DATABASE_URL,
         echo=False,
@@ -414,8 +416,8 @@ def get_db():
         db.close()
 
 
-# ==================== ASYNC DATABASE (PostgreSQL only) ====================
-# Non-blocking DB access via asyncpg. Falls back to sync for SQLite.
+# ==================== ASYNC DATABASE (PostgreSQL) ====================
+# Non-blocking DB access via asyncpg. Falls back to sync in tests (SQLite).
 
 async_engine = None
 AsyncSessionLocal = None
@@ -464,7 +466,7 @@ async def get_async_db():
     ```
     """
     if AsyncSessionLocal is None:
-        # Fallback: yield sync session (SQLite dev mode)
+        # Fallback: yield sync session (tests only)
         db = SessionLocal()
         try:
             yield db

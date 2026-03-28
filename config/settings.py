@@ -10,9 +10,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Настройки приложения"""
 
-    # Database
-    # По умолчанию SQLite, можно переключить на PostgreSQL в .env
-    database_url: str = "sqlite:///./contract_ai.db"
+    # Database — PostgreSQL only
+    # Local dev: docker compose -f docker-compose.dev.yml up -d
+    database_url: str = "postgresql://contract_user:dev_password@localhost:5432/contract_ai"
 
     # LLM API Keys
     anthropic_api_key: str = ""

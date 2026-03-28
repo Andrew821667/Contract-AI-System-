@@ -52,18 +52,13 @@ def get_url():
     return os.getenv("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
 
 
-def _is_sqlite(url: str) -> bool:
-    return url.startswith("sqlite")
-
-
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode."""
+    """Run migrations in 'offline' mode — PostgreSQL only."""
     url = get_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
-        render_as_batch=_is_sqlite(url),
         dialect_opts={"paramstyle": "named"},
     )
 
@@ -72,12 +67,7 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode.
-
-    In this scenario we need to create an Engine
-    and associate a connection with the context.
-
-    """
+    """Run migrations in 'online' mode — PostgreSQL only."""
     configuration = config.get_section(config.config_ini_section)
     configuration["sqlalchemy.url"] = get_url()
     connectable = engine_from_config(
@@ -87,11 +77,9 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        is_sqlite = connection.dialect.name == "sqlite"
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            render_as_batch=is_sqlite,
         )
 
         with context.begin_transaction():

@@ -2,7 +2,8 @@
 """
 Shared pytest fixtures for API tests.
 
-Each test gets a fresh tmp-file SQLite database.
+Each test gets a fresh tmp-file SQLite database for speed and isolation.
+The application itself uses PostgreSQL only — SQLite is only for tests.
 Both get_db functions (from src.models and src.models.database) are overridden.
 """
 import pytest

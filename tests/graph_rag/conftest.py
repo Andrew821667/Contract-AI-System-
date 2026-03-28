@@ -3,6 +3,7 @@
 Conftest для graph_rag тестов.
 
 Standalone: не зависит от FastAPI app, работает с чистым SQLAlchemy.
+Uses SQLite for test speed — app itself is PostgreSQL-only.
 """
 import pytest
 from sqlalchemy import create_engine
