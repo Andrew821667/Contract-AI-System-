@@ -15,7 +15,8 @@ from ..utils.rate_limiter import get_global_rate_limiter, RateLimitExceeded
 
 # Dedicated thread pool for LLM calls — default Python pool is only 5-8 threads,
 # which causes all async endpoints to stall when saturated with slow LLM requests.
-_LLM_THREAD_POOL = ThreadPoolExecutor(max_workers=32, thread_name_prefix="llm")
+# 64 workers handles ~64 concurrent LLM calls (each ~5-30s) without queue buildup.
+_LLM_THREAD_POOL = ThreadPoolExecutor(max_workers=64, thread_name_prefix="llm")
 
 
 class LLMGateway:

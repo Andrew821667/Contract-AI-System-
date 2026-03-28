@@ -81,13 +81,8 @@ async def analyze_contract_background(
 
         _set_progress(20, "Документ распознан, подготовка к анализу...")
 
-        # Store XML and analyze
-        meta = contract.meta_info or {}
-        if not isinstance(meta, dict):
-            import json
-            meta = json.loads(meta) if meta else {}
-        meta['xml'] = parsed_xml
-        contract.meta_info = meta
+        # Update status — parsed XML is passed directly to the agent, NOT stored in DB
+        # (storing multi-MB XML in a JSON column degrades DB performance)
         contract.status = 'analyzing'
         db.commit()
 

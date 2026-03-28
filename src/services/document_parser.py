@@ -81,6 +81,15 @@ class DocumentParser:
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
 
+        # Guard against loading very large files into memory
+        MAX_PARSE_SIZE_MB = 50
+        file_size = os.path.getsize(file_path)
+        if file_size > MAX_PARSE_SIZE_MB * 1024 * 1024:
+            raise ValueError(
+                f"File too large for parsing: {file_size / 1024 / 1024:.1f} MB "
+                f"(max {MAX_PARSE_SIZE_MB} MB)"
+            )
+
         ext = Path(file_path).suffix.lower()
 
         if ext not in self.supported_formats:

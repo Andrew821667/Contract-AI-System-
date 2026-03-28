@@ -11,7 +11,7 @@ from loguru import logger
 
 from src.models.database import get_db, Contract
 from src.models.auth_models import User
-from src.api.dependencies import get_current_user
+from src.api.dependencies import require_admin
 
 
 router = APIRouter(tags=["Admin Contracts"])
@@ -35,11 +35,12 @@ class DeleteContractResponse(BaseModel):
     "/{contract_id}",
     response_model=DeleteContractResponse,
     summary="Удалить документ (только для админа)",
+    dependencies=[Depends(require_admin)],
 )
 async def delete_contract(
     contract_id: str,
     body: DeleteContractRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """
@@ -47,12 +48,6 @@ async def delete_contract(
     Только для пользователей с ролью admin.
     История удаления сохраняется в meta_info документа.
     """
-    # Admin only
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Удаление документов доступно только администраторам",
-        )
 
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not contract:

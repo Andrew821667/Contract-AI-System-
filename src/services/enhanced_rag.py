@@ -894,17 +894,20 @@ class EnhancedRAGSystem:
         return None
 
     def _add_to_cache(self, cache_key: str, results: List[SearchResult]):
-        """Add results to cache"""
+        """Add results to cache with O(N) eviction instead of O(N log N) sort"""
         self.query_cache[cache_key] = (results, datetime.now())
 
-        # Limit cache size
-        if len(self.query_cache) > 1000:
-            # Remove oldest entries
-            sorted_keys = sorted(
-                self.query_cache.keys(),
-                key=lambda k: self.query_cache[k][1]
+        # Evict oldest entries when cache exceeds limit
+        max_cache_size = 500
+        if len(self.query_cache) > max_cache_size:
+            # Use heapq for O(N) selection of oldest 100 entries
+            import heapq
+            oldest = heapq.nsmallest(
+                100,
+                self.query_cache.items(),
+                key=lambda item: item[1][1]
             )
-            for key in sorted_keys[:200]:
+            for key, _ in oldest:
                 del self.query_cache[key]
 
     def get_kb_statistics(self) -> Dict:

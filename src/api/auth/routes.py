@@ -28,7 +28,7 @@ REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/api/v1/auth"
 REFRESH_COOKIE_HTTPONLY = True
 REFRESH_COOKIE_SAMESITE = "lax"
-REFRESH_COOKIE_SECURE = os.getenv("ENVIRONMENT", "development") == "production"
+REFRESH_COOKIE_SECURE = os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "development")) == "production"
 REFRESH_COOKIE_MAX_AGE = 30 * 24 * 3600  # 30 days
 
 # CSRF: allowed origins for cookie-based endpoints (M1)

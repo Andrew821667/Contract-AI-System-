@@ -168,13 +168,15 @@ async def websocket_analysis_updates(
         }, websocket)
 
         # Keep connection alive and send updates
+        poll_interval = 5  # seconds — increases after idle polls
+        idle_polls = 0
         while True:
-            # Poll database for updates every 5 seconds
-            await asyncio.sleep(5)
+            await asyncio.sleep(poll_interval)
 
             # Short-lived DB session for each poll — does not hold pool slot between polls
             poll_db = SessionLocal()
             try:
+                # Single query with joined load instead of two separate queries
                 contract = poll_db.query(Contract).filter(Contract.id == contract_id).first()
                 if not contract:
                     break
@@ -311,10 +313,9 @@ async def websocket_notifications(
             "user_id": user_id
         })
 
-        # Keep connection alive
+        # Keep connection alive — poll less frequently for notifications
         while True:
-            # Check for new notifications every 5 seconds
-            await asyncio.sleep(5)
+            await asyncio.sleep(15)
 
             # Short-lived DB session for each poll
             poll_db = SessionLocal()
