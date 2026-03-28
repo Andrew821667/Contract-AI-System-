@@ -51,6 +51,13 @@ async def upload_contract(
 
     **Returns:** Contract ID and status
     """
+    VALID_DOCUMENT_TYPES = {"contract", "disagreement", "tracked_changes"}
+    if document_type not in VALID_DOCUMENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid document_type. Allowed: {', '.join(sorted(VALID_DOCUMENT_TYPES))}"
+        )
+
     tmp_path = None
     try:
         # Reset daily limits if new day

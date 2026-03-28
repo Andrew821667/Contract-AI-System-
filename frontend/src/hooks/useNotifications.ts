@@ -146,8 +146,9 @@ export function useNotifications(): UseNotificationsReturn {
         setIsConnected(false)
 
         if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+          const backoff = RECONNECT_DELAY_MS * Math.pow(2, reconnectAttemptsRef.current)
           reconnectAttemptsRef.current++
-          setTimeout(connect, RECONNECT_DELAY_MS)
+          setTimeout(connect, backoff)
         }
       }
     } catch {

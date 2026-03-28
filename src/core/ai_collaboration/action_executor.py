@@ -67,6 +67,10 @@ class AIActionExecutionService:
             if not allowed:
                 action.execution_status = "blocked"
                 self.db.flush()
+                logger.warning(
+                    f"Action {action.id} blocked by policy: "
+                    f"user={user_id}, type={action.action_type}"
+                )
                 self._record_audit(action, "action_blocked", {
                     "reason": "policy_check_failed",
                     "user_id": user_id,

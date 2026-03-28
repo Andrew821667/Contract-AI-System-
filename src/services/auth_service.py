@@ -216,8 +216,7 @@ class AuthService:
         self.db.flush()
 
         from loguru import logger
-        verification_url = f"/api/v1/auth/verify-email?token={token}"
-        logger.info(f"[EMAIL VERIFICATION] URL для {email}: {verification_url}")
+        logger.info(f"[EMAIL VERIFICATION] Token created for {email} (id: {verification.id})")
 
         # Store unhashed token on the object so the caller can send it to the user,
         # but only the hash is persisted in the database.
@@ -376,7 +375,13 @@ class AuthService:
 
         # Verify password
         if not self.verify_password(password, user.password_hash):
-            user.failed_login_attempts += 1
+            # Atomic increment to prevent race condition with concurrent login attempts
+            self.db.query(User).filter(User.id == user.id).update(
+                {User.failed_login_attempts: User.failed_login_attempts + 1}
+            )
+            self.db.commit()
+            # Re-read to get actual count after atomic update
+            self.db.refresh(user)
 
             # Lock account after max attempts
             if user.failed_login_attempts >= self.MAX_LOGIN_ATTEMPTS:
@@ -388,8 +393,6 @@ class AuthService:
                 self._record_login_attempt(email, False, ip_address, user_agent, "account_locked")
 
                 return None, "Account locked due to too many failed attempts"
-
-            self.db.commit()
 
             self._record_login_attempt(email, False, ip_address, user_agent, "wrong_password")
 
@@ -555,10 +558,10 @@ class AuthService:
         Returns:
             (activation_data dict, error message if failed)
         """
-        # Find and validate token
+        # Find and validate token with pessimistic lock to prevent race condition
         demo_token = self.db.query(DemoToken).filter(
             DemoToken.token == token
-        ).first()
+        ).with_for_update().first()
 
         if not demo_token:
             return None, "Invalid demo token"

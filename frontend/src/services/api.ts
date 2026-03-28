@@ -626,7 +626,7 @@ export interface LLMStageSettingUpdate {
 // API Client
 class APIClient {
   private client: AxiosInstance;
-  private refreshing = false;
+  // refreshPromise declared near refreshToken() method
 
   constructor() {
     // Use relative URL so requests go to the same origin (works with ngrok, localhost, etc.)
@@ -811,35 +811,42 @@ class APIClient {
     }
   }
 
+  private refreshPromise: Promise<boolean> | null = null;
+
   async refreshToken(): Promise<boolean> {
-    if (this.refreshing) return false;
-
-    this.refreshing = true;
-
-    try {
-      // Refresh token is sent automatically as httpOnly cookie (withCredentials: true)
-      // No body needed — backend reads from cookie first
-      const response = await this.client.post('/api/v1/auth/refresh', {});
-
-      // Store new access token in memory
-      this.setAccessToken(response.data.access_token);
-
-      // Update Zustand store with user data if present
-      if (response.data.user) {
-        try {
-          const { useAuthStore } = require('../stores/authStore');
-          useAuthStore.getState().setAuth(response.data.user, response.data.access_token);
-        } catch {
-          // Store not available
-        }
-      }
-
-      this.refreshing = false;
-      return true;
-    } catch (error) {
-      this.refreshing = false;
-      return false;
+    // Deduplicate concurrent refresh calls — all callers await the same promise
+    if (this.refreshPromise) {
+      return this.refreshPromise;
     }
+
+    this.refreshPromise = (async () => {
+      try {
+        // Refresh token is sent automatically as httpOnly cookie (withCredentials: true)
+        // No body needed — backend reads from cookie first
+        const response = await this.client.post('/api/v1/auth/refresh', {});
+
+        // Store new access token in memory
+        this.setAccessToken(response.data.access_token);
+
+        // Update Zustand store with user data if present
+        if (response.data.user) {
+          try {
+            const { useAuthStore } = require('../stores/authStore');
+            useAuthStore.getState().setAuth(response.data.user, response.data.access_token);
+          } catch {
+            // Store not available
+          }
+        }
+
+        return true;
+      } catch (error) {
+        return false;
+      } finally {
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
   }
 
   async changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
