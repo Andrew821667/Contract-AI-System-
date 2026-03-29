@@ -14,6 +14,7 @@ from .analytics_models import AnalyticsMetricLog, AggregatedMetric
 from .ml_feedback_models import RiskPredictionFeedback, ModelTrainingBatch
 from .digital_models import DigitalContract
 from .clause_models import ExtractedClause
+from .condition_models import CompanyCondition
 
 
 def init_db():
@@ -70,5 +71,7 @@ __all__ = [
     # Digital contract models
     "DigitalContract",
     # Clause library models
-    "ExtractedClause"
+    "ExtractedClause",
+    # Company conditions models
+    "CompanyCondition"
 ]

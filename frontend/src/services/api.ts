@@ -199,6 +199,50 @@ export interface ClauseStats {
   by_risk_level: Record<string, number>;
 }
 
+// Company Conditions types
+export interface CompanyCondition {
+  id: string;
+  user_id: string;
+  category: string;
+  title: string;
+  description: string | null;
+  condition_text: string;
+  priority: number;
+  is_active: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface CompanyConditionCreate {
+  category: string;
+  title: string;
+  description?: string;
+  condition_text: string;
+  priority?: number;
+  is_active?: boolean;
+}
+
+export interface CompanyConditionUpdate {
+  category?: string;
+  title?: string;
+  description?: string;
+  condition_text?: string;
+  priority?: number;
+  is_active?: boolean;
+}
+
+export interface ConditionListResponse {
+  conditions: CompanyCondition[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface ConditionCategory {
+  value: string;
+  label: string;
+}
+
 // ML Risk Prediction types
 export interface RiskPredictionRequest {
   contract_type: string;
@@ -1113,6 +1157,40 @@ class APIClient {
       { params: { q: query, clause_type: clauseType } }
     );
     return response.data;
+  }
+
+  // ==================== Company Conditions ====================
+
+  async getConditions(params?: {
+    page?: number;
+    page_size?: number;
+    category?: string;
+    is_active?: boolean;
+  }): Promise<ConditionListResponse> {
+    const response = await this.client.get<ConditionListResponse>(
+      '/api/v1/conditions',
+      { params }
+    );
+    return response.data;
+  }
+
+  async getConditionCategories(): Promise<ConditionCategory[]> {
+    const response = await this.client.get<ConditionCategory[]>('/api/v1/conditions/categories');
+    return response.data;
+  }
+
+  async createCondition(data: CompanyConditionCreate): Promise<CompanyCondition> {
+    const response = await this.client.post<CompanyCondition>('/api/v1/conditions', data);
+    return response.data;
+  }
+
+  async updateCondition(id: string, data: CompanyConditionUpdate): Promise<CompanyCondition> {
+    const response = await this.client.put<CompanyCondition>(`/api/v1/conditions/${id}`, data);
+    return response.data;
+  }
+
+  async deleteCondition(id: string): Promise<void> {
+    await this.client.delete(`/api/v1/conditions/${id}`);
   }
 
   // ==================== ML Risk Prediction ====================
