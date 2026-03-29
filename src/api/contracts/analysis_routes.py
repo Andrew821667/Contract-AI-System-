@@ -170,7 +170,28 @@ def _analyze_contract_sync(
             except Exception as clause_err:
                 logger.warning(f"Auto clause extraction failed for {contract_id}: {clause_err}")
 
-            _set_progress(85, "Цифровизация документа...")
+            _set_progress(82, "Индексация в RAG...")
+
+            # Auto-index contract text into RAG for future analysis
+            try:
+                contract_text = parsed_xml if isinstance(parsed_xml, str) else str(parsed_xml)
+                if len(contract_text) > 100:
+                    from src.services.enhanced_rag import EnhancedRAGSystem, CHROMA_AVAILABLE
+                    if CHROMA_AVAILABLE:
+                        rag = EnhancedRAGSystem()
+                        num_chunks = rag.add_contract_with_chunking(
+                            contract_id=contract_id,
+                            contract_text=contract_text,
+                            metadata={
+                                'user_id': user_id,
+                                'status': 'analyzed',
+                            }
+                        )
+                        logger.info(f"Contract {contract_id} auto-indexed in RAG: {num_chunks} chunks")
+            except Exception as rag_err:
+                logger.warning(f"Auto RAG indexing failed for {contract_id}: {rag_err}")
+
+            _set_progress(88, "Цифровизация документа...")
 
             # Auto-digitalize after successful analysis
             try:

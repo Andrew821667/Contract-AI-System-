@@ -674,6 +674,33 @@ class ContractAnalyzerAgent(BaseAgent):
                     for r in rag_results
                 ])
 
+            # Fallback: try EnhancedRAGSystem if main rag_system has no results
+            if not rag_results:
+                try:
+                    from ..services.enhanced_rag import EnhancedRAGSystem, CHROMA_AVAILABLE
+                    if CHROMA_AVAILABLE:
+                        enhanced_rag = EnhancedRAGSystem()
+                        query = f"Договор {contract_type}: {subject}"
+                        enhanced_results = enhanced_rag.search(
+                            query=query,
+                            top_k=5,
+                            search_contracts=True,
+                            search_kb=True,
+                            search_legal=True,
+                        )
+                        if enhanced_results:
+                            rag_results = [
+                                {'text': r.content, 'metadata': r.metadata}
+                                for r in enhanced_results
+                            ]
+                            rag_context = "\n\n".join([
+                                f"[{r.source}] {r.content[:500]}"
+                                for r in enhanced_results
+                            ])
+                            logger.info(f"Enhanced RAG returned {len(enhanced_results)} results")
+                except Exception as erag_err:
+                    logger.debug(f"Enhanced RAG not available: {erag_err}")
+
             return {
                 'sources': rag_results,
                 'context': rag_context,
