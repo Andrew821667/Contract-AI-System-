@@ -7,6 +7,7 @@ services:
       POSTGRES_DB: contract_ai
       POSTGRES_USER: contract_user
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_in_production}
+    command: ["postgres", "-c", "max_connections=300"]
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -38,7 +39,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "REDISCLI_AUTH=$REDIS_PASSWORD redis-cli ping | grep PONG"]
+      test: ["CMD", "redis-cli", "-a", "changeme_in_production", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5

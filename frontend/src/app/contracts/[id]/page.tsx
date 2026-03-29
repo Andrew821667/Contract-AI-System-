@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
@@ -44,22 +44,39 @@ export default function ContractDetailPage() {
   const contractId = params.id as string
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
+  const [analysisJustStarted, setAnalysisJustStarted] = useState(false)
+
+  const [refetchMs, setRefetchMs] = useState<number | false>(false)
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['contract', contractId],
     queryFn: () => api.getContract(contractId),
+    refetchInterval: refetchMs,
   })
 
+  // Auto-refetch while analyzing; reset when done
+  const contractStatus = data?.contract?.status
+  useEffect(() => {
+    if (contractStatus === 'completed' || contractStatus === 'error') {
+      setAnalysisJustStarted(false)
+      setRefetchMs(false)
+    } else if (analysisJustStarted || contractStatus === 'analyzing' || contractStatus === 'parsing') {
+      setRefetchMs(2000)
+    }
+  }, [contractStatus, analysisJustStarted])
+
   const handleWsComplete = useCallback((msg: WSMessage) => {
+    setAnalysisJustStarted(false)
     queryClient.invalidateQueries({ queryKey: ['contract', contractId] })
   }, [queryClient, contractId])
 
   const handleWsError = useCallback((msg: WSMessage) => {
+    setAnalysisJustStarted(false)
     toast.error(msg.message || 'Ошибка анализа')
     queryClient.invalidateQueries({ queryKey: ['contract', contractId] })
   }, [queryClient, contractId])
 
-  const wsEnabled = data?.contract?.status === 'analyzing' || data?.contract?.status === 'parsing'
+  const wsEnabled = analysisJustStarted || data?.contract?.status === 'analyzing' || data?.contract?.status === 'parsing'
 
   const {
     progress: wsProgress,
@@ -74,11 +91,25 @@ export default function ContractDetailPage() {
   const analyzeMutation = useMutation({
     mutationFn: () => api.analyzeContract(contractId),
     onSuccess: () => {
-      toast.success('Анализ запущен. Обновите страницу через некоторое время.')
+      toast.success('Анализ запущен')
+      setAnalysisJustStarted(true)
       queryClient.invalidateQueries({ queryKey: ['contract', contractId] })
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Ошибка запуска анализа')
+    },
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: () => api.cancelAnalysis(contractId),
+    onSuccess: () => {
+      toast.success('Анализ остановлен')
+      setAnalysisJustStarted(false)
+      setRefetchMs(false)
+      queryClient.invalidateQueries({ queryKey: ['contract', contractId] })
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Ошибка остановки анализа')
     },
   })
 
@@ -324,7 +355,7 @@ export default function ContractDetailPage() {
         )}
 
         {/* Analyzing Progress */}
-        {(contract?.status === 'analyzing' || contract?.status === 'parsing') && (
+        {(contract?.status === 'analyzing' || contract?.status === 'parsing' || analysisJustStarted) && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -352,10 +383,20 @@ export default function ContractDetailPage() {
 
                 <p className="text-sm text-gray-500 mb-2">{wsMessage}</p>
 
-                <div className="flex items-center justify-center gap-2 text-xs text-gray-400">
+                <div className="flex items-center justify-center gap-2 text-xs text-gray-400 mb-4">
                   <span className={`inline-block w-2 h-2 rounded-full ${wsConnected ? 'bg-green-400' : 'bg-yellow-400'}`} />
                   {wsConnected ? 'Real-time обновления' : 'Polling обновления'}
                 </div>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  loading={cancelMutation.isPending}
+                  onClick={() => cancelMutation.mutate()}
+                  className="text-red-600 border-red-300 hover:bg-red-50"
+                >
+                  Остановить анализ
+                </Button>
               </div>
             </Card>
           </motion.div>

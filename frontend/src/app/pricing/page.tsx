@@ -76,7 +76,7 @@ export default function PricingPage() {
     {
       name: 'Бизнес',
       tier: 'business',
-      price: { monthly: 14990, annual: 134900 },
+      price: { monthly: 19990, annual: 179900 },
       description: 'Для компаний и корпоративных юристов',
       gradient: 'from-orange-500 to-red-600',
       popular: false,
@@ -96,7 +96,7 @@ export default function PricingPage() {
     {
       name: 'Enterprise',
       tier: 'enterprise',
-      price: { monthly: 39990, annual: 0 },
+      price: { monthly: 49990, annual: 0 },
       description: 'On-premise, безлимит, свои модели',
       gradient: 'from-stone-700 to-stone-900',
       popular: false,
@@ -125,14 +125,15 @@ export default function PricingPage() {
   ]
 
   const competitors = [
-    { name: 'Doczilla Pro', price: 'от 2 500 ₽/мес', our: 'от 1 990 ₽/мес', diff: 'Дешевле + больше функций' },
-    { name: 'PravoTech', price: 'Только по запросу', our: 'от 1 990 ₽/мес', diff: 'Прозрачные цены' },
+    { name: 'Doczilla Pro', price: 'от 2 800 ₽/мес', our: 'от 1 990 ₽/мес', diff: 'Дешевле + глубокий AI-анализ рисков' },
+    { name: 'Яндекс Нейроюрист', price: '2 000–8 500 ₽/мес', our: 'от 1 990 ₽/мес', diff: 'Больше функций за те же деньги' },
+    { name: 'PravoTech', price: 'от 500 000 ₽/год', our: 'от 19 990 ₽/мес', diff: 'В 2× дешевле, прозрачные цены' },
     { name: 'Noroots', price: 'По запросу', our: 'от 20 ₽/договор', diff: 'Понятно с первой минуты' },
-    { name: 'Ручной анализ', price: '5 000–30 000 ₽/договор', our: 'от 20 ₽/договор', diff: 'В 250–1500 раз дешевле' },
+    { name: 'Ручной анализ', price: '5 000–30 000 ₽/договор', our: 'от 20 ₽/договор', diff: 'В 250–1500× дешевле' },
   ]
 
   const getPrice = (plan: typeof plans[0]) => {
-    if (plan.isCustom) return 'от 39 990 ₽'
+    if (plan.isCustom) return 'от 49 990 ₽'
     if (plan.price.monthly === 0) return 'Бесплатно'
     const price = billingCycle === 'monthly' ? plan.price.monthly : plan.price.annual
     return `${price.toLocaleString('ru-RU')} ₽`

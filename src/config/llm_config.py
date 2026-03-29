@@ -32,7 +32,7 @@ class LLMConfig(BaseSettings):
         description="DeepSeek API base URL"
     )
     DEEPSEEK_MODEL: str = Field(
-        default="deepseek-v3",
+        default="deepseek-chat",
         description="DeepSeek model name"
     )
     DEEPSEEK_MAX_TOKENS: int = Field(
@@ -106,7 +106,7 @@ class LLMConfig(BaseSettings):
     # Smart Router Configuration
     # ========================================
     ROUTER_DEFAULT_MODEL: str = Field(
-        default="deepseek-v3",
+        default="deepseek-chat",
         description="Default model for Smart Router"
     )
     ROUTER_COMPLEXITY_THRESHOLD: float = Field(

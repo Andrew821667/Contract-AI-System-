@@ -169,7 +169,7 @@ Return ONLY the JSON, no additional text."""
             elif '```' in response:
                 response = response.split('```')[1].split('```')[0].strip()
 
-            metadata = json.loads(response)
+            metadata = json.loads(response) if isinstance(response, str) else response
             logger.info(f"Extracted metadata: {metadata.get('contract_type', 'unknown')}")
             return metadata
 

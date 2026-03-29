@@ -994,6 +994,11 @@ class APIClient {
     return response.data;
   }
 
+  async cancelAnalysis(contractId: string): Promise<any> {
+    const response = await this.client.post(`/api/v1/contracts/${contractId}/analyze/cancel`);
+    return response.data;
+  }
+
   async getContract(contractId: string): Promise<any> {
     const response = await this.client.get(`/api/v1/contracts/${contractId}`);
     return response.data;

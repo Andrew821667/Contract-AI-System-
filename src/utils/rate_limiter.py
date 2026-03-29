@@ -288,10 +288,10 @@ def get_global_rate_limiter() -> RateLimiter:
         from config.settings import settings
 
         _global_limiter = RateLimiter(
-            requests_per_minute=60,  # Консервативный лимит
-            tokens_per_minute=100000,  # gpt-4o-mini: 200k TPM, берём 50%
-            cost_per_hour=5.0,  # $5/час максимум
-            cost_per_day=50.0  # $50/день максимум
+            requests_per_minute=300,  # DeepSeek: высокий лимит
+            tokens_per_minute=1000000,  # DeepSeek: ~1M TPM
+            cost_per_hour=10.0,  # $10/час максимум
+            cost_per_day=100.0  # $100/день максимум
         )
 
     return _global_limiter

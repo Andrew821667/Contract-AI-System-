@@ -183,7 +183,7 @@ Return JSON:
         )
 
         try:
-            analysis = json.loads(response)
+            analysis = json.loads(response) if isinstance(response, str) else response
             return {
                 'semantic_description': analysis.get('semantic_description'),
                 'is_substantive': analysis.get('is_substantive', True),

@@ -22,7 +22,7 @@ from .fallback import FallbackHandler, FallbackMode
 CASCADE_LEVELS: dict[str, dict[str, Any]] = {
     "orchestration": {
         "description": "Fast/cheap — маршрутизация и планирование",
-        "preferred_models": ["deepseek-chat", "gpt-5.4-mini"],
+        "preferred_models": ["deepseek-chat", "gemini-2.5-flash"],
         "max_tokens": 2048,
         "temperature": 0.1,
     },
@@ -125,7 +125,7 @@ class CascadeManager:
 
         # cascade mode: level preferred -> all available
         chain: list[str] = []
-        all_models = ["deepseek-chat", "claude-sonnet-4-6-20250227", "gpt-5.4", "gpt-5.4-mini"]
+        all_models = ["deepseek-chat", "gemini-2.5-flash", "claude-sonnet-4-6-20250227", "gpt-5.4"]
 
         # Level preferred first
         for m in level_config.get("preferred_models", []):

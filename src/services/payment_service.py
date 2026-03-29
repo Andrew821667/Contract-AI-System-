@@ -82,7 +82,7 @@ class PaymentService:
             'can_export_pdf': True,
             'can_use_disagreements': True,
             'can_use_changes_analyzer': True,
-            'price_monthly': 14990,  # RUB
+            'price_monthly': 19990,  # RUB
             'stripe_price_id': os.getenv('STRIPE_PRICE_ENTERPRISE', 'price_enterprise')
         }
     }

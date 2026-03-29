@@ -27,10 +27,12 @@ interface UseAnalysisWebSocketReturn {
   isConnected: boolean
 }
 
-const MAX_RECONNECT_ATTEMPTS = 3
-const RECONNECT_DELAY_MS = 2000
-const POLL_INTERVAL_MS = 5000
+const POLL_INTERVAL_MS = 2000
 
+/**
+ * Hybrid hook: polling is ALWAYS active during analysis, WS is optional bonus.
+ * This guarantees progress updates even when WebSocket auth fails.
+ */
 export function useAnalysisWebSocket(
   contractId: string,
   options: UseAnalysisWebSocketOptions = {}
@@ -43,9 +45,9 @@ export function useAnalysisWebSocket(
   const [isConnected, setIsConnected] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
-  const reconnectAttemptsRef = useRef(0)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const unmountedRef = useRef(false)
+  const terminalRef = useRef(false) // true when completed/error — stop everything
 
   // Stable callback refs
   const onProgressRef = useRef(onProgress)
@@ -62,53 +64,6 @@ export function useAnalysisWebSocket(
     }
   }, [])
 
-  const startPolling = useCallback(() => {
-    stopPolling()
-    pollIntervalRef.current = setInterval(async () => {
-      try {
-        const data = await api.getContract(contractId)
-        const contract = data?.contract
-        if (!contract || unmountedRef.current) return
-
-        const progressMap: Record<string, number> = {
-          uploaded: 0,
-          parsing: 10,
-          analyzing: 50,
-          completed: 100,
-          error: 0,
-        }
-        const p = progressMap[contract.status] ?? 0
-        setProgress(p)
-        setStatus(contract.status)
-        setMessage(`Status: ${contract.status}`)
-
-        if (contract.status === 'completed') {
-          const msg: WSMessage = {
-            type: 'analysis_complete',
-            contract_id: contractId,
-            status: 'completed',
-            progress: 100,
-            message: 'Analysis completed successfully',
-          }
-          onCompleteRef.current?.(msg)
-          stopPolling()
-        } else if (contract.status === 'error') {
-          const msg: WSMessage = {
-            type: 'error',
-            contract_id: contractId,
-            status: 'error',
-            progress: 0,
-            message: 'Analysis failed',
-          }
-          onErrorRef.current?.(msg)
-          stopPolling()
-        }
-      } catch {
-        // ignore polling errors
-      }
-    }, POLL_INTERVAL_MS)
-  }, [contractId, stopPolling])
-
   const closeWs = useCallback(() => {
     if (wsRef.current) {
       wsRef.current.onopen = null
@@ -123,19 +78,66 @@ export function useAnalysisWebSocket(
     setIsConnected(false)
   }, [])
 
-  const connect = useCallback(() => {
-    if (unmountedRef.current) return
+  // ── Polling (always active during analysis) ──────────────────────
+  const startPolling = useCallback(() => {
+    if (pollIntervalRef.current) return // already polling
+    pollIntervalRef.current = setInterval(async () => {
+      if (unmountedRef.current || terminalRef.current) return
+      try {
+        const data = await api.getContract(contractId)
+        const contract = data?.contract
+        if (!contract || unmountedRef.current) return
+
+        // Use granular progress from backend meta_info
+        const statusProgress: Record<string, number> = {
+          uploaded: 0, parsing: 10, analyzing: 50, completed: 100, error: 0,
+        }
+        const p = contract.progress ?? statusProgress[contract.status] ?? 0
+        setProgress(p)
+        setStatus(contract.status)
+        setMessage(contract.progress_message || `Статус: ${contract.status}`)
+
+        if (contract.status === 'completed') {
+          terminalRef.current = true
+          const msg: WSMessage = {
+            type: 'analysis_complete', contract_id: contractId,
+            status: 'completed', progress: 100,
+            message: 'Анализ завершён',
+          }
+          onCompleteRef.current?.(msg)
+          stopPolling()
+          closeWs()
+        } else if (contract.status === 'error') {
+          terminalRef.current = true
+          const msg: WSMessage = {
+            type: 'error', contract_id: contractId,
+            status: 'error', progress: 0,
+            message: 'Ошибка анализа',
+          }
+          onErrorRef.current?.(msg)
+          stopPolling()
+          closeWs()
+        } else if (contract.status === 'uploaded') {
+          // Analysis was cancelled or never started
+          terminalRef.current = true
+          stopPolling()
+          closeWs()
+        }
+      } catch {
+        // ignore polling errors — next tick will retry
+      }
+    }, POLL_INTERVAL_MS)
+  }, [contractId, stopPolling, closeWs])
+
+  // ── WebSocket (bonus — realtime updates if auth works) ───────────
+  const connectWs = useCallback(() => {
+    if (unmountedRef.current || terminalRef.current) return
 
     const token = useAuthStore.getState().accessToken
-    if (!token) {
-      startPolling()
-      return
-    }
+    if (!token) return // no token — rely on polling only
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-    // Security: do NOT pass token as query parameter (it leaks into server logs / Referer headers).
-    // Instead, send it as the first message after connection.
-    const wsUrl = apiUrl.replace(/^http/, 'ws') + `/api/v1/ws/analysis/${contractId}`
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/ws/analysis/${contractId}`
 
     closeWs()
 
@@ -145,27 +147,32 @@ export function useAnalysisWebSocket(
 
       ws.onopen = () => {
         if (unmountedRef.current) return
-        // Authenticate by sending token as the first message
         ws.send(JSON.stringify({ type: 'auth', token }))
         setIsConnected(true)
-        reconnectAttemptsRef.current = 0
-        setMessage('Подключено к серверу')
-        stopPolling()
       }
 
       ws.onmessage = (event) => {
         if (unmountedRef.current) return
         try {
           const data: WSMessage = JSON.parse(event.data)
+
+          // Ignore auth errors from server — polling handles it
+          if (data.type === 'error' && data.message === 'Authentication failed') {
+            closeWs()
+            return
+          }
+
           setProgress(data.progress ?? 0)
           setStatus(data.status ?? '')
           setMessage(data.message ?? '')
 
           if (data.type === 'analysis_complete') {
+            terminalRef.current = true
             onCompleteRef.current?.(data)
+            stopPolling()
             closeWs()
           } else if (data.type === 'error') {
-            onErrorRef.current?.(data)
+            // Don't treat all WS errors as terminal — polling will detect real errors
             closeWs()
           } else {
             onProgressRef.current?.(data)
@@ -183,23 +190,17 @@ export function useAnalysisWebSocket(
       ws.onclose = () => {
         if (unmountedRef.current) return
         setIsConnected(false)
-
-        if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-          reconnectAttemptsRef.current++
-          setMessage(`Переподключение (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})...`)
-          setTimeout(connect, RECONNECT_DELAY_MS)
-        } else {
-          setMessage('WebSocket недоступен, используется polling...')
-          startPolling()
-        }
+        // Don't reconnect — polling is already running and will handle everything
       }
     } catch {
-      startPolling()
+      // WS failed — polling is already running
     }
-  }, [contractId, closeWs, startPolling, stopPolling])
+  }, [contractId, closeWs, stopPolling])
 
+  // ── Lifecycle ────────────────────────────────────────────────────
   useEffect(() => {
     unmountedRef.current = false
+    terminalRef.current = false
 
     if (!enabled) {
       closeWs()
@@ -207,14 +208,17 @@ export function useAnalysisWebSocket(
       return
     }
 
-    connect()
+    // Always start polling first — it's the reliable backbone
+    startPolling()
+    // Then try WS as a bonus
+    connectWs()
 
     return () => {
       unmountedRef.current = true
       closeWs()
       stopPolling()
     }
-  }, [enabled, connect, closeWs, stopPolling])
+  }, [enabled, connectWs, startPolling, closeWs, stopPolling])
 
   return { progress, status, message, isConnected }
 }

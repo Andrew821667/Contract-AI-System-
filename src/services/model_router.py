@@ -141,8 +141,8 @@ class ModelRouter:
             return self.config.ANTHROPIC_MODEL
 
         if user_mode == "testing":
-            logger.info("Testing mode: using GPT-5.4 Mini")
-            return self.config.OPENAI_MODEL_MINI
+            logger.info("Testing mode: using DeepSeek Chat")
+            return self.config.DEEPSEEK_MODEL
 
         # RAG-assisted routing (if available)
         if use_rag_context and self.rag:

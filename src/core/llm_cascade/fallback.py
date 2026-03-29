@@ -89,7 +89,7 @@ class FallbackHandler:
 
     def get_status(self) -> dict[str, Any]:
         """Статус здоровья всех моделей."""
-        all_models = ["deepseek-chat", "claude-sonnet-4-6-20250227", "gpt-5.4", "gpt-5.4-mini"]
+        all_models = ["deepseek-chat", "gemini-2.5-flash", "claude-sonnet-4-6-20250227", "gpt-5.4"]
         return {
             "models": {
                 m: {

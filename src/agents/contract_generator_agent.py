@@ -166,7 +166,7 @@ Be precise, thorough, and legally accurate."""
             elif '```' in response:
                 response = response.split('```')[1].split('```')[0].strip()
 
-            params = json.loads(response)
+            params = json.loads(response) if isinstance(response, str) else response
             logger.info(f"Parameters extracted successfully: {params.get('contract_type')}")
             return params
 
