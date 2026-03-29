@@ -46,11 +46,12 @@ class ConnectionManager:
             logger.info(f"WebSocket disconnected for contract {contract_id}")
 
     async def send_personal_message(self, message: dict, websocket: WebSocket):
-        """Send message to specific client"""
+        """Send message to specific client. Returns False if send failed (client gone)."""
         try:
             await websocket.send_json(message)
-        except Exception as e:
-            logger.error(f"Error sending personal message: {e}")
+            return True
+        except Exception:
+            return False
 
     async def broadcast_to_contract(self, message: dict, contract_id: str):
         """Broadcast message to all clients watching this contract"""
@@ -126,15 +127,21 @@ async def websocket_analysis_updates(
         pass
 
     if not ws_token:
-        await websocket.send_json({"type": "error", "message": "Authentication failed"})
-        await websocket.close(code=1008, reason="Invalid token")
+        try:
+            await websocket.send_json({"type": "error", "message": "Authentication failed"})
+            await websocket.close(code=1008, reason="Invalid token")
+        except Exception:
+            pass
         return
 
     # Authenticate using the injected DB session, then close it
     auth_info = _authenticate_ws(db, ws_token)
     if not auth_info:
-        await websocket.send_json({"type": "error", "message": "Authentication failed"})
-        await websocket.close(code=1008, reason="Invalid token")
+        try:
+            await websocket.send_json({"type": "error", "message": "Authentication failed"})
+            await websocket.close(code=1008, reason="Invalid token")
+        except Exception:
+            pass
         return
 
     # Check contract access
@@ -233,23 +240,26 @@ async def websocket_analysis_updates(
                 }
             }
 
-            await manager.send_personal_message(update_message, websocket)
+            sent_ok = await manager.send_personal_message(update_message, websocket)
+            if not sent_ok:
+                break  # Client disconnected — stop polling loop
 
             # If analysis is complete or failed, send final message
-            if current_status in ['completed', 'error']:
-                final_message = {
-                    "type": "analysis_complete" if current_status == 'completed' else "error",
-                    "contract_id": contract_id,
-                    "status": current_status,
-                    "progress": 100 if current_status == 'completed' else 0,
-                    "message": "Analysis completed successfully" if current_status == 'completed' else "Analysis failed",
-                    "data": {
-                        "analysis_id": final_analysis_id,
-                        "risks_count": final_risks,
-                        "recommendations_count": final_recs,
-                    } if current_status == 'completed' else {}
-                }
-                await manager.send_personal_message(final_message, websocket)
+            if current_status in ['completed', 'error', 'uploaded']:
+                if current_status != 'uploaded':
+                    final_message = {
+                        "type": "analysis_complete" if current_status == 'completed' else "error",
+                        "contract_id": contract_id,
+                        "status": current_status,
+                        "progress": 100 if current_status == 'completed' else 0,
+                        "message": "Анализ завершён" if current_status == 'completed' else "Ошибка анализа",
+                        "data": {
+                            "analysis_id": final_analysis_id,
+                            "risks_count": final_risks,
+                            "recommendations_count": final_recs,
+                        } if current_status == 'completed' else {}
+                    }
+                    await manager.send_personal_message(final_message, websocket)
                 break
 
     except WebSocketDisconnect:

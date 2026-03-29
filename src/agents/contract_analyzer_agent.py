@@ -82,36 +82,37 @@ class ContractAnalyzerAgent(BaseAgent):
         return "ContractAnalyzerAgent"
 
     def get_system_prompt(self) -> str:
-        return """You are a contract analysis expert specializing in Russian contract law.
+        return """Ты — эксперт по анализу договоров, специализирующийся на российском договорном праве.
+ВАЖНО: Все ответы, описания, рекомендации и комментарии давай ТОЛЬКО на русском языке.
 
-Your task is to perform deep analysis of contracts and identify:
-1. RISKS (financial, legal, operational, reputational)
-   - Severity: critical, significant, minor
-   - Probability: high, medium, low
-   - Consequences: qualitative assessment (no monetary values)
+Твоя задача — провести глубокий анализ договора и выявить:
+1. РИСКИ (финансовые, юридические, операционные, репутационные)
+   - Серьёзность: critical, significant, minor
+   - Вероятность: high, medium, low
+   - Последствия: качественная оценка (без денежных сумм)
 
-2. RECOMMENDATIONS for contract improvement
-   - Priority: critical, high, medium, low
-   - Category: legal_compliance, risk_mitigation, financial_optimization, etc.
-   - Expected benefit and implementation complexity
+2. РЕКОМЕНДАЦИИ по улучшению договора
+   - Приоритет: critical, high, medium, low
+   - Категория: legal_compliance, risk_mitigation, financial_optimization и т.д.
+   - Ожидаемая польза и сложность реализации
 
-3. SUGGESTED CHANGES (automatic via LLM)
-   - Original text and suggested replacement
-   - Issue description and reasoning
-   - Legal basis (references to laws, articles)
-   - Change type: addition, modification, deletion, clarification
+3. ПРЕДЛАГАЕМЫЕ ИЗМЕНЕНИЯ (автоматически через LLM)
+   - Оригинальный текст и предлагаемая замена
+   - Описание проблемы и обоснование
+   - Правовое основание (ссылки на законы, статьи)
+   - Тип изменения: addition, modification, deletion, clarification
 
-4. DISPUTE PROBABILITY PREDICTION
-   - Overall score and reasoning
-   - Specific clauses that may lead to disputes
+4. ПРОГНОЗ ВЕРОЯТНОСТИ СПОРОВ
+   - Общий балл и обоснование
+   - Конкретные пункты, которые могут привести к спорам
 
-5. ANNOTATIONS for document sections
-   - Type: risk, warning, info, suggestion
-   - Location via xpath
-   - Related risks/recommendations
+5. АННОТАЦИИ к разделам документа
+   - Тип: risk, warning, info, suggestion
+   - Расположение через xpath
+   - Связанные риски/рекомендации
 
-Always provide structured JSON output with all identified issues.
-Use RAG sources (precedents, legal norms, analogues) to support your analysis.
+Всегда возвращай структурированный JSON со всеми выявленными проблемами.
+Используй RAG-источники (прецеденты, правовые нормы, аналоги) для обоснования анализа.
 """
 
     def execute(self, state: Dict[str, Any]) -> AgentResult:
@@ -172,39 +173,69 @@ Use RAG sources (precedents, legal norms, analogues) to support your analysis.
             if check_counterparty:
                 counterparty_data = self.metadata_analyzer.check_counterparties(parsed_xml, metadata)
 
+            def _update_progress(pct: int, msg: str):
+                """Update progress in contract meta_info for WS/polling."""
+                try:
+                    from sqlalchemy.orm.attributes import flag_modified
+                    meta = contract.meta_info or {}
+                    if not isinstance(meta, dict):
+                        import json as _j
+                        meta = _j.loads(meta) if meta else {}
+                    meta["_progress"] = pct
+                    meta["_progress_msg"] = msg
+                    contract.meta_info = meta
+                    flag_modified(contract, "meta_info")
+                    self.db.commit()
+                    logger.debug(f"Progress updated: {pct}% — {msg}")
+                except Exception as exc:
+                    logger.warning(f"Failed to update progress: {exc}")
+                    try:
+                        self.db.rollback()
+                    except Exception:
+                        pass
+
             # 5. Analyze with RAG context
+            _update_progress(35, "Поиск контекста в базе знаний...")
             rag_context = self._get_rag_context(parsed_xml, metadata)
 
             # 6. Identify risks
+            _update_progress(40, "AI анализ: выявление рисков...")
             risks = self._identify_risks(
                 parsed_xml, structure, rag_context, counterparty_data
             )
+            _update_progress(60, f"Найдено {len(risks)} рисков, сохранение...")
             self._save_risks(analysis.id, contract.id, risks)
 
             # 7. Generate recommendations
+            _update_progress(65, "Генерация рекомендаций...")
             recommendations = self.recommendation_generator.generate_recommendations(
                 risks, rag_context
             )
+            _update_progress(72, f"Сохранение {len(recommendations)} рекомендаций...")
             self._save_recommendations(analysis.id, contract.id, recommendations)
 
             # 8. Generate suggested changes (LLM)
+            _update_progress(78, "Генерация предложений по изменениям...")
             suggested_changes = self.recommendation_generator.generate_suggested_changes(
                 parsed_xml, structure, risks, recommendations, rag_context
             )
             self._save_suggested_changes(analysis.id, contract.id, suggested_changes)
 
             # 9. Generate annotations
+            _update_progress(82, "Создание аннотаций...")
             annotations = self.recommendation_generator.generate_annotations(
                 risks, recommendations, suggested_changes
             )
             self._save_annotations(analysis.id, contract.id, annotations)
 
             # 10. Predict dispute probability
+            _update_progress(88, "Прогноз вероятности споров...")
             dispute_prediction = self.metadata_analyzer.predict_disputes(
                 parsed_xml, risks, rag_context
             )
 
             # 11. Compare with templates (if available)
+            _update_progress(92, "Сравнение с шаблонами...")
             template_comparison = self.metadata_analyzer.compare_with_templates(
                 parsed_xml, metadata.get('contract_type')
             )
@@ -1359,7 +1390,7 @@ Return ONLY valid JSON."""
                     description=rec_dict.get('description', ''),
                     reasoning=rec_dict.get('reasoning'),
                     expected_benefit=rec_dict.get('expected_benefit'),
-                    implementation_complexity=rec_dict.get('implementation_complexity')
+                    implementation_complexity=self._normalize_complexity(rec_dict.get('implementation_complexity'))
                 )
                 recommendations.append(recommendation)
 
@@ -1592,6 +1623,14 @@ Return ONLY valid JSON."""
             risk.contract_id = contract_id
             self.db.add(risk)
         self.db.commit()
+
+    @staticmethod
+    def _normalize_complexity(value: str | None) -> str | None:
+        """Normalize implementation_complexity to match DB constraint (easy/medium/hard)."""
+        if not value:
+            return None
+        mapping = {'high': 'hard', 'low': 'easy', 'simple': 'easy', 'complex': 'hard', 'difficult': 'hard'}
+        return mapping.get(value.lower(), value.lower()) if value.lower() in ('easy', 'medium', 'hard', *mapping) else 'medium'
 
     def _save_recommendations(
         self, analysis_id: str, contract_id: str, recommendations: List[ContractRecommendation]

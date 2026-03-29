@@ -37,7 +37,7 @@ class RecommendationGenerator:
             system_prompt: Optional system prompt for LLM calls
         """
         self.llm = llm_gateway
-        self.system_prompt = system_prompt or "You are a legal contract analysis expert."
+        self.system_prompt = system_prompt or "Ты — эксперт по юридическому анализу договоров. Все ответы давай ТОЛЬКО на русском языке."
 
     def generate_recommendations(
         self,
@@ -208,9 +208,9 @@ class RecommendationGenerator:
         rag_context: Dict[str, Any]
     ) -> str:
         """Build prompt for recommendations generation"""
-        prompt = "Based on identified risks, generate recommendations.\n\n"
+        prompt = "На основе выявленных рисков сгенерируй рекомендации. Все ответы ТОЛЬКО на русском языке.\n\n"
 
-        prompt += "IDENTIFIED RISKS:\n"
+        prompt += "ВЫЯВЛЕННЫЕ РИСКИ:\n"
         risks_summary = [
             {
                 'id': i,
@@ -225,29 +225,29 @@ class RecommendationGenerator:
         prompt += "\n\n"
 
         if rag_context.get('context'):
-            prompt += "LEGAL CONTEXT:\n"
+            prompt += "ПРАВОВОЙ КОНТЕКСТ:\n"
             prompt += rag_context['context'][:2000]
             prompt += "\n\n"
 
-        prompt += """Generate recommendations for each risk.
+        prompt += """Сгенерируй рекомендации для каждого риска. Все тексты ТОЛЬКО на русском языке.
 
-Return JSON:
+Верни JSON:
 {
   "recommendations": [
     {
       "category": "legal_compliance|risk_mitigation|financial_optimization|etc",
       "priority": "critical|high|medium|low",
-      "title": "Short title",
-      "description": "What to do",
-      "reasoning": "Why this recommendation",
-      "expected_benefit": "Expected outcome",
+      "title": "Краткое название рекомендации на русском",
+      "description": "Что нужно сделать (на русском)",
+      "reasoning": "Почему эта рекомендация важна (на русском)",
+      "expected_benefit": "Ожидаемый результат (на русском)",
       "related_risk_id": 0,
       "implementation_complexity": "easy|medium|hard"
     }
   ]
 }
 
-Return ONLY valid JSON."""
+Верни ТОЛЬКО валидный JSON."""
 
         return prompt
 
@@ -258,43 +258,43 @@ Return ONLY valid JSON."""
         rag_context: Dict[str, Any]
     ) -> str:
         """Build prompt for suggested changes generation"""
-        prompt = "Generate specific text changes to fix identified risks.\n\n"
+        prompt = "Сгенерируй конкретные текстовые изменения для исправления выявленных рисков. Все тексты ТОЛЬКО на русском языке.\n\n"
 
-        prompt += "RISKS:\n"
+        prompt += "РИСКИ:\n"
         prompt += json.dumps([
             {'id': i, 'title': r.title, 'description': r.description, 'xpath': r.xpath_location}
             for i, r in enumerate(risks)
         ], ensure_ascii=False, indent=2)
         prompt += "\n\n"
 
-        prompt += "CONTRACT SECTIONS:\n"
+        prompt += "РАЗДЕЛЫ ДОГОВОРА:\n"
         prompt += json.dumps(structure.get('sections', [])[:20], ensure_ascii=False, indent=2)
         prompt += "\n\n"
 
         if rag_context.get('context'):
-            prompt += "LEGAL REFERENCES:\n"
+            prompt += "ПРАВОВЫЕ ССЫЛКИ:\n"
             prompt += rag_context['context'][:2000]
             prompt += "\n\n"
 
-        prompt += """For each risk that can be fixed by changing contract text, provide:
+        prompt += """Для каждого риска, который можно исправить изменением текста договора, предложи конкретные правки. Все тексты ТОЛЬКО на русском языке.
 
 {
   "changes": [
     {
-      "xpath_location": "XPath to section",
-      "section_name": "Section name",
-      "original_text": "Current problematic text",
-      "suggested_text": "Improved version",
+      "xpath_location": "XPath к разделу",
+      "section_name": "Название раздела",
+      "original_text": "Текущий проблемный текст",
+      "suggested_text": "Улучшенная версия",
       "change_type": "addition|modification|deletion|clarification",
-      "issue": "What's the problem",
-      "reasoning": "Why this change fixes it",
-      "legal_basis": "Reference to law/article if applicable",
+      "issue": "В чём проблема (на русском)",
+      "reasoning": "Почему это изменение решает проблему (на русском)",
+      "legal_basis": "Ссылка на закон/статью если применимо",
       "related_risk_id": 0
     }
   ]
 }
 
-Return ONLY valid JSON."""
+Верни ТОЛЬКО валидный JSON."""
 
         return prompt
 

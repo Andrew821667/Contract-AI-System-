@@ -57,15 +57,15 @@ class Settings(BaseSettings):
 
     # LLM Settings
     llm_temperature: float = 0.0
-    llm_max_tokens: int = 4000
+    llm_max_tokens: int = 8000
     llm_timeout: int = 120
 
     # Test Mode - экономия токенов
     llm_test_mode: bool = False  # Переключатель: True = тестовый режим, False = продакшн
 
     # Two-level analysis system
-    llm_quick_model: str = "gpt-5.4-mini"  # Быстрый анализ (Уровень 1)
-    llm_deep_model: str = "gpt-5.4"        # Глубокий анализ (Уровень 2)
+    llm_quick_model: str = "deepseek-chat"  # Быстрый анализ (Уровень 1)
+    llm_deep_model: str = "deepseek-chat"   # Глубокий анализ (Уровень 2)
 
     # Batch analysis settings (оптимизировано для производительности)
     llm_batch_size: int = 15  # Сколько пунктов анализировать в одном запросе (оптимально для gpt-4o-mini)

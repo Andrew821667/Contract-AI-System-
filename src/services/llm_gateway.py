@@ -153,7 +153,7 @@ class LLMGateway:
             cache_entry = LLMCache(
                 prompt_hash=cache_key,
                 provider=self.provider,
-                model=self.model or "gpt-5.4-mini",
+                model=self.model or "deepseek-chat",
                 prompt=prompt[:5000],  # Truncate prompt for storage (cache key uses full hash)
                 system_prompt=system_prompt[:2000] if system_prompt else None,
                 response=response if isinstance(response, str) else json.dumps(response),  # Store full response
@@ -337,8 +337,8 @@ class LLMGateway:
 
     def _estimate_cost(self, tokens: int) -> float:
         """Estimate cost based on tokens (rough approximation)"""
-        model = self.model or "gpt-5.4-mini"
-        pricing = settings.llm_pricing.get(model, {"input": 0.15, "output": 0.60})
+        model = self.model or "deepseek-chat"
+        pricing = settings.llm_pricing.get(model, {"input": 0.28, "output": 0.42})
 
         # Assume 60% input, 40% output split
         input_tokens = int(tokens * 0.6)
@@ -379,26 +379,35 @@ class LLMGateway:
         # Используем модель из self.model, если она указана
         if self.model:
             model = self.model
-        elif self.provider == "openai":
-            model = "gpt-5.4-mini"  # По умолчанию бюджетная модель
-        elif self.provider == "perplexity":
-            model = "llama-3.1-sonar-large-128k-online"
         elif self.provider == "deepseek":
             model = "deepseek-chat"
+        elif self.provider == "openai":
+            model = "gpt-5.4-mini"
+        elif self.provider == "perplexity":
+            model = "llama-3.1-sonar-large-128k-online"
         elif self.provider == "ollama":
             model = getattr(settings, 'ollama_model', 'qwen3:7b')
         elif self.provider == "google":
             model = "gemini-2.5-flash"
         else:
-            model = "gpt-5.4-mini"
+            model = "deepseek-chat"
 
-        logger.info(f"🔍 DEBUG: API call with model = {model}, self.model = {self.model}")
-        response = self._client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
+        # Safety: if using deepseek provider, force deepseek model
+        if self.provider == "deepseek" and model not in ("deepseek-chat", "deepseek-reasoner"):
+            logger.warning(f"Model {model} is not a DeepSeek model, forcing deepseek-chat")
+            model = "deepseek-chat"
+
+        logger.info(f"🔍 DEBUG: API call with model = {model}, self.model = {self.model}, prompt_len={sum(len(m['content']) for m in messages)}")
+        try:
+            response = self._client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+        except Exception as e:
+            logger.error(f"API call failed: {type(e).__name__}: {e}")
+            raise
 
         # Отслеживаем использование токенов
         if hasattr(response, 'usage'):
@@ -486,14 +495,14 @@ class LLMGateway:
 
             model = self.model
             if not model:
-                if self.provider == "openai":
+                if self.provider == "deepseek":
+                    model = "deepseek-chat"
+                elif self.provider == "openai":
                     model = "gpt-5.4-mini"
                 elif self.provider == "perplexity":
                     model = "llama-3.1-sonar-large-128k-online"
-                elif self.provider == "deepseek":
-                    model = "deepseek-chat"
                 else:
-                    model = "gpt-5.4-mini"
+                    model = "deepseek-chat"
 
             response = self._client.chat.completions.create(
                 model=model,
@@ -533,7 +542,7 @@ class LLMGateway:
             Словарь с информацией о токенах и стоимости
         """
         # Определяем текущую модель
-        current_model = self.model or "gpt-5.4-mini"
+        current_model = self.model or "deepseek-chat"
         
         # Получаем цены из настроек
         pricing = settings.llm_pricing.get(current_model, {"input": 0, "output": 0})

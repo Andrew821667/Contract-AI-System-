@@ -94,7 +94,7 @@ class RiskAnalyzer:
             try:
                 return batch_idx, self._analyze_batch(batch_clauses, rag_context)
             except Exception as e:
-                logger.error(f"[Parallel] Batch {batch_idx + 1} failed: {e}")
+                logger.error(f"[Parallel] Batch {batch_idx + 1} failed: {e}", exc_info=True)
                 return batch_idx, [self._get_fallback_analysis(c) for c in batch_clauses]
 
         with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
@@ -132,15 +132,15 @@ class RiskAnalyzer:
         try:
             prompt = self._build_detailed_analysis_prompt(clause, rag_context)
 
-            response = self.llm.generate(
+            response = self.llm.call(
                 prompt=prompt,
-                system_prompt="You are a contract risk analysis expert. Provide detailed risk assessment in JSON format.",
+                system_prompt="Ты — эксперт по анализу рисков в договорах. Все ответы давай ТОЛЬКО на русском языке. Формат ответа — JSON.",
                 temperature=0.0,
                 max_tokens=2000,
                 response_format="json"
             )
 
-            analysis = json.loads(response)
+            analysis = json.loads(response) if isinstance(response, str) else response
             analysis['clause_id'] = clause['id']
             analysis['clause_xpath'] = clause.get('xpath', '')
 
@@ -212,16 +212,16 @@ class RiskAnalyzer:
         """Analyze batch of clauses"""
         prompt = self._build_batch_analysis_prompt(clauses, rag_context)
 
-        response = self.llm.generate(
+        response = self.llm.call(
             prompt=prompt,
-            system_prompt="You are a contract analysis expert. Analyze clauses and identify risks in JSON format.",
+            system_prompt="Ты — эксперт по анализу договоров. Анализируй пункты и выявляй риски. Все ответы давай ТОЛЬКО на русском языке. Формат ответа — JSON.",
             temperature=0.0,
             max_tokens=4000,
             response_format="json"
         )
 
         try:
-            result = json.loads(response)
+            result = json.loads(response) if isinstance(response, str) else response
             analyses = result.get('analyses', [])
 
             # Ensure we have analysis for each clause
@@ -233,7 +233,7 @@ class RiskAnalyzer:
 
             return analyses
 
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, AttributeError) as e:
             logger.error(f"JSON decode failed: {e}")
             return [self._get_fallback_analysis(c) for c in clauses]
 
@@ -253,15 +253,17 @@ class RiskAnalyzer:
             rag_info = f"\n\nRELEVANT PRECEDENTS:\n{rag_context.get('precedents', '')[:500]}"
             rag_info += f"\n\nLEGAL NORMS:\n{rag_context.get('norms', '')[:500]}"
 
-        prompt = f"""Analyze these contract clauses for risks:
+        prompt = f"""Проанализируй следующие пункты договора на наличие рисков:
 
 {clauses_text}{rag_info}
 
-For each clause, identify:
-1. Risks (type, severity, probability, impact, mitigation)
-2. Issues (legal compliance, clarity, fairness)
+Для каждого пункта определи:
+1. Риски (тип, серьёзность, вероятность, последствия, меры снижения)
+2. Проблемы (соответствие законодательству, ясность формулировок, справедливость условий)
 
-Return JSON:
+ВАЖНО: Все описания, последствия и рекомендации пиши ТОЛЬКО на русском языке.
+
+Верни JSON:
 {{
   "analyses": [
     {{
@@ -271,13 +273,15 @@ Return JSON:
           "type": "financial|legal|operational|reputational",
           "severity": "critical|high|medium|low",
           "probability": "high|medium|low",
-          "description": "...",
-          "impact": "...",
-          "mitigation": "...",
-          "legal_basis": "..."
+          "title": "Краткое название риска на русском",
+          "description": "Подробное описание риска на русском",
+          "consequences": "Возможные последствия на русском",
+          "impact": "Анализ влияния на русском",
+          "mitigation": "Стратегия снижения риска на русском",
+          "legal_basis": "Ссылки на законы/статьи"
         }}
       ],
-      "issues": ["..."],
+      "issues": ["описание проблемы на русском"],
       "overall_risk_level": "critical|high|medium|low"
     }}
   ]
@@ -295,29 +299,33 @@ Return JSON:
         if rag_context:
             rag_info = f"\n\nRELEVANT CONTEXT:\nPrecedents: {rag_context.get('precedents', '')[:300]}\nNorms: {rag_context.get('norms', '')[:300]}"
 
-        prompt = f"""Perform deep analysis of this contract clause:
+        prompt = f"""Выполни глубокий анализ этого пункта договора:
 
-CLAUSE: {clause['title']}
-TYPE: {clause['type']}
-TEXT: {clause['text']}{rag_info}
+ПУНКТ: {clause['title']}
+ТИП: {clause['type']}
+ТЕКСТ: {clause['text']}{rag_info}
 
-Provide comprehensive risk assessment in JSON:
+ВАЖНО: Все описания пиши ТОЛЬКО на русском языке.
+
+Верни подробную оценку рисков в JSON:
 {{
   "risks": [
     {{
       "type": "financial|legal|operational|reputational",
       "severity": "critical|high|medium|low",
       "probability": "high|medium|low",
-      "description": "Detailed risk description",
-      "impact": "Detailed impact analysis",
-      "mitigation": "Mitigation strategy",
-      "legal_basis": "Relevant laws/articles",
-      "precedents": ["Case 1", "Case 2"]
+      "title": "Краткое название риска на русском",
+      "description": "Подробное описание риска на русском",
+      "consequences": "Возможные последствия на русском",
+      "impact": "Детальный анализ влияния на русском",
+      "mitigation": "Стратегия снижения риска на русском",
+      "legal_basis": "Ссылки на законы/статьи",
+      "precedents": ["Прецедент 1", "Прецедент 2"]
     }}
   ],
-  "strengths": ["..."],
-  "weaknesses": ["..."],
-  "recommendations": ["..."],
+  "strengths": ["сильные стороны на русском"],
+  "weaknesses": ["слабые стороны на русском"],
+  "recommendations": ["рекомендации на русском"],
   "overall_risk_level": "critical|high|medium|low"
 }}"""
 

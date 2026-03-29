@@ -36,6 +36,11 @@ _ALLOWED_ORIGINS = {
     "http://localhost:3000",
     "http://localhost:8090",
 }
+# Trusted origin suffixes (e.g. ngrok tunnels)
+_ALLOWED_ORIGIN_SUFFIXES = [
+    ".ngrok-free.dev",
+    ".ngrok.io",
+]
 # Extend from settings if available
 try:
     from config.settings import settings as _settings
@@ -43,6 +48,16 @@ try:
         _ALLOWED_ORIGINS.update(_settings.allowed_origins)
 except Exception:
     pass
+
+
+def _is_origin_allowed(origin: str) -> bool:
+    """Check if origin is in allowed list or matches trusted suffix."""
+    if origin in _ALLOWED_ORIGINS:
+        return True
+    from urllib.parse import urlparse
+    parsed = urlparse(origin)
+    hostname = parsed.hostname or ""
+    return any(hostname.endswith(suffix) for suffix in _ALLOWED_ORIGIN_SUFFIXES)
 
 
 def _check_csrf(request: Request) -> None:
@@ -55,7 +70,7 @@ def _check_csrf(request: Request) -> None:
     """
     origin = request.headers.get("origin")
     if origin:
-        if origin not in _ALLOWED_ORIGINS:
+        if not _is_origin_allowed(origin):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="CSRF: origin not allowed",
@@ -68,7 +83,7 @@ def _check_csrf(request: Request) -> None:
         from urllib.parse import urlparse
         parsed = urlparse(referer)
         referer_origin = f"{parsed.scheme}://{parsed.netloc}"
-        if referer_origin not in _ALLOWED_ORIGINS:
+        if not _is_origin_allowed(referer_origin):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="CSRF: referer not allowed",

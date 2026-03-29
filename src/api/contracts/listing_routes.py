@@ -17,6 +17,7 @@ from loguru import logger
 from src.models.database import get_async_db, AsyncSessionLocal
 from src.models import Contract, AnalysisResult
 from src.models.auth_models import User
+from src.models.analyzer_models import ContractRisk, ContractRecommendation
 from src.api.dependencies import get_current_user
 
 from .schemas import ContractListResponse
@@ -226,20 +227,80 @@ async def get_contract_details(
         else:
             analysis = db.execute(analysis_stmt).scalar_one_or_none()
 
+        # Load risks from contract_risks table
+        risks_data = []
+        if analysis:
+            risks_stmt = select(ContractRisk).where(ContractRisk.contract_id == contract_id)
+            if _ASYNC_MODE:
+                risks_result = await db.execute(risks_stmt)
+                risks_rows = risks_result.scalars().all()
+            else:
+                risks_rows = db.execute(risks_stmt).scalars().all()
+            risks_data = [
+                {
+                    'id': r.id,
+                    'risk_type': r.risk_type,
+                    'severity': r.severity,
+                    'probability': r.probability,
+                    'title': r.title,
+                    'description': r.description,
+                    'consequences': r.consequences,
+                    'section_name': r.section_name,
+                    'rag_sources': r.rag_sources,
+                }
+                for r in risks_rows
+            ]
+
+        # Load recommendations from contract_recommendations table
+        recs_data = []
+        if analysis:
+            recs_stmt = select(ContractRecommendation).where(ContractRecommendation.contract_id == contract_id)
+            if _ASYNC_MODE:
+                recs_result = await db.execute(recs_stmt)
+                recs_rows = recs_result.scalars().all()
+            else:
+                recs_rows = db.execute(recs_stmt).scalars().all()
+            recs_data = [
+                {
+                    'id': r.id,
+                    'category': r.category,
+                    'priority': r.priority,
+                    'title': r.title,
+                    'description': r.description,
+                    'reasoning': r.reasoning,
+                    'expected_benefit': r.expected_benefit,
+                    'implementation_complexity': r.implementation_complexity,
+                }
+                for r in recs_rows
+            ]
+
+        # Extract granular progress from meta_info
+        _progress = None
+        _progress_msg = None
+        try:
+            meta = contract.meta_info
+            if meta and isinstance(meta, dict):
+                _progress = meta.get("_progress")
+                _progress_msg = meta.get("_progress_msg")
+        except Exception:
+            pass
+
         return {
             'contract': {
                 'id': contract.id,
                 'file_name': contract.file_name,
                 'status': contract.status,
                 'contract_type': contract.contract_type,
+                'progress': _progress,
+                'progress_message': _progress_msg,
                 'created_at': contract.created_at.isoformat() if contract.created_at else None,
                 'updated_at': contract.updated_at.isoformat() if contract.updated_at else None,
             },
             'analysis': {
                 'id': analysis.id if analysis else None,
-                'risks': analysis.risks_by_category if analysis else [],
-                'recommendations': analysis.recommendations if analysis else [],
-                'status': analysis.status if analysis else None
+                'risks': risks_data,
+                'recommendations': recs_data,
+                'version': analysis.version if analysis else None
             } if analysis else None
         }
 

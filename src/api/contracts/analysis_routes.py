@@ -40,7 +40,23 @@ async def analyze_contract_background(
     check_counterparty: bool,
     counterparty_tin: Optional[str],
 ):
-    """Background task for contract analysis — creates its own DB session"""
+    """Background task for contract analysis — runs in thread to avoid blocking event loop"""
+    import asyncio
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(
+        None,
+        _analyze_contract_sync,
+        contract_id, user_id, check_counterparty, counterparty_tin
+    )
+
+
+def _analyze_contract_sync(
+    contract_id: str,
+    user_id: str,
+    check_counterparty: bool,
+    counterparty_tin: Optional[str],
+):
+    """Synchronous contract analysis — runs in a thread pool executor"""
     from src.models.database import SessionLocal
     db = SessionLocal()
     try:
@@ -52,6 +68,7 @@ async def analyze_contract_background(
         def _set_progress(pct: int, msg: str = ""):
             """Update analysis_progress on contract for WebSocket to pick up."""
             try:
+                from sqlalchemy.orm.attributes import flag_modified
                 meta = contract.meta_info or {}
                 if not isinstance(meta, dict):
                     import json
@@ -59,9 +76,13 @@ async def analyze_contract_background(
                 meta["_progress"] = pct
                 meta["_progress_msg"] = msg
                 contract.meta_info = meta
+                flag_modified(contract, "meta_info")
                 db.commit()
             except Exception:
-                pass
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
 
         # Update status to parsing
         contract.status = 'parsing'
@@ -80,6 +101,12 @@ async def analyze_contract_background(
             return
 
         _set_progress(20, "Документ распознан, подготовка к анализу...")
+
+        # Check if cancelled
+        db.refresh(contract)
+        if contract.status == 'uploaded':
+            logger.info(f"Analysis cancelled for contract {contract_id} (during parsing)")
+            return
 
         # Update status — parsed XML is passed directly to the agent, NOT stored in DB
         # (storing multi-MB XML in a JSON column degrades DB performance)
@@ -100,6 +127,12 @@ async def analyze_contract_background(
                 'uploaded_by': user_id
             }
         })
+
+        # Check if cancelled during analysis
+        db.refresh(contract)
+        if contract.status == 'uploaded':
+            logger.info(f"Analysis cancelled for contract {contract_id} (during analysis)")
+            return
 
         if result.success:
             _set_progress(70, "Анализ завершён, извлечение клауз...")
@@ -211,6 +244,18 @@ async def analyze_contract(
                 detail="Анализ уже запущен для этого договора"
             )
 
+        # Per-user concurrent analysis limit (max 3)
+        MAX_CONCURRENT_PER_USER = 3
+        active_count = db.query(Contract).filter(
+            Contract.assigned_to == current_user.id,
+            Contract.status.in_(['analyzing', 'parsing'])
+        ).count()
+        if active_count >= MAX_CONCURRENT_PER_USER:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Максимум {MAX_CONCURRENT_PER_USER} одновременных анализа. Дождитесь завершения текущих."
+            )
+
         # Start background task
         background_tasks.add_task(
             analyze_contract_background,
@@ -243,6 +288,29 @@ async def analyze_contract(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error starting analysis"
         )
+
+
+@router.post("/{contract_id}/analyze/cancel")
+async def cancel_analysis(
+    contract_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Cancel a running analysis by resetting contract status to uploaded."""
+    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    if contract.assigned_to != current_user.id and current_user.role != 'admin':
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    if contract.status not in ('analyzing', 'parsing'):
+        raise HTTPException(status_code=409, detail="Анализ не запущен")
+
+    contract.status = 'uploaded'
+    db.commit()
+    logger.info(f"Analysis cancelled for contract {contract_id} by user {current_user.id}")
+    return {"ok": True, "message": "Анализ остановлен"}
 
 
 @router.post("/{contract_id}/analyze/stream")
