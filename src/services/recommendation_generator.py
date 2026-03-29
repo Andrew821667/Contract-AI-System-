@@ -42,7 +42,8 @@ class RecommendationGenerator:
     def generate_recommendations(
         self,
         risks: List[ContractRisk],
-        rag_context: Dict[str, Any]
+        rag_context: Dict[str, Any],
+        company_conditions: list = None
     ) -> List[ContractRecommendation]:
         """
         Generate recommendations based on identified risks
@@ -50,12 +51,13 @@ class RecommendationGenerator:
         Args:
             risks: List of identified contract risks
             rag_context: RAG context with legal references
+            company_conditions: Optional list of user's company standard conditions
 
         Returns:
             List of ContractRecommendation objects
         """
         try:
-            prompt = self._build_recommendations_prompt(risks, rag_context)
+            prompt = self._build_recommendations_prompt(risks, rag_context, company_conditions)
 
             response = self.llm.call(
                 prompt=prompt,
@@ -205,7 +207,8 @@ class RecommendationGenerator:
     def _build_recommendations_prompt(
         self,
         risks: List[ContractRisk],
-        rag_context: Dict[str, Any]
+        rag_context: Dict[str, Any],
+        company_conditions: list = None
     ) -> str:
         """Build prompt for recommendations generation"""
         prompt = "На основе выявленных рисков сгенерируй рекомендации. Все ответы ТОЛЬКО на русском языке.\n\n"
@@ -229,19 +232,28 @@ class RecommendationGenerator:
             prompt += rag_context['context'][:2000]
             prompt += "\n\n"
 
+        # Add company conditions context
+        if company_conditions:
+            prompt += "СТАНДАРТЫ КОМПАНИИ (обязательные условия заказчика):\n"
+            for cond in company_conditions:
+                priority_label = {1: 'низкий', 2: 'средний', 3: 'высокий'}.get(cond.get('priority', 1), '')
+                prompt += f"- [{cond.get('category', 'other')}] (приоритет: {priority_label}) {cond.get('title', '')}: {cond.get('condition_text', '')[:200]}\n"
+            prompt += "\nВАЖНО: Если какой-то риск связан с несоответствием стандартам компании, рекомендация ДОЛЖНА содержать конкретное указание, как привести пункт в соответствие со стандартом.\n\n"
+
         prompt += """Сгенерируй рекомендации для каждого риска. Все тексты ТОЛЬКО на русском языке.
 
 Верни JSON:
 {
   "recommendations": [
     {
-      "category": "legal_compliance|risk_mitigation|financial_optimization|etc",
+      "category": "legal_compliance|risk_mitigation|financial_optimization|company_standard|etc",
       "priority": "critical|high|medium|low",
       "title": "Краткое название рекомендации на русском",
       "description": "Что нужно сделать (на русском)",
       "reasoning": "Почему эта рекомендация важна (на русском)",
       "expected_benefit": "Ожидаемый результат (на русском)",
       "related_risk_id": 0,
+      "related_condition": "Название стандарта компании (если применимо)",
       "implementation_complexity": "easy|medium|hard"
     }
   ]

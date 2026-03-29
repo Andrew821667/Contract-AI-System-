@@ -140,6 +140,7 @@ class ContractAnalyzerAgent(BaseAgent):
             parsed_xml = state.get('parsed_xml')
             metadata = state.get('metadata', {})
             check_counterparty = state.get('check_counterparty', False)
+            company_conditions = state.get('company_conditions', [])
 
             if not contract_id or not parsed_xml:
                 return AgentResult(
@@ -201,7 +202,8 @@ class ContractAnalyzerAgent(BaseAgent):
             # 6. Identify risks
             _update_progress(40, "AI анализ: выявление рисков...")
             risks = self._identify_risks(
-                parsed_xml, structure, rag_context, counterparty_data
+                parsed_xml, structure, rag_context, counterparty_data,
+                company_conditions=company_conditions
             )
             _update_progress(60, f"Найдено {len(risks)} рисков, сохранение...")
             self._save_risks(analysis.id, contract.id, risks)
@@ -209,7 +211,7 @@ class ContractAnalyzerAgent(BaseAgent):
             # 7. Generate recommendations
             _update_progress(65, "Генерация рекомендаций...")
             recommendations = self.recommendation_generator.generate_recommendations(
-                risks, rag_context
+                risks, rag_context, company_conditions=company_conditions
             )
             _update_progress(72, f"Сохранение {len(recommendations)} рекомендаций...")
             self._save_recommendations(analysis.id, contract.id, recommendations)
@@ -1160,7 +1162,8 @@ JSON формат:
         xml_content: str,
         structure: Dict[str, Any],
         rag_context: Dict[str, Any],
-        counterparty_data: Optional[Dict[str, Any]]
+        counterparty_data: Optional[Dict[str, Any]],
+        company_conditions: Optional[List[Dict[str, Any]]] = None
     ) -> List[ContractRisk]:
         """Identify contract risks using detailed clause-by-clause LLM analysis"""
         logger.info("🔍 DEBUG: _identify_risks called (NEW method with batching)")
@@ -1188,7 +1191,8 @@ JSON формат:
             all_clause_analyses = self.risk_analyzer.analyze_clauses_batch(
                 clauses[:max_clauses],
                 rag_context,
-                batch_size=batch_size
+                batch_size=batch_size,
+                company_conditions=company_conditions
             )
             logger.info(f"🔍 DEBUG: Batch analysis returned {len(all_clause_analyses)} results")
 

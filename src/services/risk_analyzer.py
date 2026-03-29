@@ -37,7 +37,8 @@ class RiskAnalyzer:
         clauses: List[Dict[str, Any]],
         rag_context: Optional[Dict[str, Any]] = None,
         batch_size: int = 15,
-        parallel: bool = True
+        parallel: bool = True,
+        company_conditions: Optional[List[Dict[str, Any]]] = None
     ) -> List[Dict[str, Any]]:
         """
         Analyze multiple clauses in batches (optionally parallel).
@@ -47,6 +48,7 @@ class RiskAnalyzer:
             rag_context: Optional RAG context with precedents/norms
             batch_size: Clauses per batch (default: 15)
             parallel: Run batches in parallel using threads (default: True)
+            company_conditions: Optional list of user's company standard conditions
 
         Returns:
             List of clause analyses with risks
@@ -63,14 +65,14 @@ class RiskAnalyzer:
         max_concurrent = getattr(settings, 'max_concurrent_batches', 3)
 
         if parallel and len(batches) > 1:
-            return self._analyze_batches_parallel(batches, rag_context, max_concurrent)
+            return self._analyze_batches_parallel(batches, rag_context, max_concurrent, company_conditions)
 
         # Sequential fallback
         all_analyses: List[Dict[str, Any]] = []
         for i, batch in batches:
             logger.info(f"Analyzing batch {i//batch_size + 1}: clauses {i+1}-{i+len(batch)}")
             try:
-                batch_analyses = self._analyze_batch(batch, rag_context)
+                batch_analyses = self._analyze_batch(batch, rag_context, company_conditions)
                 all_analyses.extend(batch_analyses)
             except Exception as e:
                 logger.error(f"Batch analysis failed: {e}")
@@ -82,7 +84,8 @@ class RiskAnalyzer:
         self,
         batches: List,
         rag_context: Optional[Dict[str, Any]],
-        max_concurrent: int = 3
+        max_concurrent: int = 3,
+        company_conditions: Optional[List[Dict[str, Any]]] = None
     ) -> List[Dict[str, Any]]:
         """Run batch analyses in parallel using ThreadPoolExecutor"""
         from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -92,7 +95,7 @@ class RiskAnalyzer:
         def process_batch(batch_idx, batch_clauses):
             logger.info(f"[Parallel] Analyzing batch {batch_idx + 1}: {len(batch_clauses)} clauses")
             try:
-                return batch_idx, self._analyze_batch(batch_clauses, rag_context)
+                return batch_idx, self._analyze_batch(batch_clauses, rag_context, company_conditions)
             except Exception as e:
                 logger.error(f"[Parallel] Batch {batch_idx + 1} failed: {e}", exc_info=True)
                 return batch_idx, [self._get_fallback_analysis(c) for c in batch_clauses]
@@ -207,10 +210,11 @@ class RiskAnalyzer:
     def _analyze_batch(
         self,
         clauses: List[Dict[str, Any]],
-        rag_context: Optional[Dict[str, Any]]
+        rag_context: Optional[Dict[str, Any]],
+        company_conditions: Optional[List[Dict[str, Any]]] = None
     ) -> List[Dict[str, Any]]:
         """Analyze batch of clauses"""
-        prompt = self._build_batch_analysis_prompt(clauses, rag_context)
+        prompt = self._build_batch_analysis_prompt(clauses, rag_context, company_conditions)
 
         response = self.llm.call(
             prompt=prompt,
@@ -240,7 +244,8 @@ class RiskAnalyzer:
     def _build_batch_analysis_prompt(
         self,
         clauses: List[Dict[str, Any]],
-        rag_context: Optional[Dict[str, Any]]
+        rag_context: Optional[Dict[str, Any]],
+        company_conditions: Optional[List[Dict[str, Any]]] = None
     ) -> str:
         """Build prompt for batch analysis"""
         clauses_text = "\n\n".join([
@@ -253,13 +258,34 @@ class RiskAnalyzer:
             rag_info = f"\n\nRELEVANT PRECEDENTS:\n{rag_context.get('precedents', '')[:500]}"
             rag_info += f"\n\nLEGAL NORMS:\n{rag_context.get('norms', '')[:500]}"
 
+        # Build company conditions block
+        conditions_block = ""
+        if company_conditions:
+            conditions_lines = []
+            for cond in company_conditions:
+                priority_label = {1: 'низкий', 2: 'средний', 3: 'высокий'}.get(cond.get('priority', 1), '')
+                conditions_lines.append(
+                    f"- [{cond.get('category', 'other')}] (приоритет: {priority_label}) "
+                    f"{cond.get('title', '')}: {cond.get('condition_text', '')[:300]}"
+                )
+            conditions_block = f"""
+
+СТАНДАРТЫ КОМПАНИИ (условия, которым должен соответствовать договор):
+{chr(10).join(conditions_lines)}
+
+ВАЖНО: Для каждого пункта договора проверь соответствие стандартам компании.
+Если пункт НЕ соответствует стандарту — обязательно укажи это как риск типа "compliance"
+с описанием, какому именно стандарту он не соответствует и что нужно изменить.
+Если пункт соответствует стандарту — укажи это в поле "compliance_status"."""
+
         prompt = f"""Проанализируй следующие пункты договора на наличие рисков:
 
-{clauses_text}{rag_info}
+{clauses_text}{rag_info}{conditions_block}
 
 Для каждого пункта определи:
 1. Риски (тип, серьёзность, вероятность, последствия, меры снижения)
 2. Проблемы (соответствие законодательству, ясность формулировок, справедливость условий)
+3. Соответствие стандартам компании (если стандарты заданы)
 
 ВАЖНО: Все описания, последствия и рекомендации пиши ТОЛЬКО на русском языке.
 
@@ -270,7 +296,7 @@ class RiskAnalyzer:
       "clause_number": 1,
       "risks": [
         {{
-          "type": "financial|legal|operational|reputational",
+          "type": "financial|legal|operational|reputational|compliance",
           "severity": "critical|high|medium|low",
           "probability": "high|medium|low",
           "title": "Краткое название риска на русском",
@@ -278,10 +304,12 @@ class RiskAnalyzer:
           "consequences": "Возможные последствия на русском",
           "impact": "Анализ влияния на русском",
           "mitigation": "Стратегия снижения риска на русском",
-          "legal_basis": "Ссылки на законы/статьи"
+          "legal_basis": "Ссылки на законы/статьи",
+          "related_condition": "Название стандарта компании (если применимо)"
         }}
       ],
       "issues": ["описание проблемы на русском"],
+      "compliance_status": "compliant|non_compliant|partial|not_applicable",
       "overall_risk_level": "critical|high|medium|low"
     }}
   ]

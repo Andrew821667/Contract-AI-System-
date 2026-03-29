@@ -58,12 +58,26 @@ def _analyze_contract_sync(
 ):
     """Synchronous contract analysis — runs in a thread pool executor"""
     from src.models.database import SessionLocal
+    from src.models.condition_models import CompanyCondition
     db = SessionLocal()
     try:
         contract = db.query(Contract).filter(Contract.id == contract_id).first()
         if not contract:
             logger.error(f"Contract {contract_id} not found for background analysis")
             return
+
+        # Load user's active company conditions for analysis
+        company_conditions = []
+        try:
+            conditions = db.query(CompanyCondition).filter(
+                CompanyCondition.user_id == user_id,
+                CompanyCondition.is_active == True,
+            ).order_by(CompanyCondition.priority.desc()).all()
+            company_conditions = [c.to_dict() for c in conditions]
+            if company_conditions:
+                logger.info(f"Loaded {len(company_conditions)} company conditions for user {user_id}")
+        except Exception as cond_err:
+            logger.warning(f"Failed to load company conditions: {cond_err}")
 
         def _set_progress(pct: int, msg: str = ""):
             """Update analysis_progress on contract for WebSocket to pick up."""
@@ -122,6 +136,7 @@ def _analyze_contract_sync(
             'contract_id': contract_id,
             'parsed_xml': parsed_xml,
             'check_counterparty': check_counterparty,
+            'company_conditions': company_conditions,
             'metadata': {
                 'counterparty_tin': counterparty_tin,
                 'uploaded_by': user_id
