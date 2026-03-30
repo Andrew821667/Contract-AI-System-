@@ -147,7 +147,7 @@ class ClauseExtractor:
                         'path': current_path,
                         'xpath': current_path,
                         'title': ClauseExtractor._extract_clause_title(element.tag, full_text),
-                        'text': full_text[:2000],  # Limit to 2000 chars
+                        'text': full_text,  # Full clause text — models have 128K+ context
                         'type': clause_type,
                         'level': level,
                         'attributes': dict(element.attrib),
@@ -220,7 +220,7 @@ class ClauseExtractor:
                             'path': f"/clauses/clause[{idx}]",
                             'xpath': f"/clauses/clause[{idx}]",
                             'title': title,
-                            'text': full_text[:2000],
+                            'text': full_text,
                             'type': clause_elem.get('type', ClauseExtractor._determine_clause_type(title, full_text)),
                             'level': 0,
                             'attributes': dict(clause_elem.attrib),
@@ -257,7 +257,7 @@ class ClauseExtractor:
                         'path': f"/{elem.tag}",
                         'xpath': f"/{elem.tag}",
                         'title': ClauseExtractor._extract_clause_title(elem.tag, full_text),
-                        'text': full_text[:2000],
+                        'text': full_text,
                         'type': ClauseExtractor._determine_clause_type(elem.tag, full_text),
                         'level': 0,
                         'attributes': dict(elem.attrib),

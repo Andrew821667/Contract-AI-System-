@@ -32,6 +32,147 @@ class RiskAnalyzer:
         """
         self.llm = llm_gateway
 
+    def analyze_full_text(
+        self,
+        plain_text: str,
+        rag_context: Optional[Dict[str, Any]] = None,
+        company_conditions: Optional[List[Dict[str, Any]]] = None
+    ) -> Dict[str, Any]:
+        """
+        Полнотекстовый анализ договора — отправка ВСЕГО текста в LLM.
+
+        Проход 1 двухпроходного анализа: LLM видит весь документ целиком
+        и может выявить системные риски, взаимосвязи между разделами,
+        пропущенные условия и баланс прав/обязанностей.
+
+        Args:
+            plain_text: Полный текст договора (plain text, без XML-тегов)
+            rag_context: Контекст из RAG (прецеденты, нормы)
+            company_conditions: Стандарты компании пользователя
+
+        Returns:
+            Dict с ключами: risks, compliance_issues, missing_clauses,
+            balance_assessment, dispute_forecast, summary
+        """
+        estimated_tokens = len(plain_text) // 4
+        logger.info(f"Full-text analysis: {len(plain_text)} chars (~{estimated_tokens} tokens)")
+
+        # RAG context
+        rag_block = ""
+        if rag_context:
+            precedents = rag_context.get('precedents', '')
+            norms = rag_context.get('norms', '')
+            if precedents:
+                rag_block += f"\n\nСУДЕБНАЯ ПРАКТИКА И ПРЕЦЕДЕНТЫ:\n{precedents[:5000]}"
+            if norms:
+                rag_block += f"\n\nПРАВОВЫЕ НОРМЫ:\n{norms[:5000]}"
+
+        # Company conditions
+        conditions_block = ""
+        if company_conditions:
+            conditions_lines = []
+            for cond in company_conditions:
+                priority_label = {1: 'низкий', 2: 'средний', 3: 'высокий'}.get(cond.get('priority', 1), '')
+                conditions_lines.append(
+                    f"- [{cond.get('category', 'other')}] (приоритет: {priority_label}) "
+                    f"{cond.get('title', '')}: {cond.get('condition_text', '')}"
+                )
+            conditions_block = f"\n\nСТАНДАРТЫ КОМПАНИИ:\n" + "\n".join(conditions_lines)
+
+        prompt = f"""Проведи ПОЛНЫЙ КОМПЛЕКСНЫЙ анализ договора.
+Ты видишь ВЕСЬ текст — анализируй взаимосвязи между разделами, баланс прав и обязанностей,
+пропущенные условия и системные риски.
+
+ПОЛНЫЙ ТЕКСТ ДОГОВОРА:
+{plain_text}{rag_block}{conditions_block}
+
+ЗАДАЧА:
+1. Выяви ВСЕ риски с учётом взаимосвязей между разделами
+2. Проверь соответствие стандартам компании (если заданы)
+3. Оцени баланс прав и обязанностей сторон
+4. Найди ПРОПУЩЕННЫЕ важные условия (которых нет, но должны быть)
+5. Дай прогноз вероятности споров с обоснованием
+6. Составь краткое резюме договора (2-3 предложения)
+
+ВАЖНО: Все ответы ТОЛЬКО на русском языке.
+
+Верни JSON:
+{{
+  "risks": [
+    {{
+      "type": "financial|legal|operational|reputational|compliance",
+      "severity": "critical|high|medium|low",
+      "probability": "high|medium|low",
+      "title": "Краткое название риска",
+      "description": "Подробное описание",
+      "consequences": "Возможные последствия",
+      "mitigation": "Стратегия снижения",
+      "legal_basis": "Ссылки на законы/статьи",
+      "related_sections": ["Раздел 1", "Раздел 5"],
+      "related_condition": "Название стандарта (если применимо)"
+    }}
+  ],
+  "compliance_issues": [
+    {{
+      "condition_title": "Название стандарта",
+      "status": "non_compliant|partial",
+      "description": "В чём несоответствие",
+      "recommendation": "Что изменить"
+    }}
+  ],
+  "missing_clauses": [
+    {{
+      "title": "Название пропущенного условия",
+      "importance": "critical|high|medium",
+      "description": "Почему это важно",
+      "suggested_text": "Рекомендуемая формулировка"
+    }}
+  ],
+  "balance_assessment": {{
+    "score": 0.0-1.0,
+    "description": "Оценка баланса прав и обязанностей",
+    "party_advantages": {{"сторона": "описание преимуществ"}}
+  }},
+  "dispute_forecast": {{
+    "probability": 0.0-1.0,
+    "key_triggers": ["потенциальные причины споров"],
+    "recommendation": "Как снизить вероятность"
+  }},
+  "summary": "Краткое резюме договора (2-3 предложения)"
+}}"""
+
+        try:
+            response = self.llm.call(
+                prompt=prompt,
+                system_prompt=(
+                    "Ты — ведущий эксперт по анализу договоров, специализирующийся на российском праве. "
+                    "Ты проводишь глубокий комплексный анализ ВСЕГО текста договора. "
+                    "Все ответы давай ТОЛЬКО на русском языке. Формат — JSON."
+                ),
+                temperature=0.0,
+                max_tokens=16000,
+                response_format="json"
+            )
+
+            result = json.loads(response) if isinstance(response, str) else response
+            logger.info(
+                f"Full-text analysis complete: {len(result.get('risks', []))} risks, "
+                f"{len(result.get('missing_clauses', []))} missing clauses"
+            )
+            return result
+
+        except Exception as e:
+            logger.error(f"Full-text analysis failed: {e}")
+            return {
+                'risks': [],
+                'compliance_issues': [],
+                'missing_clauses': [],
+                'balance_assessment': {'score': 0.5, 'description': 'Анализ не удался'},
+                'dispute_forecast': {'probability': 0.5, 'key_triggers': [], 'recommendation': ''},
+                'summary': 'Полнотекстовый анализ не удался, используются результаты поклаузульного анализа.',
+                'error': str(e)
+            }
+
     def analyze_clauses_batch(
         self,
         clauses: List[Dict[str, Any]],
@@ -175,7 +316,7 @@ class RiskAnalyzer:
                 try:
                     # Map risk_type to allowed values
                     raw_type = risk_data.get('risk_type', risk_data.get('type', 'legal'))
-                    allowed_types = ('financial', 'legal', 'operational', 'reputational')
+                    allowed_types = ('financial', 'legal', 'operational', 'reputational', 'compliance')
                     risk_type = raw_type if raw_type in allowed_types else 'legal'
 
                     # Map severity to allowed values
@@ -220,7 +361,7 @@ class RiskAnalyzer:
             prompt=prompt,
             system_prompt="Ты — эксперт по анализу договоров. Анализируй пункты и выявляй риски. Все ответы давай ТОЛЬКО на русском языке. Формат ответа — JSON.",
             temperature=0.0,
-            max_tokens=4000,
+            max_tokens=8000,
             response_format="json"
         )
 
@@ -249,14 +390,18 @@ class RiskAnalyzer:
     ) -> str:
         """Build prompt for batch analysis"""
         clauses_text = "\n\n".join([
-            f"CLAUSE {i+1} [{clause['type']}]:\nTitle: {clause['title']}\nText: {clause['text'][:500]}"
+            f"ПУНКТ {i+1} [{clause['type']}]:\nЗаголовок: {clause['title']}\nТекст: {clause['text']}"
             for i, clause in enumerate(clauses)
         ])
 
         rag_info = ""
         if rag_context:
-            rag_info = f"\n\nRELEVANT PRECEDENTS:\n{rag_context.get('precedents', '')[:500]}"
-            rag_info += f"\n\nLEGAL NORMS:\n{rag_context.get('norms', '')[:500]}"
+            precedents = rag_context.get('precedents', '')
+            norms = rag_context.get('norms', '')
+            if precedents:
+                rag_info += f"\n\nСУДЕБНАЯ ПРАКТИКА:\n{precedents[:3000]}"
+            if norms:
+                rag_info += f"\n\nПРАВОВЫЕ НОРМЫ:\n{norms[:3000]}"
 
         # Build company conditions block
         conditions_block = ""
@@ -325,7 +470,12 @@ class RiskAnalyzer:
         """Build prompt for detailed single clause analysis"""
         rag_info = ""
         if rag_context:
-            rag_info = f"\n\nRELEVANT CONTEXT:\nPrecedents: {rag_context.get('precedents', '')[:300]}\nNorms: {rag_context.get('norms', '')[:300]}"
+            precedents = rag_context.get('precedents', '')
+            norms = rag_context.get('norms', '')
+            if precedents:
+                rag_info += f"\n\nСУДЕБНАЯ ПРАКТИКА:\n{precedents[:3000]}"
+            if norms:
+                rag_info += f"\n\nПРАВОВЫЕ НОРМЫ:\n{norms[:3000]}"
 
         prompt = f"""Выполни глубокий анализ этого пункта договора:
 

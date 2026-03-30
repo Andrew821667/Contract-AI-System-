@@ -177,6 +177,32 @@ Contract-AI-System = hierarchical LLM cascade
 - [x] Статистика: всего клаузул, договоров, распределение по типам
 - [x] Просмотр анализа LLM, рисков, рекомендаций для каждой клаузулы
 
+### Этап 6 — Полнотекстовый анализ договоров ✅
+**Цель:** Отправлять ВЕСЬ текст договора в LLM, а не обрезанные клаузулы по 500 символов.
+
+- [x] Убраны все обрезки текста: `clause_extractor.py` (3 места `[:2000]`), `risk_analyzer.py` (`[:500]`), `recommendation_generator.py` (`[:200]`)
+- [x] Новый метод `analyze_full_text()` в `RiskAnalyzer` — полнотекстовый анализ всего договора
+- [x] Двухпроходный анализ в `_identify_risks()`: Pass 1 (full-text) + Pass 2 (clause-level)
+- [x] `_extract_plain_text()` — извлечение чистого текста из XML
+- [x] Обновлён legacy метод: `xml[:5000]` → полный plain text
+- [x] `llm_max_tokens`: 8000→16000, `llm_timeout`: 120→180, `llm_batch_size`: 15→10
+- [x] Новая настройка `full_text_analysis: bool = True`
+
+### Этап 7 — Bridge API (интеграция с Legal AI Platform) ✅
+**Цель:** API для бесшовной интеграции с legal-ai-platform и Telegram-ботом.
+
+- [x] `src/api/bridge/routes.py` — 6 эндпоинтов:
+  - `GET /status` — режим работы (online/busy/offline), capabilities
+  - `POST /analyze` — приём файла на анализ, создание пользователя, запуск анализа
+  - `GET /progress/{job_id}` — прогресс анализа (percent, message)
+  - `GET /result/{job_id}` — полные результаты (risks, recommendations, changes)
+  - `GET /result/{job_id}/summary` — краткий markdown-отчёт для Telegram (до 4096 символов)
+  - `GET /result/{job_id}/pdf` — PDF-отчёт
+- [x] SSO-эндпоинт `POST /api/v1/auth/sso-token` — обмен platform-токена на JWT
+- [x] Аутентификация через `X-Bridge-Secret` header (shared secret)
+- [x] `BRIDGE_SECRET` в config/settings.py и docker-compose.yml
+- [x] Роутер подключён в `src/main.py`
+
 ---
 
 ## ЗАВЕРШЁННЫЕ ЗАДАЧИ (2026-03-29)

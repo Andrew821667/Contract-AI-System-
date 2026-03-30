@@ -1051,3 +1051,110 @@ async def get_analytics(
     analytics = auth_service.get_analytics()
 
     return analytics
+
+
+# ─── SSO — Bridge Token Exchange ─────────────────────────────
+
+BRIDGE_SECRET = os.getenv("BRIDGE_SECRET", "")
+
+
+class SSOTokenRequest(BaseModel):
+    """Запрос на обмен platform-токена на JWT Contract-AI-System."""
+    platform_token: str = Field(description="Shared secret от Legal AI Platform")
+    user_email: EmailStr = Field(description="Email пользователя")
+    user_name: str = Field(default="", description="Имя пользователя")
+    org_id: str = Field(default="", description="ID организации")
+    role: str = Field(default="demo", description="Роль пользователя")
+
+
+class SSOTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user_id: str
+    user_email: str
+    user_name: str
+    redirect_url: str = Field(default="", description="URL для редиректа в кабинет")
+
+
+@router.post("/sso-token", response_model=SSOTokenResponse)
+async def sso_token_exchange(
+    request: SSOTokenRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    SSO Token Exchange — обмен platform-токена на JWT.
+
+    Используется Legal AI Platform для бесшовного входа пользователей
+    в Contract-AI-System без отдельной регистрации/логина.
+
+    **Flow:**
+    1. Legal AI Platform авторизует пользователя на своей стороне
+    2. Отправляет сюда platform_token (shared secret) + данные пользователя
+    3. Contract-AI-System валидирует secret, создаёт/находит пользователя
+    4. Возвращает JWT-токен для доступа к API Contract-AI-System
+    """
+    # Валидация bridge secret
+    if not BRIDGE_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="SSO not configured (BRIDGE_SECRET not set)"
+        )
+
+    if request.platform_token != BRIDGE_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid platform token"
+        )
+
+    # Найти или создать пользователя
+    user = db.query(User).filter(User.email == request.user_email).first()
+
+    if not user:
+        import uuid
+        # Маппинг ролей platform → contract-ai
+        role_map = {
+            "admin": "admin",
+            "lawyer": "lawyer",
+            "senior_lawyer": "senior_lawyer",
+            "user": "demo",
+            "demo": "demo",
+        }
+        mapped_role = role_map.get(request.role, "demo")
+
+        user = User(
+            id=str(uuid.uuid4()),
+            email=request.user_email,
+            name=request.user_name or request.user_email.split("@")[0],
+            role=mapped_role,
+            hashed_password="sso_bridge_user",  # Не может войти по паролю
+            is_active=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        logger.info(f"SSO: created user {request.user_email} (role={mapped_role})")
+    else:
+        # Обновляем имя если пришло новое
+        if request.user_name and request.user_name != user.name:
+            user.name = request.user_name
+            db.commit()
+
+    # Генерируем JWT
+    auth_service = AuthService(db)
+    access_token = auth_service.create_access_token(
+        user_id=user.id,
+        additional_claims={"source": "sso_bridge", "org_id": request.org_id}
+    )
+
+    # URL для редиректа (фронтенд Contract-AI-System)
+    ngrok_url = os.getenv("NGROK_URL", "")
+    base_url = ngrok_url if ngrok_url else "http://localhost:8090"
+    redirect_url = f"{base_url}/auth/sso?token={access_token}"
+
+    return SSOTokenResponse(
+        access_token=access_token,
+        user_id=user.id,
+        user_email=user.email,
+        user_name=user.name,
+        redirect_url=redirect_url,
+    )

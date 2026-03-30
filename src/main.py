@@ -49,6 +49,7 @@ from src.api.clauses import router as clauses_router
 from src.api.conditions import router as conditions_router
 from src.api.analytics.routes import router as analytics_router
 from src.api.ml import router as ml_router
+from src.api.bridge import router as bridge_router
 
 
 @asynccontextmanager
@@ -205,6 +206,7 @@ app.include_router(clauses_router, prefix="/api/v1/clauses", tags=["Clause Libra
 app.include_router(conditions_router, prefix="/api/v1/conditions", tags=["Company Conditions"])
 app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["Analytics"])
 app.include_router(ml_router, prefix="/api/v1/ml", tags=["ML & AI"])
+app.include_router(bridge_router, prefix="/api/v1/bridge", tags=["Bridge Integration"])
 
 # API v2 — AI-collaborative OS
 from src.api.v2.router import v2_router

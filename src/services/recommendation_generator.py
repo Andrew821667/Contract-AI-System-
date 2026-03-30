@@ -229,7 +229,7 @@ class RecommendationGenerator:
 
         if rag_context.get('context'):
             prompt += "ПРАВОВОЙ КОНТЕКСТ:\n"
-            prompt += rag_context['context'][:2000]
+            prompt += rag_context['context'][:5000]
             prompt += "\n\n"
 
         # Add company conditions context
@@ -237,7 +237,7 @@ class RecommendationGenerator:
             prompt += "СТАНДАРТЫ КОМПАНИИ (обязательные условия заказчика):\n"
             for cond in company_conditions:
                 priority_label = {1: 'низкий', 2: 'средний', 3: 'высокий'}.get(cond.get('priority', 1), '')
-                prompt += f"- [{cond.get('category', 'other')}] (приоритет: {priority_label}) {cond.get('title', '')}: {cond.get('condition_text', '')[:200]}\n"
+                prompt += f"- [{cond.get('category', 'other')}] (приоритет: {priority_label}) {cond.get('title', '')}: {cond.get('condition_text', '')}\n"
             prompt += "\nВАЖНО: Если какой-то риск связан с несоответствием стандартам компании, рекомендация ДОЛЖНА содержать конкретное указание, как привести пункт в соответствие со стандартом.\n\n"
 
         prompt += """Сгенерируй рекомендации для каждого риска. Все тексты ТОЛЬКО на русском языке.
@@ -285,7 +285,7 @@ class RecommendationGenerator:
 
         if rag_context.get('context'):
             prompt += "ПРАВОВЫЕ ССЫЛКИ:\n"
-            prompt += rag_context['context'][:2000]
+            prompt += rag_context['context'][:5000]
             prompt += "\n\n"
 
         prompt += """Для каждого риска, который можно исправить изменением текста договора, предложи конкретные правки. Все тексты ТОЛЬКО на русском языке.

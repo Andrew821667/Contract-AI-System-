@@ -263,6 +263,7 @@ class ContractAnalyzerAgent(BaseAgent):
 
             # Get detailed clause analyses if available
             clause_analyses = getattr(self, '_clause_analyses', [])
+            full_text_analysis = getattr(self, '_full_text_analysis', None)
 
             return AgentResult(
                 success=True,
@@ -276,7 +277,8 @@ class ContractAnalyzerAgent(BaseAgent):
                     'dispute_prediction': dispute_prediction,
                     'template_comparison': template_comparison,
                     'counterparty_data': counterparty_data,
-                    'clause_analyses': clause_analyses,  # Детальный анализ каждого пункта
+                    'clause_analyses': clause_analyses,
+                    'full_text_analysis': full_text_analysis,  # Полнотекстовый анализ (missing clauses, balance, etc.)
                     'disclaimer': 'Результаты AI-анализа носят рекомендательный характер и не являются юридической консультацией. Перед принятием решений проконсультируйтесь с квалифицированным юристом.'
                 },
                 next_action=next_action,
@@ -1184,6 +1186,28 @@ JSON формат:
             'improvement_priority': 'medium'
         }
 
+    def _extract_plain_text(self, xml_content: str) -> str:
+        """
+        Извлечь чистый текст из XML (без тегов).
+        Используется для полнотекстового анализа.
+        """
+        try:
+            tree = parse_xml_safely(xml_content)
+            # Собираем весь текст из всех элементов
+            all_text = ''.join(tree.itertext())
+            # Убираем множественные пробелы и пустые строки
+            import re
+            all_text = re.sub(r'\n\s*\n', '\n\n', all_text)
+            all_text = re.sub(r' +', ' ', all_text)
+            return all_text.strip()
+        except Exception as e:
+            logger.warning(f"XML plain text extraction failed: {e}, using raw content")
+            # Fallback: убираем XML-теги регулярками
+            import re
+            text = re.sub(r'<[^>]+>', ' ', xml_content)
+            text = re.sub(r'\s+', ' ', text)
+            return text.strip()
+
     def _identify_risks(
         self,
         xml_content: str,
@@ -1192,57 +1216,104 @@ JSON формат:
         counterparty_data: Optional[Dict[str, Any]],
         company_conditions: Optional[List[Dict[str, Any]]] = None
     ) -> List[ContractRisk]:
-        """Identify contract risks using detailed clause-by-clause LLM analysis"""
-        logger.info("🔍 DEBUG: _identify_risks called (NEW method with batching)")
-        try:
-            logger.info("Starting detailed clause-by-clause risk identification...")
+        """
+        Двухпроходный анализ рисков:
+        Проход 1 — полнотекстовый анализ всего договора (системные риски, взаимосвязи)
+        Проход 2 — детальный поклаузульный анализ (конкретика по каждому пункту)
+        """
+        from config.settings import settings
 
-            # Извлекаем все пункты договора с помощью ClauseExtractor
+        all_risks: List[ContractRisk] = []
+        full_text_result = None
+
+        # ═══ ПРОХОД 1: Полнотекстовый анализ ═══
+        if getattr(settings, 'full_text_analysis', True):
+            try:
+                plain_text = self._extract_plain_text(xml_content)
+                logger.info(f"Pass 1: Full-text analysis — {len(plain_text)} chars (~{len(plain_text)//4} tokens)")
+
+                full_text_result = self.risk_analyzer.analyze_full_text(
+                    plain_text=plain_text,
+                    rag_context=rag_context,
+                    company_conditions=company_conditions
+                )
+
+                # Извлекаем риски из полнотекстового анализа
+                ft_risks_data = full_text_result.get('risks', [])
+                for risk_data in ft_risks_data:
+                    try:
+                        raw_type = risk_data.get('type', risk_data.get('risk_type', 'legal'))
+                        allowed_types = ('financial', 'legal', 'operational', 'reputational', 'compliance')
+                        risk_type = raw_type if raw_type in allowed_types else 'legal'
+
+                        raw_severity = risk_data.get('severity', 'medium')
+                        allowed_severities = ('critical', 'high', 'significant', 'medium', 'minor', 'low')
+                        severity = raw_severity if raw_severity in allowed_severities else 'medium'
+
+                        risk = ContractRisk(
+                            risk_type=risk_type,
+                            severity=severity,
+                            probability=risk_data.get('probability', 'medium'),
+                            title=risk_data.get('title', 'Риск')[:255],
+                            description=risk_data.get('description', ''),
+                            consequences=risk_data.get('consequences', ''),
+                            xpath_location='',
+                            section_name='full_text_analysis',
+                        )
+                        all_risks.append(risk)
+                    except Exception as e:
+                        logger.error(f"Failed to create full-text risk: {e}")
+
+                # Сохраняем дополнительные данные (missing_clauses, balance, etc.)
+                self._full_text_analysis = full_text_result
+                logger.info(f"Pass 1 complete: {len(all_risks)} risks from full-text analysis")
+
+            except Exception as e:
+                logger.error(f"Full-text analysis failed, continuing with clause-level: {e}")
+
+        # ═══ ПРОХОД 2: Поклаузульный анализ ═══
+        try:
+            logger.info("Pass 2: Clause-level analysis...")
             clauses = self.clause_extractor.extract_clauses(xml_content)
             logger.info(f"Extracted {len(clauses)} clauses for analysis")
 
             if not clauses:
-                logger.warning("No clauses extracted, falling back to legacy method")
-                return self._identify_risks_legacy(xml_content, structure, rag_context, counterparty_data)
+                logger.warning("No clauses extracted, skipping clause-level analysis")
+                if not all_risks:
+                    return self._identify_risks_legacy(xml_content, structure, rag_context, counterparty_data)
+                return all_risks
 
-            # BATCH ANALYSIS - анализируем пунктами по batch_size за раз
-            # Ограничиваем количество пунктов в тестовом режиме
-            from config.settings import settings
             max_clauses = settings.llm_test_max_clauses if settings.llm_test_mode else len(clauses)
             batch_size = settings.llm_batch_size
 
             logger.info(f"Will analyze {min(len(clauses), max_clauses)} clauses in batches of {batch_size}")
 
-            # Используем RiskAnalyzer для батч-анализа
-            logger.info(f"🔍 DEBUG: Starting batch analysis for {len(clauses[:max_clauses])} clauses")
             all_clause_analyses = self.risk_analyzer.analyze_clauses_batch(
                 clauses[:max_clauses],
                 rag_context,
                 batch_size=batch_size,
                 company_conditions=company_conditions
             )
-            logger.info(f"🔍 DEBUG: Batch analysis returned {len(all_clause_analyses)} results")
+            logger.info(f"Pass 2: Batch analysis returned {len(all_clause_analyses)} results")
 
-            # Извлекаем риски из анализов с помощью RiskAnalyzer
-            logger.info(f"🔍 DEBUG: Extracting risks from {len(all_clause_analyses)} clause analyses")
-            all_risks = self.risk_analyzer.identify_risks(all_clause_analyses)
+            # Извлекаем риски из поклаузульного анализа
+            clause_risks = self.risk_analyzer.identify_risks(all_clause_analyses)
+            all_risks.extend(clause_risks)
 
             # Сохраняем детальные анализы пунктов для отображения в UI
             if all_clause_analyses:
                 self._store_clause_analyses(all_clause_analyses)
-                logger.info(f"Detailed analysis complete: {len(all_risks)} risks from {len(all_clause_analyses)} clauses")
-            else:
-                logger.warning("No clauses were successfully analyzed, using legacy method")
-                return self._identify_risks_legacy(xml_content, structure, rag_context, counterparty_data)
-
-            return all_risks
+                logger.info(f"Pass 2 complete: {len(clause_risks)} clause-level risks")
 
         except Exception as e:
-            logger.error(f"Detailed risk identification failed: {e}")
+            logger.error(f"Clause-level analysis failed: {e}")
             import traceback
             traceback.print_exc()
-            # Fallback to legacy method
-            return self._identify_risks_legacy(xml_content, structure, rag_context, counterparty_data)
+            if not all_risks:
+                return self._identify_risks_legacy(xml_content, structure, rag_context, counterparty_data)
+
+        logger.info(f"Total risks (both passes): {len(all_risks)}")
+        return all_risks
 
     def _store_clause_analyses(self, analyses: List[Dict[str, Any]]):
         """Store detailed clause analyses for UI display"""
@@ -1307,18 +1378,20 @@ JSON формат:
         counterparty_data: Optional[Dict[str, Any]]
     ) -> str:
         """Build prompt for risk identification"""
-        prompt = "Analyze this contract and identify ALL risks.\n\n"
-        prompt += "<user_document>\n"
-        prompt += xml_content[:5000]
-        prompt += "\n</user_document>\n\n"
+        # Извлекаем чистый текст для полноценного анализа
+        plain_text = self._extract_plain_text(xml_content)
+        prompt = "Проанализируй этот договор и выяви ВСЕ риски. Все ответы ТОЛЬКО на русском языке.\n\n"
+        prompt += "ПОЛНЫЙ ТЕКСТ ДОГОВОРА:\n"
+        prompt += plain_text
+        prompt += "\n\n"
 
-        prompt += "CONTRACT STRUCTURE:\n"
+        prompt += "СТРУКТУРА ДОГОВОРА:\n"
         prompt += json.dumps(structure, ensure_ascii=False, indent=2)
         prompt += "\n\n"
 
         if rag_context.get('context'):
-            prompt += "RELEVANT LEGAL CONTEXT (from RAG):\n"
-            prompt += rag_context['context'][:3000]
+            prompt += "ПРАВОВОЙ КОНТЕКСТ (из базы знаний):\n"
+            prompt += rag_context['context'][:5000]
             prompt += "\n\n"
 
         if counterparty_data:

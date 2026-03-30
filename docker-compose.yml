@@ -83,6 +83,7 @@ services:
       - SEED_VIP_PASSWORD=${SEED_VIP_PASSWORD:-}
       - SEED_DEMO_PASSWORD=${SEED_DEMO_PASSWORD:-}
       - FORCE_RESEED=${FORCE_RESEED:-false}
+      - BRIDGE_SECRET=${BRIDGE_SECRET:-}
     volumes:
       - ./data:/app/data
       - ./chroma_data:/app/chroma_data

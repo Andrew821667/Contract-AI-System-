@@ -55,10 +55,16 @@ class Settings(BaseSettings):
     # Redis (optional)
     redis_url: str = "redis://localhost:6379/0"
 
+    # Bridge Integration (Legal AI Platform)
+    bridge_secret: str = ""  # Shared secret для bridge API и SSO
+
     # LLM Settings
     llm_temperature: float = 0.0
-    llm_max_tokens: int = 8000
-    llm_timeout: int = 120
+    llm_max_tokens: int = 16000  # Увеличено для полнотекстового анализа
+    llm_timeout: int = 180  # Увеличено: full-text анализ может занять больше времени
+
+    # Full-text analysis — отправка всего текста договора в LLM
+    full_text_analysis: bool = True  # True = двухпроходный (full-text + clause-level), False = только clause-level
 
     # Test Mode - экономия токенов
     llm_test_mode: bool = False  # Переключатель: True = тестовый режим, False = продакшн
@@ -67,8 +73,8 @@ class Settings(BaseSettings):
     llm_quick_model: str = "deepseek-chat"  # Быстрый анализ (Уровень 1)
     llm_deep_model: str = "deepseek-chat"   # Глубокий анализ (Уровень 2)
 
-    # Batch analysis settings (оптимизировано для производительности)
-    llm_batch_size: int = 15  # Сколько пунктов анализировать в одном запросе (оптимально для gpt-4o-mini)
+    # Batch analysis settings
+    llm_batch_size: int = 10  # Пунктов в одном батче (уменьшено — клаузулы теперь полные)
     max_concurrent_batches: int = 3  # Макс. параллельных батчей при анализе
 
     # Token limits for test mode
