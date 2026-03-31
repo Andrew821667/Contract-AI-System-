@@ -614,8 +614,40 @@ class ContractAnalyzerAgent(BaseAgent):
             logger.error(f"Counterparty check failed: {e}")
             return {}
 
+    def _has_available_rag_sources(self) -> bool:
+        """Return True only when there is indexed knowledge to search."""
+        try:
+            from pathlib import Path
+            from ..models.database import LegalDocument
+
+            indexed_docs = self.db.query(LegalDocument).filter(
+                LegalDocument.status == 'active',
+                LegalDocument.is_vectorized.is_(True)
+            ).count()
+            if indexed_docs > 0:
+                return True
+
+            enhanced_dir = Path("data/chroma_enhanced")
+            kb_file = enhanced_dir / "company_kb.json"
+            if kb_file.exists() and kb_file.stat().st_size > 2:
+                return True
+
+            if enhanced_dir.exists():
+                for child in enhanced_dir.iterdir():
+                    if child.name.startswith("."):
+                        continue
+                    if child.is_file() and child.stat().st_size > 0:
+                        return True
+                    if child.is_dir():
+                        return True
+
+            return False
+        except Exception as exc:
+            logger.warning(f"Failed to inspect knowledge base state: {exc}")
+            return False
+
     def _get_rag_context(
-        self, xml_content: str, metadata: Dict[str, Any]
+        self, xml_content: str, metadata: Dict[str, Any], kb_available: Optional[bool] = None
     ) -> Dict[str, Any]:
         """Get RAG context (analogues + precedents + legal norms) + contract summary"""
         try:
@@ -655,6 +687,17 @@ class ContractAnalyzerAgent(BaseAgent):
                 'subject': subject,
                 'party_count': len(parties)
             }
+
+            if kb_available is None:
+                kb_available = self._has_available_rag_sources()
+
+            if not kb_available:
+                logger.info("Knowledge base is empty, skipping RAG lookup")
+                return {
+                    'sources': [],
+                    'context': '',
+                    'contract_summary': contract_summary
+                }
 
             # Search RAG if available
             rag_results = []
@@ -1061,7 +1104,7 @@ JSON формат:
   "risks": [
     {{
       "risk_type": "financial|legal|operational|reputational",
-      "severity": "critical|significant|minor",
+      "severity": "critical|high|medium|low",
       "probability": "high|medium|low",
       "title": "краткое название риска",
       "description": "ПОДРОБНОЕ описание риска",
@@ -1618,7 +1661,37 @@ Return ONLY valid JSON."""
 
     def _save_risks(self, analysis_id: str, contract_id: str, risks: List[ContractRisk]):
         """Save risks to database"""
+        allowed_types = {'financial', 'legal', 'operational', 'reputational', 'general'}
+        type_mapping = {
+            'compliance': 'legal',
+            'regulatory': 'legal',
+            'contractual': 'legal',
+            'process': 'operational',
+            'business': 'operational',
+        }
+        allowed_severities = {'critical', 'high', 'medium', 'low', 'info'}
+        severity_mapping = {
+            'significant': 'high',
+            'minor': 'low',
+            'warning': 'medium',
+        }
+        allowed_probabilities = {'high', 'medium', 'low'}
+
         for risk in risks:
+            raw_type = (risk.risk_type or 'legal').lower()
+            normalized_type = type_mapping.get(raw_type, raw_type)
+            if normalized_type not in allowed_types:
+                normalized_type = 'legal'
+            risk.risk_type = normalized_type
+
+            raw_severity = (risk.severity or 'medium').lower()
+            normalized_severity = severity_mapping.get(raw_severity, raw_severity)
+            if normalized_severity not in allowed_severities:
+                normalized_severity = 'medium'
+            risk.severity = normalized_severity
+
+            raw_probability = (risk.probability or 'medium').lower()
+            risk.probability = raw_probability if raw_probability in allowed_probabilities else 'medium'
             risk.analysis_id = analysis_id
             risk.contract_id = contract_id
             self.db.add(risk)
