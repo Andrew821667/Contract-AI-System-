@@ -411,7 +411,7 @@ export default function AdminPage() {
                       type="text"
                       value={cpClauseType}
                       onChange={(e) => setCpClauseType(e.target.value)}
-                      placeholder="Тип клаузы (financial, liability, termination...)"
+                      placeholder="Тип условия (financial, liability, termination...)"
                       className="w-full bg-gray-50 dark:bg-dark-900 border border-gray-200 dark:border-dark-700 rounded-lg px-3 py-1.5 text-xs mb-2 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary-500"
                     />
                     <select

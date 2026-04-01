@@ -19,7 +19,7 @@ const nextConfig = {
     ]
   },
 
-  // Environment variables
+  // Environment variables — empty = relative URLs (works with any proxy/tunnel)
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '',
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || '',

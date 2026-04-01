@@ -57,6 +57,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: contract-ai-backend
+    command: ["gunicorn", "src.main:app", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "600", "--graceful-timeout", "60"]
     environment:
       - DATABASE_URL=postgresql://contract_user:${POSTGRES_PASSWORD:-changeme_in_production}@postgres:5432/contract_ai
       - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme_in_production}@redis:6379/0
@@ -97,6 +98,48 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    # No memory limit — parallel LLM analysis needs RAM for ThreadPoolExecutor
+    networks:
+      - contract-ai-network
+    restart: always
+
+  # RQ Workers — run contract analysis in separate processes
+  rq-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["rq", "worker", "analysis", "--url", "redis://:${REDIS_PASSWORD:-changeme_in_production}@redis:6379/0", "--with-scheduler"]
+    environment:
+      - DATABASE_URL=postgresql://contract_user:${POSTGRES_PASSWORD:-changeme_in_production}@postgres:5432/contract_ai
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme_in_production}@redis:6379/0
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=contract_user
+      - APP_ENV=${APP_ENV:-development}
+      - SECRET_KEY=${SECRET_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY:-}
+      - YANDEX_API_KEY=${YANDEX_API_KEY:-}
+      - YANDEX_FOLDER_ID=${YANDEX_FOLDER_ID:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - QWEN_API_KEY=${QWEN_API_KEY:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:7b}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-deepseek}
+    volumes:
+      - ./data:/app/data
+      - ./chroma_data:/app/chroma_data
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # No memory limit — ThreadPoolExecutor parallel batching needs RAM
+    deploy:
+      replicas: 2
     networks:
       - contract-ai-network
     restart: always

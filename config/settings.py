@@ -65,7 +65,7 @@ class Settings(BaseSettings):
 
     # Two-level analysis system
     llm_quick_model: str = "deepseek-chat"  # Быстрый анализ (Уровень 1)
-    llm_deep_model: str = "deepseek-chat"   # Глубокий анализ (Уровень 2)
+    llm_deep_model: str = "deepseek-chat"  # Глубокий анализ (Уровень 2)
 
     # Batch analysis settings (оптимизировано для производительности)
     llm_batch_size: int = 15  # Сколько пунктов анализировать в одном запросе (оптимально для gpt-4o-mini)

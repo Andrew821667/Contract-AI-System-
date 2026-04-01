@@ -3,9 +3,10 @@
 Clause Library API Routes
 Browse, search, and inspect extracted clauses
 """
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from loguru import logger
@@ -16,7 +17,55 @@ from src.api.contracts.routes import get_current_user
 from src.services.clause_library_service import ClauseLibraryService
 
 
+class ClauseCreateRequest(BaseModel):
+    contract_id: Optional[str] = None
+    title: str
+    text: str
+    clause_type: str = 'general'
+    risk_level: str = 'none'
+    tags: Optional[List[str]] = None
+
+
+class ClauseUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    text: Optional[str] = None
+    clause_type: Optional[str] = None
+    risk_level: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+
 router = APIRouter()
+
+
+@router.post("")
+async def create_clause(
+    data: ClauseCreateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a new clause manually."""
+    try:
+        # If contract_id provided, verify ownership
+        if data.contract_id:
+            from src.models import Contract
+            contract = db.query(Contract).filter(Contract.id == data.contract_id).first()
+            if not contract:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Договор не найден")
+            if current_user.role != "admin" and contract.assigned_to != current_user.id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к договору")
+
+        service = ClauseLibraryService(db)
+        result = service.create_clause(data.model_dump())
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating clause: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Ошибка создания условия",
+        )
 
 
 @router.get("")
@@ -126,7 +175,7 @@ async def get_clause_details(
                 detail="Clause not found"
             )
 
-        # IDOR fix: проверяем, что клаузула принадлежит контракту текущего пользователя
+        # IDOR fix: проверяем, что условие принадлежит контракту текущего пользователя
         if current_user.role != "admin":
             from src.models.database import Contract
             contract_id = clause.get("contract_id") if isinstance(clause, dict) else getattr(clause, "contract_id", None)
@@ -135,7 +184,7 @@ async def get_clause_details(
                 if not contract or contract.assigned_to != current_user.id:
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
-                        detail="Нет доступа к данной клаузуле"
+                        detail="Нет доступа к данному условию"
                     )
 
         return clause
@@ -147,4 +196,81 @@ async def get_clause_details(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error"
+        )
+
+
+def _check_clause_ownership(clause_id: str, current_user: User, db: Session):
+    """Check that user owns the contract this clause belongs to."""
+    from src.models.clause_models import ExtractedClause
+    from src.models import Contract
+
+    clause = db.query(ExtractedClause).filter(ExtractedClause.id == clause_id).first()
+    if not clause:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Условие не найдено")
+
+    if current_user.role != "admin":
+        contract = db.query(Contract).filter(Contract.id == clause.contract_id).first()
+        if not contract or contract.assigned_to != current_user.id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа")
+
+    return clause
+
+
+@router.put("/{clause_id}")
+async def update_clause(
+    clause_id: str,
+    data: ClauseUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update clause title, text, type, risk level, or tags."""
+    try:
+        _check_clause_ownership(clause_id, current_user, db)
+
+        service = ClauseLibraryService(db)
+        update_data = data.model_dump(exclude_none=True)
+        if not update_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Нет данных для обновления",
+            )
+
+        result = service.update_clause(clause_id, update_data)
+        if not result:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Условие не найдено")
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating clause {clause_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Ошибка обновления",
+        )
+
+
+@router.delete("/{clause_id}")
+async def delete_clause(
+    clause_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a clause from the library."""
+    try:
+        _check_clause_ownership(clause_id, current_user, db)
+
+        service = ClauseLibraryService(db)
+        deleted = service.delete_clause(clause_id)
+        if not deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Условие не найдено")
+        return {"ok": True, "message": "Условие удалено"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting clause {clause_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Ошибка удаления",
         )

@@ -70,6 +70,7 @@ export function useAnalysisWebSocket(
         const contract = data?.contract
         if (!contract || unmountedRef.current) return
 
+        // Use granular progress from backend if available, else fallback to status map
         const progressMap: Record<string, number> = {
           uploaded: 0,
           parsing: 10,
@@ -77,10 +78,10 @@ export function useAnalysisWebSocket(
           completed: 100,
           error: 0,
         }
-        const p = progressMap[contract.status] ?? 0
+        const p = contract.progress ?? progressMap[contract.status] ?? 0
         setProgress(p)
         setStatus(contract.status)
-        setMessage(`Status: ${contract.status}`)
+        setMessage(contract.progress_message || `Статус: ${contract.status}`)
 
         if (contract.status === 'completed') {
           const msg: WSMessage = {
@@ -132,7 +133,7 @@ export function useAnalysisWebSocket(
       return
     }
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || (typeof window !== 'undefined' ? window.location.origin : '')
     // Security: do NOT pass token as query parameter (it leaks into server logs / Referer headers).
     // Instead, send it as the first message after connection.
     const wsUrl = apiUrl.replace(/^http/, 'ws') + `/api/v1/ws/analysis/${contractId}`

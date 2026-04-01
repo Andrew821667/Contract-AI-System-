@@ -20,7 +20,7 @@ class ExtractedClause(Base):
     contract_id = Column(
         String(36),
         ForeignKey('contracts.id', ondelete='CASCADE'),
-        nullable=False
+        nullable=True
     )
     clause_number = Column(Integer, nullable=False)
     clause_type = Column(String(50), nullable=False)  # financial, temporal, liability, etc.

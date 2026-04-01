@@ -263,6 +263,77 @@ class ClauseLibraryService:
             'query': query
         }
 
+    def create_clause(self, data: Dict[str, Any]) -> Dict:
+        """Create a new clause manually."""
+        tags = data.get('tags', [])
+        risk_level = data.get('risk_level', 'none')
+
+        clause = ExtractedClause(
+            contract_id=data.get('contract_id'),
+            clause_number=data.get('clause_number', 0),
+            clause_type=data.get('clause_type', 'general'),
+            title=data.get('title', '')[:500],
+            text=data.get('text', '')[:5000],
+            xpath_location='',
+            analysis_json=None,
+            risk_level=risk_level,
+            severity_score=SEVERITY_MAP.get(risk_level, 0.0),
+            tags=json.dumps(tags, ensure_ascii=False) if isinstance(tags, list) else tags,
+            created_at=datetime.now(timezone.utc),
+        )
+        self.db.add(clause)
+        try:
+            self.db.commit()
+            self.db.refresh(clause)
+            return self._clause_to_dict(clause)
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error creating clause: {e}")
+            raise
+
+    def update_clause(self, clause_id: str, data: Dict[str, Any]) -> Optional[Dict]:
+        """Update clause fields (title, text, clause_type, risk_level, tags)."""
+        clause = self.db.query(ExtractedClause).filter(
+            ExtractedClause.id == clause_id
+        ).first()
+
+        if not clause:
+            return None
+
+        allowed_fields = {'title', 'text', 'clause_type', 'risk_level'}
+        for field in allowed_fields:
+            if field in data:
+                setattr(clause, field, data[field])
+
+        if 'tags' in data:
+            clause.tags = json.dumps(data['tags'], ensure_ascii=False) if isinstance(data['tags'], list) else data['tags']
+
+        if 'risk_level' in data:
+            clause.severity_score = SEVERITY_MAP.get(data['risk_level'], 0.0)
+
+        try:
+            self.db.commit()
+            self.db.refresh(clause)
+            return self._clause_to_dict(clause)
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error updating clause {clause_id}: {e}")
+            raise
+
+    def delete_clause(self, clause_id: str) -> bool:
+        """Delete a clause by ID. Returns True if deleted."""
+        deleted = self.db.query(ExtractedClause).filter(
+            ExtractedClause.id == clause_id
+        ).delete()
+
+        try:
+            self.db.commit()
+            return deleted > 0
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Error deleting clause {clause_id}: {e}")
+            raise
+
     # ==================== Private Methods ====================
 
     def _determine_risk_level(self, analysis: Dict) -> str:

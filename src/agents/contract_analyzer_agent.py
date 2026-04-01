@@ -3,8 +3,10 @@
 Contract Analyzer Agent - Deep analysis of contracts with risk identification
 """
 import json
+import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from lxml import etree
 from loguru import logger
 
@@ -87,7 +89,7 @@ class ContractAnalyzerAgent(BaseAgent):
 
 Твоя задача — провести глубокий анализ договора и выявить:
 1. РИСКИ (финансовые, юридические, операционные, репутационные)
-   - Серьёзность: critical, significant, minor
+   - Серьёзность: critical, high, medium, low, info
    - Вероятность: high, medium, low
    - Последствия: качественная оценка (без денежных сумм)
 
@@ -140,6 +142,13 @@ class ContractAnalyzerAgent(BaseAgent):
             parsed_xml = state.get('parsed_xml')
             metadata = state.get('metadata', {})
             check_counterparty = state.get('check_counterparty', False)
+            self._clause_analyses = []
+            self._required_fields = []
+            self._placeholder_clause_ids = set()
+            analysis_context = {
+                'analysis_date': metadata.get('analysis_date') or datetime.now(ZoneInfo("Europe/Moscow")).date().isoformat(),
+                'analysis_perspective': metadata.get('analysis_perspective') or 'Интересы пользователя',
+            }
 
             if not contract_id or not parsed_xml:
                 return AgentResult(
@@ -167,6 +176,7 @@ class ContractAnalyzerAgent(BaseAgent):
 
             # 3. Extract contract structure
             structure = self.clause_extractor.extract_structure(parsed_xml)
+            required_fields = self._extract_required_fields(parsed_xml)
 
             # 4. Optional: Check counterparty
             counterparty_data = None
@@ -195,14 +205,20 @@ class ContractAnalyzerAgent(BaseAgent):
                         pass
 
             # 5. Analyze with RAG context
-            _update_progress(35, "Поиск контекста в базе знаний...")
-            rag_context = self._get_rag_context(parsed_xml, metadata)
+            kb_available = self._has_available_rag_sources()
+            if kb_available:
+                _update_progress(35, "Поиск контекста в базе знаний...")
+            else:
+                _update_progress(35, "База знаний пуста, пропускаем поиск контекста...")
+            rag_context = self._get_rag_context(parsed_xml, metadata, kb_available=kb_available)
 
             # 6. Identify risks
             _update_progress(40, "AI анализ: выявление рисков...")
             risks = self._identify_risks(
-                parsed_xml, structure, rag_context, counterparty_data
+                parsed_xml, structure, rag_context, counterparty_data, analysis_context
             )
+            required_fields = list(getattr(self, "_required_fields", required_fields))
+            risks = self._filter_placeholder_risks(risks)
             _update_progress(60, f"Найдено {len(risks)} рисков, сохранение...")
             self._save_risks(analysis.id, contract.id, risks)
 
@@ -243,13 +259,23 @@ class ContractAnalyzerAgent(BaseAgent):
             # 12. Update analysis record with results
             # Store metadata in risks_by_category as JSON
             import json
+            analysis.entities = json.dumps({
+                'analysis_context': analysis_context,
+                'parties': structure.get('parties', []),
+            }, ensure_ascii=False)
+            analysis.legal_issues = json.dumps({
+                'required_fields': required_fields,
+            }, ensure_ascii=False)
             analysis.risks_by_category = json.dumps({
                 'risk_count': len(risks),
                 'recommendation_count': len(recommendations),
                 'suggested_changes_count': len(suggested_changes),
-                'dispute_probability': dispute_prediction.get('score'),
+                'dispute_probability': dispute_prediction.get('overall_score', dispute_prediction.get('score')),
                 'template_comparison': template_comparison,
-                'counterparty_checked': counterparty_data is not None
+                'counterparty_checked': counterparty_data is not None,
+                'analysis_date': analysis_context.get('analysis_date'),
+                'analysis_perspective': analysis_context.get('analysis_perspective'),
+                'required_fields_count': len(required_fields),
             }, ensure_ascii=False)
             self.db.commit()
             self.db.refresh(analysis)
@@ -269,17 +295,19 @@ class ContractAnalyzerAgent(BaseAgent):
                     'contract_id': contract.id,
                     'risks': [self._risk_to_dict(r) for r in risks],
                     'recommendations': [self._recommendation_to_dict(r) for r in recommendations],
+                    'required_fields': required_fields,
                     'suggested_changes': [self._change_to_dict(c) for c in suggested_changes],
                     'annotations': [self._annotation_to_dict(a) for a in annotations],
                     'dispute_prediction': dispute_prediction,
                     'template_comparison': template_comparison,
                     'counterparty_data': counterparty_data,
+                    'analysis_context': analysis_context,
                     'clause_analyses': clause_analyses,  # Детальный анализ каждого пункта
                     'disclaimer': 'Результаты AI-анализа носят рекомендательный характер и не являются юридической консультацией. Перед принятием решений проконсультируйтесь с квалифицированным юристом.'
                 },
                 next_action=next_action,
                 metadata={
-                    'message': f"Analysis completed: {len(risks)} risks identified, {len(recommendations)} recommendations, {len(clause_analyses)} clauses analyzed"
+                    'message': f"Analysis completed: {len(risks)} risks identified, {len(recommendations)} recommendations, {len(required_fields)} required fields, {len(clause_analyses)} clauses analyzed"
                 }
             )
 
@@ -1203,7 +1231,8 @@ JSON формат:
         xml_content: str,
         structure: Dict[str, Any],
         rag_context: Dict[str, Any],
-        counterparty_data: Optional[Dict[str, Any]]
+        counterparty_data: Optional[Dict[str, Any]],
+        analysis_context: Optional[Dict[str, Any]] = None,
     ) -> List[ContractRisk]:
         """Identify contract risks using detailed clause-by-clause LLM analysis"""
         logger.info("🔍 DEBUG: _identify_risks called (NEW method with batching)")
@@ -1216,7 +1245,9 @@ JSON формат:
 
             if not clauses:
                 logger.warning("No clauses extracted, falling back to legacy method")
-                return self._identify_risks_legacy(xml_content, structure, rag_context, counterparty_data)
+                return self._identify_risks_legacy(
+                    xml_content, structure, rag_context, counterparty_data, analysis_context
+                )
 
             # BATCH ANALYSIS - анализируем пунктами по batch_size за раз
             # Ограничиваем количество пунктов в тестовом режиме
@@ -1224,14 +1255,14 @@ JSON формат:
             max_clauses = settings.llm_test_max_clauses if settings.llm_test_mode else len(clauses)
             batch_size = settings.llm_batch_size
 
-            logger.info(f"Will analyze {min(len(clauses), max_clauses)} clauses in batches of {batch_size}")
+            logger.info(f"Will analyze {min(len(clauses), max_clauses)} clauses (smart batching)")
 
-            # Используем RiskAnalyzer для батч-анализа
-            logger.info(f"🔍 DEBUG: Starting batch analysis for {len(clauses[:max_clauses])} clauses")
+            # RiskAnalyzer handles smart batching internally
             all_clause_analyses = self.risk_analyzer.analyze_clauses_batch(
                 clauses[:max_clauses],
                 rag_context,
-                batch_size=batch_size
+                batch_size=batch_size,
+                analysis_context=analysis_context,
             )
             logger.info(f"🔍 DEBUG: Batch analysis returned {len(all_clause_analyses)} results")
 
@@ -1241,11 +1272,14 @@ JSON формат:
 
             # Сохраняем детальные анализы пунктов для отображения в UI
             if all_clause_analyses:
+                self._merge_required_fields_from_analyses(all_clause_analyses)
                 self._store_clause_analyses(all_clause_analyses)
                 logger.info(f"Detailed analysis complete: {len(all_risks)} risks from {len(all_clause_analyses)} clauses")
             else:
                 logger.warning("No clauses were successfully analyzed, using legacy method")
-                return self._identify_risks_legacy(xml_content, structure, rag_context, counterparty_data)
+                return self._identify_risks_legacy(
+                    xml_content, structure, rag_context, counterparty_data, analysis_context
+                )
 
             return all_risks
 
@@ -1254,7 +1288,9 @@ JSON формат:
             import traceback
             traceback.print_exc()
             # Fallback to legacy method
-            return self._identify_risks_legacy(xml_content, structure, rag_context, counterparty_data)
+            return self._identify_risks_legacy(
+                xml_content, structure, rag_context, counterparty_data, analysis_context
+            )
 
     def _store_clause_analyses(self, analyses: List[Dict[str, Any]]):
         """Store detailed clause analyses for UI display"""
@@ -1263,19 +1299,148 @@ JSON формат:
             self._clause_analyses = []
         self._clause_analyses = analyses
 
+    def _extract_required_fields(self, xml_content: str) -> List[Dict[str, Any]]:
+        """Extract explicit placeholders and blanks that must be filled by the user."""
+        clauses = self.clause_extractor.extract_clauses(xml_content)
+        required_fields: List[Dict[str, Any]] = []
+        placeholder_clause_ids: set[str] = set()
+        patterns = [
+            re.compile(r"_{2,}"),
+            re.compile(r"\[(?:[^\]]*(?:указать|заполнить|вписать|определить)[^\]]*)\]", re.IGNORECASE),
+        ]
+
+        for clause in clauses:
+            clause_text = clause.get('text', '')
+            matches = []
+            for pattern in patterns:
+                matches.extend(list(pattern.finditer(clause_text)))
+            if not matches:
+                continue
+
+            placeholder_clause_ids.add(clause.get('id', ''))
+            for match in matches:
+                start = max(0, match.start() - 60)
+                end = min(len(clause_text), match.end() + 60)
+                snippet = clause_text[start:end].strip()
+                required_fields.append({
+                    'title': clause.get('title') or 'Нужно заполнить поле',
+                    'description': 'В договоре есть незаполненное место, которое нужно заполнить до использования документа.',
+                    'snippet': snippet,
+                    'section_name': clause.get('title') or clause.get('id', ''),
+                    'xpath_location': clause.get('xpath', ''),
+                })
+
+        self._required_fields = self._dedupe_required_fields(required_fields)
+        self._placeholder_clause_ids = placeholder_clause_ids
+        return self._required_fields
+
+    def _merge_required_fields_from_analyses(self, analyses: List[Dict[str, Any]]) -> None:
+        """Merge LLM-detected placeholders with regex-detected placeholders."""
+        existing = list(getattr(self, '_required_fields', []))
+        for analysis in analyses:
+            for item in analysis.get('required_fields', []):
+                existing.append({
+                    'title': item.get('title') or 'Нужно заполнить поле',
+                    'description': item.get('description') or 'В договоре есть незаполненное место.',
+                    'snippet': item.get('snippet') or '',
+                    'section_name': analysis.get('clause_id', ''),
+                    'xpath_location': analysis.get('clause_xpath', ''),
+                })
+        self._required_fields = self._dedupe_required_fields(existing)
+
+    @staticmethod
+    def _dedupe_required_fields(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        seen: set[str] = set()
+        deduped: List[Dict[str, Any]] = []
+        for item in items:
+            key = '|'.join([
+                item.get('section_name', ''),
+                item.get('xpath_location', ''),
+                item.get('snippet', ''),
+            ]).strip().lower()
+            if key and key not in seen:
+                seen.add(key)
+                deduped.append(item)
+        return deduped
+
+    def _filter_placeholder_risks(self, risks: List[ContractRisk]) -> List[ContractRisk]:
+        """Remove pseudo-risks caused by placeholders/metadata and deduplicate obvious repeats."""
+        placeholder_clause_ids = getattr(self, '_placeholder_clause_ids', set())
+        technical_markers = [
+            'uuid', 'метадан', 'metadata', 'parsed_at', 'file_name', 'дата создания',
+            'author', 'автор', 'title', 'без названия', 'docx',
+        ]
+        filtered: List[ContractRisk] = []
+        for risk in risks:
+            combined = ' '.join([risk.title or '', risk.description or '']).lower()
+            is_placeholder_clause = (risk.section_name or '') in placeholder_clause_ids
+            mentions_placeholder = any(marker in combined for marker in [
+                'незаполн', 'пропуск', 'пустое поле', '___', 'placeholder', 'не заполн',
+            ])
+            mentions_technical_metadata = any(marker in combined for marker in technical_markers)
+            if is_placeholder_clause and mentions_placeholder:
+                continue
+            if mentions_technical_metadata:
+                continue
+            filtered.append(risk)
+        return self._dedupe_risks(filtered)
+
+    @staticmethod
+    def _dedupe_risks(risks: List[ContractRisk]) -> List[ContractRisk]:
+        """Collapse obviously duplicated risks while preserving the strongest variant."""
+        severity_rank = {'info': 0, 'low': 1, 'medium': 2, 'high': 3, 'critical': 4}
+        probability_rank = {'low': 1, 'medium': 2, 'high': 3}
+        deduped: dict[str, ContractRisk] = {}
+
+        for risk in risks:
+            normalized_title = re.sub(r'\s+', ' ', re.sub(r'[^a-zа-я0-9]+', ' ', (risk.title or '').lower())).strip()
+            fallback_title = re.sub(
+                r'\s+',
+                ' ',
+                re.sub(r'[^a-zа-я0-9]+', ' ', (risk.description or '').lower())[:120],
+            ).strip()
+            key = '|'.join([
+                risk.risk_type or 'general',
+                normalized_title or fallback_title,
+            ]).strip('|')
+
+            if not key:
+                key = f"risk-{id(risk)}"
+
+            existing = deduped.get(key)
+            if existing is None:
+                deduped[key] = risk
+                continue
+
+            existing_score = (
+                severity_rank.get(existing.severity or 'info', 0),
+                probability_rank.get(existing.probability or 'low', 1),
+                len(existing.description or ''),
+            )
+            current_score = (
+                severity_rank.get(risk.severity or 'info', 0),
+                probability_rank.get(risk.probability or 'low', 1),
+                len(risk.description or ''),
+            )
+            if current_score > existing_score:
+                deduped[key] = risk
+
+        return list(deduped.values())
+
     def _identify_risks_legacy(
         self,
         xml_content: str,
         structure: Dict[str, Any],
         rag_context: Dict[str, Any],
-        counterparty_data: Optional[Dict[str, Any]]
+        counterparty_data: Optional[Dict[str, Any]],
+        analysis_context: Optional[Dict[str, Any]] = None,
     ) -> List[ContractRisk]:
         logger.info("⚠️ DEBUG: _identify_risks_legacy called (OLD method, NO batching, EXPENSIVE!)")
         """Legacy risk identification method (fallback)"""
         try:
             # Prepare prompt
             prompt = self._build_risk_identification_prompt(
-                xml_content, structure, rag_context, counterparty_data
+                xml_content, structure, rag_context, counterparty_data, analysis_context
             )
 
             # Call LLM
@@ -1294,7 +1459,7 @@ JSON формат:
             for risk_dict in risks_data.get('risks', []):
                 risk = ContractRisk(
                     risk_type=risk_dict.get('risk_type', 'legal'),
-                    severity=risk_dict.get('severity', 'minor'),
+                    severity=risk_dict.get('severity', 'medium'),
                     probability=risk_dict.get('probability'),
                     title=risk_dict.get('title', ''),
                     description=risk_dict.get('description', ''),
@@ -1316,52 +1481,69 @@ JSON формат:
         xml_content: str,
         structure: Dict[str, Any],
         rag_context: Dict[str, Any],
-        counterparty_data: Optional[Dict[str, Any]]
+        counterparty_data: Optional[Dict[str, Any]],
+        analysis_context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Build prompt for risk identification"""
-        prompt = "Analyze this contract and identify ALL risks.\n\n"
+        prompt = "Проанализируй договор и выяви только реальные существенные риски.\n\n"
         prompt += "<user_document>\n"
         prompt += xml_content[:5000]
         prompt += "\n</user_document>\n\n"
 
-        prompt += "CONTRACT STRUCTURE:\n"
+        prompt += "СТРУКТУРА ДОГОВОРА:\n"
         prompt += json.dumps(structure, ensure_ascii=False, indent=2)
         prompt += "\n\n"
 
         if rag_context.get('context'):
-            prompt += "RELEVANT LEGAL CONTEXT (from RAG):\n"
+            prompt += "РЕЛЕВАНТНЫЙ ПРАВОВОЙ КОНТЕКСТ (из RAG):\n"
             prompt += rag_context['context'][:3000]
             prompt += "\n\n"
 
         if counterparty_data:
-            prompt += "COUNTERPARTY CHECK RESULTS:\n"
+            prompt += "РЕЗУЛЬТАТЫ ПРОВЕРКИ КОНТРАГЕНТА:\n"
             prompt += json.dumps(counterparty_data, ensure_ascii=False, indent=2)
             prompt += "\n\n"
 
-        prompt += """Identify ALL risks in these categories:
-- financial (price, payment, penalties)
-- legal (compliance, validity, enforceability)
-- operational (execution, delivery, quality)
-- reputational (brand, relationships)
+        if analysis_context:
+            prompt += "ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА АНАЛИЗА:\n"
+            if analysis_context.get('analysis_date'):
+                prompt += (
+                    f"- Текущая дата анализа: {analysis_context['analysis_date']}. "
+                    "Оценивай все даты относительно этой даты.\n"
+                )
+            if analysis_context.get('analysis_perspective'):
+                prompt += (
+                    f"- Анализируй договор в интересах стороны: {analysis_context['analysis_perspective']}.\n"
+                )
+            prompt += (
+                "- Не считай рисками служебные метаданные файла и парсинга.\n"
+                "- Незаполненные поля, пропуски и шаблонные плейсхолдеры не являются рисками сами по себе.\n\n"
+            )
 
-For each risk, provide:
+        prompt += """Выделяй риски только по категориям:
+- financial
+- legal
+- operational
+- reputational
+
+Верни JSON:
 {
   "risks": [
     {
-      "risk_type": "financial|legal|operational|reputational",
-      "severity": "critical|significant|minor",
+      "risk_type": "financial|legal|operational|reputational|general",
+      "severity": "critical|high|medium|low|info",
       "probability": "high|medium|low",
-      "title": "Short title",
-      "description": "Detailed description",
-      "consequences": "Qualitative consequences (no monetary)",
-      "xpath_location": "XPath to problem section",
-      "section_name": "Section name",
-      "rag_sources": ["Source 1", "Source 2"]
+      "title": "Краткое название риска",
+      "description": "Подробное описание риска",
+      "consequences": "Качественные последствия",
+      "xpath_location": "XPath к проблемному месту",
+      "section_name": "Раздел",
+      "rag_sources": ["Источник 1", "Источник 2"]
     }
   ]
 }
 
-Return ONLY valid JSON, no additional text."""
+Верни ТОЛЬКО валидный JSON, без дополнительного текста."""
 
         return prompt
 

@@ -88,8 +88,9 @@ plotly==5.18.0
 # kaleido==0.2.1  # For plotly static image export
 pandas==2.1.4
 
-# Caching (optional)
+# Caching + Task Queue
 redis==5.0.1
+rq==1.16.1
 
 # Scheduler
 APScheduler==3.10.4

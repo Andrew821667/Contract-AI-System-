@@ -1,27 +1,32 @@
 # -*- coding: utf-8 -*-
 """
 Contract Analysis Routes
-"""
-import os
-import uuid
-from typing import Optional, Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+Analysis runs in RQ workers (separate process), not in gunicorn.
+Progress is tracked via contract.meta_info in DB and exposed via WebSocket polling.
+"""
+import json
+import re
+import uuid
+from datetime import datetime
+from typing import Any, List, Optional
+from zoneinfo import ZoneInfo
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from loguru import logger
+from redis import Redis
+from rq import Queue
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.orm import Session
-from loguru import logger
 
-from src.models.database import get_db
-from src.models import Contract, AnalysisResult
-from src.models.auth_models import User
-from src.services.document_parser import DocumentParser
-from src.agents.contract_analyzer_agent import ContractAnalyzerAgent
-from src.services.llm_gateway import LLMGateway
-from src.services.digital_service import DigitalContractService
-from src.services.clause_library_service import ClauseLibraryService
-from src.services.clause_extractor import ClauseExtractor
 from config.settings import settings
 from src.api.dependencies import get_current_user
+from src.models import Contract
+from src.models.auth_models import User
+from src.models.database import get_db
+from src.services.document_parser import DocumentParser
+from src.services.llm_gateway import LLMGateway
+from src.utils.xml_security import parse_xml_safely
 
 from .schemas import (
     AnalysisResultRequest,
@@ -34,259 +39,288 @@ from .schemas import (
 router = APIRouter()
 
 
-async def analyze_contract_background(
-    contract_id: str,
-    user_id: str,
-    check_counterparty: bool,
-    counterparty_tin: Optional[str],
-):
-    """Background task for contract analysis — runs in thread to avoid blocking event loop"""
-    import asyncio
-    loop = asyncio.get_event_loop()
-    await loop.run_in_executor(
-        None,
-        _analyze_contract_sync,
-        contract_id, user_id, check_counterparty, counterparty_tin
+ROLE_LABELS = {
+    "supplier": "Поставщик",
+    "buyer": "Покупатель",
+    "seller": "Продавец",
+    "customer": "Заказчик",
+    "executor": "Исполнитель",
+    "contractor": "Подрядчик",
+    "client": "Клиент",
+    "patient": "Пациент",
+    "clinic": "Клиника",
+    "employer": "Работодатель",
+    "employee": "Работник",
+    "landlord": "Арендодатель",
+    "tenant": "Арендатор",
+    "lender": "Займодавец",
+    "borrower": "Заемщик",
+    "party": "Сторона",
+    "unknown": "Сторона",
+}
+
+
+def _get_analysis_queue() -> Queue:
+    """Get RQ analysis queue (Redis connection from settings)."""
+    redis_conn = Redis.from_url(settings.redis_url)
+    return Queue("analysis", connection=redis_conn)
+
+
+def _load_meta(meta: Any) -> dict[str, Any]:
+    if isinstance(meta, dict):
+        return meta
+    if isinstance(meta, str) and meta:
+        try:
+            loaded = json.loads(meta)
+            return loaded if isinstance(loaded, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _normalize_for_match(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    return re.sub(r"[^a-zа-я0-9]+", "", value.lower(), flags=re.IGNORECASE)
+
+
+def _humanize_role(role: Optional[str]) -> str:
+    role_key = (role or "unknown").strip().lower()
+    return ROLE_LABELS.get(role_key, role.replace("_", " ").title() if role else "Сторона")
+
+
+def _build_party_label(role: Optional[str], name: Optional[str]) -> str:
+    role_label = _humanize_role(role)
+    clean_name = (name or "").strip()
+    if clean_name and _normalize_for_match(clean_name) != _normalize_for_match(role_label):
+        return f"{role_label}: {clean_name}"
+    return role_label
+
+
+def _extract_party_candidates(parsed_xml: str) -> List[str]:
+    """Extract human-readable party options for perspective selection."""
+    candidates: List[str] = []
+    seen: set[str] = set()
+
+    def add_candidate(label: Optional[str]) -> None:
+        clean = (label or "").strip()
+        key = _normalize_for_match(clean)
+        if clean and key and key not in seen:
+            seen.add(key)
+            candidates.append(clean)
+
+    try:
+        root = parse_xml_safely(parsed_xml)
+
+        for party in root.findall('.//party'):
+            add_candidate(
+                _build_party_label(
+                    party.get('role') or party.findtext('role', ''),
+                    party.findtext('name', ''),
+                )
+            )
+
+        sample_parts = root.xpath('.//clauses/clause[position() <= 3]//paragraph/text()')
+        sample_text = ' '.join(part.strip() for part in sample_parts if part and part.strip())[:6000]
+
+        # Patterns like: ООО "...", именуемое в дальнейшем «Исполнитель»
+        entity_role_pattern = re.compile(
+            r'([^,\n]{3,160}?)\s*,\s*именуем(?:ый|ая|ое|ые)?\s+в\s+дальнейшем\s+[«\"]([^»\"]+)[»\"]',
+            re.IGNORECASE,
+        )
+        for match in entity_role_pattern.finditer(sample_text):
+            name = re.sub(r'\s+', ' ', match.group(1)).strip(' .')
+            role = re.sub(r'\s+', ' ', match.group(2)).strip(' .')
+            add_candidate(_build_party_label(role, name))
+
+        # Patterns like: именуемый в дальнейшем "Пациент"
+        role_only_pattern = re.compile(
+            r'именуем(?:ый|ая|ое|ые)?\s+в\s+дальнейшем\s+[«\"]([^»\"]+)[»\"]',
+            re.IGNORECASE,
+        )
+        for match in role_only_pattern.finditer(sample_text):
+            add_candidate(match.group(1).strip())
+
+        keyword_labels = [
+            (r'\bисполнитель\b', 'Исполнитель'),
+            (r'\bзаказчик\b', 'Заказчик'),
+            (r'\bподрядчик\b', 'Подрядчик'),
+            (r'\bпоставщик\b', 'Поставщик'),
+            (r'\bпокупатель\b', 'Покупатель'),
+            (r'\bпродавец\b', 'Продавец'),
+            (r'\bпациент\b', 'Пациент'),
+            (r'\bклиник[аи]\b', 'Клиника'),
+            (r'\bарендодатель\b', 'Арендодатель'),
+            (r'\bарендатор\b', 'Арендатор'),
+            (r'\bработодатель\b', 'Работодатель'),
+            (r'\bработник\b', 'Работник'),
+        ]
+        lowered = sample_text.lower()
+        for pattern, label in keyword_labels:
+            if re.search(pattern, lowered):
+                add_candidate(label)
+
+    except Exception as exc:
+        logger.warning(f"Failed to extract party candidates: {exc}")
+
+    return candidates
+
+
+def _match_user_perspective(current_user: User, party_candidates: List[str]) -> Optional[str]:
+    """Best-effort attempt to infer user's side automatically."""
+    tokens = []
+    for raw in [current_user.name, current_user.email.split('@')[0] if current_user.email else ""]:
+        for token in re.split(r"[^a-zа-я0-9]+", raw.lower() if raw else ""):
+            token = token.strip()
+            if len(token) >= 3:
+                tokens.append(token)
+
+    if not tokens:
+        return None
+
+    for candidate in party_candidates:
+        normalized_candidate = _normalize_for_match(candidate)
+        if any(token in normalized_candidate for token in tokens):
+            return candidate
+
+    return None
+
+
+def _resolve_analysis_perspective(
+    contract: Contract,
+    request_data: AnalysisResultRequest,
+    current_user: User,
+) -> str:
+    explicit = (request_data.analysis_perspective or "").strip()
+    if explicit:
+        return explicit
+
+    meta = _load_meta(contract.meta_info)
+    cached = (meta.get("analysis_perspective") or "").strip()
+    if cached:
+        return cached
+
+    parser = DocumentParser()
+    parsed_xml = parser.parse(contract.file_path)
+    if not parsed_xml:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Не удалось подготовить договор для выбора стороны анализа.",
+        )
+
+    party_candidates = _extract_party_candidates(parsed_xml)
+    matched = _match_user_perspective(current_user, party_candidates)
+    if matched:
+        return matched
+
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "analysis_perspective_required",
+            "message": "Не удалось автоматически определить, в чьих интересах выполнять анализ. Укажите сторону перед запуском.",
+            "parties": party_candidates,
+        },
     )
 
 
-def _analyze_contract_sync(
-    contract_id: str,
-    user_id: str,
-    check_counterparty: bool,
-    counterparty_tin: Optional[str],
-):
-    """Synchronous contract analysis — runs in a thread pool executor"""
-    from src.models.database import SessionLocal
-    db = SessionLocal()
-    try:
-        contract = db.query(Contract).filter(Contract.id == contract_id).first()
-        if not contract:
-            logger.error(f"Contract {contract_id} not found for background analysis")
-            return
-
-        def _set_progress(pct: int, msg: str = ""):
-            """Update analysis_progress on contract for WebSocket to pick up."""
-            try:
-                from sqlalchemy.orm.attributes import flag_modified
-                meta = contract.meta_info or {}
-                if not isinstance(meta, dict):
-                    import json
-                    meta = json.loads(meta) if meta else {}
-                meta["_progress"] = pct
-                meta["_progress_msg"] = msg
-                contract.meta_info = meta
-                flag_modified(contract, "meta_info")
-                db.commit()
-            except Exception:
-                try:
-                    db.rollback()
-                except Exception:
-                    pass
-
-        # Update status to parsing
-        contract.status = 'parsing'
-        _set_progress(5, "Загрузка документа...")
-        db.commit()
-
-        # Parse document
-        parser = DocumentParser()
-        _set_progress(10, "Парсинг документа...")
-        parsed_xml = parser.parse(contract.file_path)
-
-        if not parsed_xml:
-            contract.status = 'error'
-            db.commit()
-            logger.error(f"Failed to parse contract {contract_id}")
-            return
-
-        _set_progress(20, "Документ распознан, подготовка к анализу...")
-
-        # Check if cancelled
-        db.refresh(contract)
-        if contract.status == 'uploaded':
-            logger.info(f"Analysis cancelled for contract {contract_id} (during parsing)")
-            return
-
-        # Update status — parsed XML is passed directly to the agent, NOT stored in DB
-        # (storing multi-MB XML in a JSON column degrades DB performance)
-        contract.status = 'analyzing'
-        db.commit()
-
-        _set_progress(30, "AI анализ: выявление рисков...")
-
-        llm_gateway = LLMGateway(model=settings.llm_quick_model)
-        agent = ContractAnalyzerAgent(llm_gateway=llm_gateway, db_session=db)
-
-        result = agent.execute({
-            'contract_id': contract_id,
-            'parsed_xml': parsed_xml,
-            'check_counterparty': check_counterparty,
-            'metadata': {
-                'counterparty_tin': counterparty_tin,
-                'uploaded_by': user_id
-            }
-        })
-
-        # Check if cancelled during analysis
-        db.refresh(contract)
-        if contract.status == 'uploaded':
-            logger.info(f"Analysis cancelled for contract {contract_id} (during analysis)")
-            return
-
-        if result.success:
-            _set_progress(70, "Анализ завершён, извлечение клауз...")
-            logger.info(f"Contract {contract_id} analyzed successfully")
-
-            # Auto-save extracted clauses to library
-            try:
-                xml_content = parsed_xml if isinstance(parsed_xml, str) else str(parsed_xml)
-                extractor = ClauseExtractor()
-                clauses = extractor.extract_clauses(xml_content)
-
-                analyses = []
-                if result.data and isinstance(result.data, dict):
-                    analyses = result.data.get('clause_analyses', [])
-
-                if clauses:
-                    clause_service = ClauseLibraryService(db)
-                    clause_service.save_clauses(contract_id, clauses, analyses)
-                    logger.info(f"Contract {contract_id}: {len(clauses)} clauses saved to library")
-            except Exception as clause_err:
-                logger.warning(f"Auto clause extraction failed for {contract_id}: {clause_err}")
-
-            _set_progress(85, "Цифровизация документа...")
-
-            # Auto-digitalize after successful analysis
-            try:
-                if contract.file_path and os.path.exists(contract.file_path):
-                    with open(contract.file_path, "rb") as f:
-                        file_content = f.read()
-                    digital_service = DigitalContractService(db)
-                    digital_service.digitalize(contract_id, file_content, user_id)
-                    logger.info(f"Contract {contract_id} auto-digitalized")
-            except Exception as dig_err:
-                logger.warning(f"Auto-digitalization failed for {contract_id}: {dig_err}")
-
-            contract.status = 'completed'
-            _set_progress(100, "Анализ завершён!")
-        else:
-            contract.status = 'error'
-            logger.error(f"Contract {contract_id} analysis failed: {result.error}")
-
-        # Single commit for all analysis results + status update
-        db.commit()
-
-    except Exception as e:
-        logger.error(f"Background analysis error for contract {contract_id}: {e}", exc_info=True)
-        try:
-            contract = db.query(Contract).filter(Contract.id == contract_id).first()
-            if contract:
-                contract.status = 'error'
-                db.commit()
-        except Exception as update_err:
-            logger.error(f"Failed to update contract {contract_id} status to error: {update_err}")
-    finally:
-        db.close()
+def _current_analysis_date() -> str:
+    return datetime.now(ZoneInfo("Europe/Moscow")).date().isoformat()
 
 
 @router.post("/analyze", response_model=AnalysisResultResponse)
 async def analyze_contract(
     request_data: AnalysisResultRequest,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
-    Analyze an uploaded contract
+    Analyze an uploaded contract.
 
-    **Process:**
-    1. Parse document to XML
-    2. Extract contract structure
-    3. Analyze each clause for risks
-    4. Check legal compliance
-    5. Generate recommendations
-    6. (Optional) Check counterparty via ФНС API
-
-    **Returns:** Analysis ID and initial status
-    **Note:** Analysis runs in background. Use WebSocket or polling to get results.
+    Enqueues analysis as an RQ job and requires a user-oriented perspective.
+    If the user's side cannot be inferred, the client must ask which side's
+    interests should be protected before the job is queued.
     """
     try:
-        # Reset daily limits if new day
         current_user.reset_daily_limits()
 
-        # Check LLM usage limits
         if current_user.llm_requests_today >= current_user.max_llm_requests_per_day:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Дневной лимит LLM-запросов ({current_user.max_llm_requests_per_day}) исчерпан."
+                detail=f"Дневной лимит LLM-запросов ({current_user.max_llm_requests_per_day}) исчерпан.",
             )
 
-        # Get contract
         contract = db.query(Contract).filter(Contract.id == request_data.contract_id).first()
         if not contract:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Contract not found"
+                detail="Contract not found",
             )
 
-        # Check ownership
-        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
+        if contract.assigned_to != current_user.id and current_user.role not in ["admin"]:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to analyze this contract"
+                detail="You don't have permission to analyze this contract",
             )
 
-        # Prevent duplicate analysis (race condition guard)
-        if contract.status == 'analyzing':
+        if contract.status in {"analyzing", "parsing"}:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Анализ уже запущен для этого договора"
+                detail="Анализ уже запущен для этого договора",
             )
 
-        # Per-user concurrent analysis limit (max 3)
-        MAX_CONCURRENT_PER_USER = 3
+        max_concurrent_per_user = 3
         active_count = db.query(Contract).filter(
             Contract.assigned_to == current_user.id,
-            Contract.status.in_(['analyzing', 'parsing'])
+            Contract.status.in_(["analyzing", "parsing"]),
         ).count()
-        if active_count >= MAX_CONCURRENT_PER_USER:
+        if active_count >= max_concurrent_per_user:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Максимум {MAX_CONCURRENT_PER_USER} одновременных анализа. Дождитесь завершения текущих."
+                detail=f"Максимум {max_concurrent_per_user} одновременных анализа. Дождитесь завершения текущих.",
             )
 
-        # Start background task
-        background_tasks.add_task(
-            analyze_contract_background,
+        analysis_perspective = _resolve_analysis_perspective(contract, request_data, current_user)
+        analysis_date = _current_analysis_date()
+
+        q = _get_analysis_queue()
+        job = q.enqueue(
+            "src.tasks.analysis.run_analysis",
             contract_id=request_data.contract_id,
             user_id=current_user.id,
             check_counterparty=request_data.check_counterparty,
             counterparty_tin=request_data.counterparty_tin,
+            analysis_perspective=analysis_perspective,
+            analysis_date=analysis_date,
+            job_timeout="30m",
         )
 
-        # Increment LLM usage counter
         current_user.llm_requests_today = (current_user.llm_requests_today or 0) + 1
         db.commit()
 
-        logger.info(f"Analysis started for contract {request_data.contract_id} by user {current_user.id}")
+        logger.info(
+            f"Analysis enqueued for contract {request_data.contract_id} "
+            f"by user {current_user.id}, perspective={analysis_perspective}, job_id={job.id}"
+        )
 
         return AnalysisResultResponse(
-            analysis_id=request_data.contract_id,  # analysis record is created inside background task
+            analysis_id=request_data.contract_id,
             contract_id=request_data.contract_id,
-            status='analyzing',
+            status="analyzing",
             risks_count=0,
             recommendations_count=0,
-            message='Analysis started. Use WebSocket /ws/analysis/{contract_id} to track progress.'
+            message=(
+                f"Анализ запущен на дату {analysis_date} в интересах стороны: {analysis_perspective}. "
+                "Следите за прогрессом через WebSocket /ws/analysis/{contract_id}."
+            ),
         )
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error starting analysis: {e}", exc_info=True)
+    except Exception as exc:
+        logger.error(f"Error enqueuing analysis: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error starting analysis"
+            detail="Error starting analysis",
         )
 
 
@@ -301,13 +335,13 @@ async def cancel_analysis(
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
 
-    if contract.assigned_to != current_user.id and current_user.role != 'admin':
+    if contract.assigned_to != current_user.id and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    if contract.status not in ('analyzing', 'parsing'):
+    if contract.status not in ("analyzing", "parsing"):
         raise HTTPException(status_code=409, detail="Анализ не запущен")
 
-    contract.status = 'uploaded'
+    contract.status = "uploaded"
     db.commit()
     logger.info(f"Analysis cancelled for contract {contract_id} by user {current_user.id}")
     return {"ok": True, "message": "Анализ остановлен"}
@@ -317,34 +351,33 @@ async def cancel_analysis(
 async def analyze_contract_stream(
     contract_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Streaming contract analysis via Server-Sent Events (SSE).
     Sends incremental analysis results as they are generated.
     """
-    import asyncio
-    import json as json_mod
-
     contract = db.query(Contract).filter(Contract.id == contract_id).first()
     if not contract:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
 
-    if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
+    if contract.assigned_to != current_user.id and current_user.role not in ["admin"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission")
 
-    parsed_xml = (contract.meta_info or {}).get('xml')
+    parsed_xml = _load_meta(contract.meta_info).get("xml")
     if not parsed_xml:
-        # Parse on the fly
         parser = DocumentParser()
         try:
             parsed_xml = parser.parse(contract.file_path)
-        except Exception as e:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Document parse error")
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Document parse error",
+            )
 
     async def event_generator():
         try:
-            yield {"event": "status", "data": json_mod.dumps({"status": "started", "contract_id": contract_id})}
+            yield {"event": "status", "data": json.dumps({"status": "started", "contract_id": contract_id})}
 
             llm = LLMGateway(model=settings.llm_quick_model)
             system_prompt = (
@@ -352,7 +385,7 @@ async def analyze_contract_stream(
                 "Analyze the following contract clauses and provide risk assessment in Russian."
             )
 
-            yield {"event": "status", "data": json_mod.dumps({"status": "analyzing"})}
+            yield {"event": "status", "data": json.dumps({"status": "analyzing"})}
 
             collected = []
             async for chunk in llm.stream(
@@ -360,14 +393,14 @@ async def analyze_contract_stream(
                 system_prompt=system_prompt,
             ):
                 collected.append(chunk)
-                yield {"event": "chunk", "data": json_mod.dumps({"text": chunk})}
+                yield {"event": "chunk", "data": json.dumps({"text": chunk})}
 
             full_text = "".join(collected)
-            yield {"event": "done", "data": json_mod.dumps({"status": "completed", "full_text": full_text})}
+            yield {"event": "done", "data": json.dumps({"status": "completed", "full_text": full_text})}
 
-        except Exception as e:
-            logger.error(f"Streaming analysis error: {e}", exc_info=True)
-            yield {"event": "error", "data": json_mod.dumps({"error": "Ошибка анализа. Попробуйте снова."})}
+        except Exception as exc:
+            logger.error(f"Streaming analysis error: {exc}", exc_info=True)
+            yield {"event": "error", "data": json.dumps({"error": "Ошибка анализа. Попробуйте снова."})}
 
     return EventSourceResponse(event_generator())
 
@@ -375,17 +408,13 @@ async def analyze_contract_stream(
 @router.post("/analyze/batch", response_model=BatchAnalysisResponse)
 async def batch_analyze_contracts(
     request_data: BatchAnalysisRequest,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
-    Start batch analysis of multiple contracts.
-    Progress is reported via WebSocket at /ws/batch/{task_id}.
+    Batch analysis — enqueues each contract as a separate RQ job.
+    Each job can be retried and monitored independently.
     """
-    import asyncio
-
-    # Validate all contracts exist and belong to user
     contract_ids = request_data.contract_ids
     contracts = db.query(Contract).filter(Contract.id.in_(contract_ids)).all()
 
@@ -394,55 +423,36 @@ async def batch_analyze_contracts(
         missing = [cid for cid in contract_ids if cid not in found]
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Contracts not found: {missing}"
+            detail=f"Contracts not found: {missing}",
         )
 
-    for c in contracts:
-        if c.assigned_to != current_user.id and current_user.role not in ['admin']:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"No permission for contract {c.id}")
+    for contract in contracts:
+        if contract.assigned_to != current_user.id and current_user.role not in ["admin"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"No permission for contract {contract.id}",
+            )
 
     task_id = str(uuid.uuid4())
+    q = _get_analysis_queue()
+    analysis_date = _current_analysis_date()
 
-    # Launch background batch processing
-    async def run_batch():
-        try:
-            import asyncio
-            tasks = []
-            for cid in contract_ids:
-                tasks.append(
-                    asyncio.to_thread(
-                        _analyze_single_sync,
-                        cid,
-                        current_user.id,
-                        request_data.check_counterparty,
-                    )
-                )
-            # Process in parallel with concurrency limit
-            sem = asyncio.Semaphore(settings.max_concurrent_batches if hasattr(settings, 'max_concurrent_batches') else 3)
+    for contract_id in contract_ids:
+        q.enqueue(
+            "src.tasks.analysis.run_analysis",
+            contract_id=contract_id,
+            user_id=current_user.id,
+            check_counterparty=request_data.check_counterparty,
+            analysis_perspective=request_data.analysis_perspective,
+            analysis_date=analysis_date,
+            job_timeout="30m",
+        )
 
-            async def bounded(t):
-                async with sem:
-                    return await t
-
-            await asyncio.gather(*(bounded(t) for t in tasks), return_exceptions=True)
-        except Exception as e:
-            logger.error(f"Batch analysis error: {e}", exc_info=True)
-
-    background_tasks.add_task(run_batch)
+    logger.info(f"Batch analysis: enqueued {len(contract_ids)} jobs, task_id={task_id}")
 
     return BatchAnalysisResponse(
         task_id=task_id,
         total=len(contract_ids),
         status="started",
-        message=f"Batch analysis started for {len(contract_ids)} contracts. Track via /ws/batch/{task_id}"
+        message=f"Batch analysis started for {len(contract_ids)} contracts. Track via /ws/batch/{task_id}",
     )
-
-
-def _analyze_single_sync(contract_id: str, user_id: str, check_counterparty: bool):
-    """Synchronous single contract analysis for use in thread pool"""
-    from src.models.database import SessionLocal
-    db = SessionLocal()
-    try:
-        analyze_contract_background(contract_id, user_id, check_counterparty, None)
-    finally:
-        db.close()

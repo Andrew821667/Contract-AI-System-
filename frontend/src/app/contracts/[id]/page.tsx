@@ -34,6 +34,18 @@ interface Recommendation {
   expected_benefit: string
 }
 
+interface RequiredField {
+  title: string
+  description: string
+  snippet?: string
+  section_name?: string
+}
+
+interface AnalysisContext {
+  analysis_date?: string
+  analysis_perspective?: string
+}
+
 export default function ContractDetailPage() {
   const { isReady } = useAuthGuard()
   const currentUser = useAuthStore((s) => s.user)
@@ -44,6 +56,10 @@ export default function ContractDetailPage() {
   const contractId = params.id as string
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
+  const [showPerspectiveModal, setShowPerspectiveModal] = useState(false)
+  const [perspectiveOptions, setPerspectiveOptions] = useState<string[]>([])
+  const [selectedPerspective, setSelectedPerspective] = useState('')
+  const [customPerspective, setCustomPerspective] = useState('')
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['contract', contractId],
@@ -72,13 +88,26 @@ export default function ContractDetailPage() {
   })
 
   const analyzeMutation = useMutation({
-    mutationFn: () => api.analyzeContract(contractId),
+    mutationFn: (analysisPerspective?: string) => api.analyzeContract(contractId, {
+      analysis_perspective: analysisPerspective,
+    }),
     onSuccess: () => {
+      setShowPerspectiveModal(false)
+      setCustomPerspective('')
       toast.success('Анализ запущен. Обновите страницу через некоторое время.')
       queryClient.invalidateQueries({ queryKey: ['contract', contractId] })
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Ошибка запуска анализа')
+      const detail = err?.response?.data?.detail
+      if (detail?.code === 'analysis_perspective_required') {
+        const options = Array.isArray(detail?.parties) ? detail.parties : []
+        setPerspectiveOptions(options)
+        setSelectedPerspective(options[0] || '')
+        setCustomPerspective('')
+        setShowPerspectiveModal(true)
+        return
+      }
+      toast.error(typeof detail === 'string' ? detail : detail?.message || 'Ошибка запуска анализа')
     },
   })
 
@@ -113,6 +142,26 @@ export default function ContractDetailPage() {
 
   const contract = data?.contract
   const analysis = data?.analysis
+  const risks: Risk[] = analysis?.risks || []
+  const recommendations: Recommendation[] = analysis?.recommendations || []
+  const requiredFields: RequiredField[] = analysis?.required_fields || []
+  const analysisContext: AnalysisContext = analysis?.analysis_context || {}
+
+  const handleAnalyze = (analysisPerspective?: string) => {
+    analyzeMutation.mutate(analysisPerspective)
+  }
+
+  const formatAnalysisDate = (date?: string) => {
+    if (!date) return null
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return new Date(`${date}T12:00:00`).toLocaleDateString('ru-RU', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    }
+    return date
+  }
 
   const getSeverityBadge = (severity: string) => {
     const map: Record<string, { variant: 'success' | 'warning' | 'danger' | 'info'; label: string }> = {
@@ -188,9 +237,6 @@ export default function ContractDetailPage() {
   }
 
   const statusInfo = statusLabels[contract?.status] || statusLabels.pending
-  const risks: Risk[] = analysis?.risks || []
-  const recommendations: Recommendation[] = analysis?.recommendations || []
-
   return (
     <AppLayout title={contract?.file_name || 'Договор'}>
       <div className="max-w-7xl mx-auto">
@@ -231,7 +277,7 @@ export default function ContractDetailPage() {
                     variant="primary"
                     size="sm"
                     loading={analyzeMutation.isPending}
-                    onClick={() => analyzeMutation.mutate()}
+                    onClick={() => handleAnalyze()}
                   >
                     🔍 Запустить анализ
                   </Button>
@@ -241,7 +287,7 @@ export default function ContractDetailPage() {
                     variant="outline"
                     size="sm"
                     loading={analyzeMutation.isPending}
-                    onClick={() => analyzeMutation.mutate()}
+                    onClick={() => handleAnalyze()}
                   >
                     🔄 Повторный анализ
                   </Button>
@@ -323,6 +369,66 @@ export default function ContractDetailPage() {
           </div>
         )}
 
+        {showPerspectiveModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-2xl p-6 max-w-lg w-full mx-4 shadow-xl"
+            >
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Чьи интересы защищать при анализе</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Система не смогла автоматически определить сторону. Выберите вариант ниже или укажите свой.
+              </p>
+              {perspectiveOptions.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {perspectiveOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => { setSelectedPerspective(option); setCustomPerspective('') }}
+                      className={`px-3 py-2 rounded-xl border text-sm ${
+                        selectedPerspective === option && !customPerspective
+                          ? 'border-primary-500 bg-primary-50 text-primary-700'
+                          : 'border-gray-200 text-gray-700 hover:border-primary-300'
+                      }`}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <input
+                value={customPerspective}
+                onChange={(e) => setCustomPerspective(e.target.value)}
+                placeholder="Например: Пациент, Заказчик, Арендатор"
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-primary-400 focus:outline-none mb-4"
+              />
+              <div className="flex gap-3 justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowPerspectiveModal(false)
+                    setCustomPerspective('')
+                  }}
+                >
+                  Отмена
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  loading={analyzeMutation.isPending}
+                  disabled={!(customPerspective.trim() || selectedPerspective.trim())}
+                  onClick={() => handleAnalyze(customPerspective.trim() || selectedPerspective)}
+                >
+                  Запустить анализ
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
         {/* Analyzing Progress */}
         {(contract?.status === 'analyzing' || contract?.status === 'parsing') && (
           <motion.div
@@ -364,6 +470,76 @@ export default function ContractDetailPage() {
         {/* Analysis Results */}
         {analysis && contract?.status === 'completed' && (
           <>
+            {(analysisContext.analysis_date || analysisContext.analysis_perspective) && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+                className="mb-8"
+              >
+                <Card className="bg-blue-50 border border-blue-100">
+                  <div className="flex flex-col gap-2 text-sm text-gray-700">
+                    {analysisContext.analysis_perspective && (
+                      <div>
+                        <span className="font-semibold text-blue-800">Анализ выполнен в интересах: </span>
+                        <span>{analysisContext.analysis_perspective}</span>
+                      </div>
+                    )}
+                    {analysisContext.analysis_date && (
+                      <div>
+                        <span className="font-semibold text-blue-800">Дата анализа: </span>
+                        <span>{formatAnalysisDate(analysisContext.analysis_date)}</span>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+              </motion.div>
+            )}
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.18 }}
+              className="mb-8"
+            >
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                Нужно Заполнить ({requiredFields.length})
+              </h2>
+
+              {requiredFields.length === 0 ? (
+                <Card>
+                  <div className="text-center py-8">
+                    <div className="text-4xl mb-2">🧾</div>
+                    <p className="text-gray-600">Явных незаполненных мест не обнаружено</p>
+                  </div>
+                </Card>
+              ) : (
+                <div className="space-y-4">
+                  {requiredFields.map((item, idx) => (
+                    <motion.div
+                      key={`${item.section_name || 'field'}-${idx}`}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.06 * idx }}
+                    >
+                      <Card className="border-amber-200 bg-amber-50/60">
+                        <h3 className="text-lg font-semibold text-gray-900 mb-2">{item.title}</h3>
+                        <p className="text-gray-700 mb-2">{item.description}</p>
+                        {item.section_name && (
+                          <p className="text-xs text-gray-500 mb-2">Раздел: {item.section_name}</p>
+                        )}
+                        {item.snippet && (
+                          <div className="bg-white border border-amber-100 rounded-lg p-3">
+                            <span className="text-sm text-gray-700">{item.snippet}</span>
+                          </div>
+                        )}
+                      </Card>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+
             {/* Risks Section */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -438,7 +614,11 @@ export default function ContractDetailPage() {
                 <Card>
                   <div className="text-center py-8">
                     <div className="text-4xl mb-2">👍</div>
-                    <p className="text-gray-600">Рекомендаций нет — договор в хорошем состоянии</p>
+                    <p className="text-gray-600">
+                      {risks.length === 0 && requiredFields.length === 0
+                        ? 'Рекомендаций нет — явных проблем не обнаружено'
+                        : 'Рекомендации не сформированы автоматически. Ориентируйтесь на риски и обязательные поля для заполнения.'}
+                    </p>
                   </div>
                 </Card>
               ) : (
@@ -485,7 +665,7 @@ export default function ContractDetailPage() {
         )}
 
         {/* ML Quick Risk Assessment */}
-        <MLRiskSection contractId={contractId} contract={contract} onAnalyze={() => analyzeMutation.mutate()} />
+        <MLRiskSection contractId={contractId} contract={contract} onAnalyze={() => handleAnalyze()} />
 
         {/* Version Comparison Section */}
         <VersionComparisonSection contractId={contractId} />

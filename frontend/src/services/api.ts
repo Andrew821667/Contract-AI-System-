@@ -987,9 +987,17 @@ class APIClient {
     return response.data;
   }
 
-  async analyzeContract(contractId: string): Promise<any> {
+  async analyzeContract(
+    contractId: string,
+    options?: {
+      analysis_perspective?: string;
+      check_counterparty?: boolean;
+      counterparty_tin?: string;
+    }
+  ): Promise<any> {
     const response = await this.client.post('/api/v1/contracts/analyze', {
       contract_id: contractId,
+      ...(options || {}),
     });
     return response.data;
   }
@@ -1107,6 +1115,40 @@ class APIClient {
       '/api/v1/clauses/search',
       { params: { q: query, clause_type: clauseType } }
     );
+    return response.data;
+  }
+
+  async createClause(data: {
+    title: string;
+    text: string;
+    clause_type?: string;
+    risk_level?: string;
+    contract_id?: string;
+    tags?: string[];
+  }): Promise<ExtractedClause> {
+    const response = await this.client.post<ExtractedClause>(
+      '/api/v1/clauses',
+      data
+    );
+    return response.data;
+  }
+
+  async updateClause(clauseId: string, data: {
+    title?: string;
+    text?: string;
+    clause_type?: string;
+    risk_level?: string;
+    tags?: string[];
+  }): Promise<ExtractedClause> {
+    const response = await this.client.put<ExtractedClause>(
+      `/api/v1/clauses/${clauseId}`,
+      data
+    );
+    return response.data;
+  }
+
+  async deleteClause(clauseId: string): Promise<{ ok: boolean; message: string }> {
+    const response = await this.client.delete(`/api/v1/clauses/${clauseId}`);
     return response.data;
   }
 

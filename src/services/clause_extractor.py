@@ -75,19 +75,47 @@ class ClauseExtractor:
                     'xpath': f'//{term_elem.tag}'
                 }
 
-            # Extract all sections with detailed info
-            for elem in root.iter():
-                if elem.tag not in ['contract', 'party', 'price', 'term']:
-                    text_content = elem.text or ''
-                    full_text = ''.join(elem.itertext()).strip()
-
+            clauses_container = root.find('.//clauses')
+            if clauses_container is not None:
+                for idx, clause_elem in enumerate(clauses_container.findall('clause'), 1):
+                    title = clause_elem.findtext('title', '').strip()
+                    paragraphs = [
+                        paragraph.text.strip()
+                        for paragraph in clause_elem.findall('.//paragraph')
+                        if paragraph.text and paragraph.text.strip()
+                    ]
+                    full_text = '\n'.join(paragraphs).strip() or ''.join(clause_elem.itertext()).strip()
+                    if not full_text:
+                        continue
                     structure['sections'].append({
-                        'tag': elem.tag,
-                        'text': text_content,
+                        'tag': 'clause',
+                        'text': title,
                         'full_text': full_text,
-                        'xpath': f'//{elem.tag}',
-                        'attributes': dict(elem.attrib)
+                        'xpath': f'/clauses/clause[{idx}]',
+                        'attributes': dict(clause_elem.attrib)
                     })
+                return structure
+
+            ignored_tags = {
+                'contract', 'metadata', 'parties', 'party', 'terms', 'financial', 'dates',
+                'tables', 'table', 'row', 'cell', 'price', 'term'
+            }
+            for elem in root.iter():
+                if elem.tag in ignored_tags:
+                    continue
+
+                text_content = elem.text or ''
+                full_text = ''.join(elem.itertext()).strip()
+                if not full_text:
+                    continue
+
+                structure['sections'].append({
+                    'tag': elem.tag,
+                    'text': text_content,
+                    'full_text': full_text,
+                    'xpath': f'//{elem.tag}',
+                    'attributes': dict(elem.attrib)
+                })
 
             return structure
 
@@ -114,8 +142,17 @@ class ClauseExtractor:
 
             logger.info(f"Root tag: {root.tag}, children: {len(list(root))}")
 
+            direct_clauses = ClauseExtractor._extract_clauses_alternative(xml_content)
+            if direct_clauses:
+                logger.info(f"Using normalized clause container: {len(direct_clauses)} clauses")
+                return direct_clauses[:max_clauses]
+
             clauses: List[Dict[str, Any]] = []
             clause_counter = 1
+            ignored_tags = {
+                'metadata', 'parties', 'party', 'terms', 'financial', 'dates',
+                'tables', 'table', 'row', 'cell'
+            }
 
             def extract_recursive(element: etree._Element, parent_path: str = "", level: int = 0) -> None:
                 """Recursive clause extraction"""
@@ -126,6 +163,9 @@ class ClauseExtractor:
                     logger.info(f"Processing root element: {element.tag}")
                     for child in element:
                         extract_recursive(child, element.tag, level + 1)
+                    return
+
+                if element.tag in ignored_tags:
                     return
 
                 # Get element text

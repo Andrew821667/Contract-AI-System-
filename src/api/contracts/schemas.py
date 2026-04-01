@@ -19,6 +19,7 @@ class AnalysisResultRequest(BaseModel):
     contract_id: str
     check_counterparty: bool = True
     counterparty_tin: Optional[str] = None
+    analysis_perspective: Optional[str] = None
 
 
 class AnalysisResultResponse(BaseModel):
@@ -100,6 +101,7 @@ class CompareResultResponse(BaseModel):
 class BatchAnalysisRequest(BaseModel):
     contract_ids: List[str] = Field(..., description="List of contract IDs to analyze", min_length=1, max_length=20)
     check_counterparty: bool = True
+    analysis_perspective: Optional[str] = None
 
 
 class BatchAnalysisResponse(BaseModel):

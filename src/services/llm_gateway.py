@@ -7,7 +7,7 @@ import asyncio
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Literal, Optional, Union
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 from loguru import logger
 from datetime import datetime, timezone
 from config.settings import settings
@@ -175,7 +175,8 @@ class LLMGateway:
 
     @retry(
         stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10)
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception(lambda e: not (hasattr(e, 'status_code') and e.status_code == 400))
     )
     def call(
         self,
