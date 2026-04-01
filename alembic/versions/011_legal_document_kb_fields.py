@@ -1,7 +1,7 @@
 """Add KB management fields to legal_documents
 
 Revision ID: 011_legal_document_kb_fields
-Revises: 010_contract_versions
+Revises: 010
 Create Date: 2026-03-11 12:00:00.000000
 
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '011_legal_document_kb_fields'
-down_revision = '010_contract_versions'
+down_revision = '010'
 branch_labels = None
 depends_on = None
 

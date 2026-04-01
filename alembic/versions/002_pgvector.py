@@ -7,7 +7,7 @@ Create Date: 2026-01-09 10:00:00.000000
 """
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
+from pgvector.sqlalchemy import Vector
 
 # revision identifiers, used by Alembic.
 revision = '002_pgvector'
@@ -24,7 +24,7 @@ def upgrade():
 
     # Add embedding column to contracts_core
     op.add_column('contracts_core',
-                  sa.Column('embedding', postgresql.ARRAY(sa.Float), nullable=True))
+                  sa.Column('embedding', Vector(384), nullable=True))
 
     # Create index for vector similarity search
     op.execute("""

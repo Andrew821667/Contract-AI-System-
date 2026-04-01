@@ -15,7 +15,7 @@ Author: AI Contract System
 from typing import Optional, List, Dict
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy.orm import Session
 import json
 import asyncio
@@ -86,6 +86,7 @@ class RiskPredictionRequest(BaseModel):
 
 class RiskPredictionResponse(BaseModel):
     """ML risk prediction response"""
+    model_config = ConfigDict(protected_namespaces=())
     risk_level: str
     confidence: float
     risk_score: float
@@ -98,6 +99,7 @@ class RiskPredictionResponse(BaseModel):
 
 class RiskFeedbackRequest(BaseModel):
     """User feedback on risk prediction"""
+    model_config = ConfigDict(protected_namespaces=())
     contract_id: Optional[int] = None
     contract_features: Dict = Field(..., description="Features used for prediction")
     predicted_risk_level: str = Field(..., description="What the model predicted")
@@ -109,6 +111,7 @@ class RiskFeedbackRequest(BaseModel):
 
 class ModelStatusResponse(BaseModel):
     """ML model status"""
+    model_config = ConfigDict(protected_namespaces=())
     model_type: str
     model_version: str
     is_trained: bool

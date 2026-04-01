@@ -8,6 +8,8 @@ from sqlalchemy import select, text
 import logging
 import numpy as np
 
+from src.utils.constants import EMBEDDING_VECTOR_SIZE
+
 logger = logging.getLogger(__name__)
 
 
@@ -311,7 +313,7 @@ class RAGService:
         """
         if not self.embedding_model:
             # Return zero vector as fallback
-            return np.zeros(1536)
+            return np.zeros(EMBEDDING_VECTOR_SIZE)
 
         try:
             # Assuming sentence-transformers or similar
@@ -319,13 +321,13 @@ class RAGService:
                 embedding = self.embedding_model.encode(text, convert_to_numpy=True)
             else:
                 # Fallback
-                embedding = np.zeros(1536)
+                embedding = np.zeros(EMBEDDING_VECTOR_SIZE)
 
             return embedding
 
         except Exception as e:
             logger.error(f"Embedding generation failed: {e}")
-            return np.zeros(1536)
+            return np.zeros(EMBEDDING_VECTOR_SIZE)
 
     async def _update_usage_stats(self, knowledge_ids: List[str]):
         """

@@ -8,6 +8,7 @@ Create Date: 2026-01-09 10:15:00.000000
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+from pgvector.sqlalchemy import Vector
 
 # revision identifiers, used by Alembic.
 revision = '005_knowledge_base'
@@ -35,7 +36,7 @@ def upgrade():
         sa.Column('content', sa.Text, nullable=False),
 
         # Эмбеддинг для векторного поиска
-        sa.Column('embedding', postgresql.ARRAY(sa.Float), nullable=True),
+        sa.Column('embedding', Vector(384), nullable=True),
 
         # Метаданные
         sa.Column('metadata', postgresql.JSONB, nullable=True),

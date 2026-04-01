@@ -1,6 +1,9 @@
 #!/bin/sh
 set -e
 
+# Use the project virtualenv explicitly even if PATH is reset by the runtime shell.
+export PATH="/opt/venv/bin:$PATH"
+
 echo "==> Waiting for PostgreSQL..."
 until pg_isready -h "${DB_HOST:-postgres}" -p "${DB_PORT:-5432}" -U "${DB_USER:-contract_user}" -q; do
     echo "PostgreSQL is not ready yet, retrying in 2s..."
@@ -33,8 +36,19 @@ Base.metadata.create_all(bind=engine)
 print('All tables created successfully')
 " || echo "WARNING: Table creation failed, continuing..."
 
-echo "==> Running Alembic migrations..."
-alembic upgrade head 2>/dev/null || echo "WARNING: Alembic migrations skipped (may not be configured for Docker yet)"
+echo "==> Ensuring PostgreSQL extensions..."
+python -c "
+import os
+from sqlalchemy import create_engine, text
+
+engine = create_engine(os.environ['DATABASE_URL'])
+with engine.begin() as conn:
+    conn.execute(text('CREATE EXTENSION IF NOT EXISTS vector'))
+print('pgvector extension ensured')
+" || echo "WARNING: Failed to ensure PostgreSQL extensions"
+
+echo "==> Recording Alembic schema version..."
+/opt/venv/bin/alembic stamp head >/dev/null 2>&1 && echo "Alembic schema version stamped to head" || echo "WARNING: Alembic schema stamp failed (see container logs for details)"
 
 echo "==> Seeding initial users..."
 python database/seed_users.py || echo "WARNING: User seeding failed (may already exist)"

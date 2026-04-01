@@ -131,3 +131,6 @@ test_*.py
 tmp/
 temp/
 *.tmp
+
+# Finder/desktop duplicate copies that must not get into the image
+alembic/versions/* 2.py

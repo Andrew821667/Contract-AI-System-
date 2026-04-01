@@ -89,8 +89,13 @@ class PaymentService:
 
     def __init__(self):
         """Initialize payment service"""
+        app_env = os.getenv('APP_ENV', 'development').lower()
+
         if not STRIPE_AVAILABLE:
-            logger.warning("Stripe library not installed. Payment features will be disabled.")
+            if app_env in {'production', 'prod'}:
+                logger.warning("Stripe library not installed. Payment features will be disabled.")
+            else:
+                logger.info("Stripe library not installed in dev environment. Payment features are disabled.")
             return
 
         # Get Stripe API key from environment
@@ -102,7 +107,10 @@ class PaymentService:
             stripe.api_key = self.api_key
             logger.info("Stripe payment service initialized")
         else:
-            logger.warning("Stripe API key not configured. Set STRIPE_SECRET_KEY environment variable.")
+            if app_env in {'production', 'prod'}:
+                logger.warning("Stripe API key not configured. Set STRIPE_SECRET_KEY environment variable.")
+            else:
+                logger.info("Stripe API key not configured in dev environment. Payment features are disabled.")
 
     def create_customer(self, user: User) -> Optional[str]:
         """
