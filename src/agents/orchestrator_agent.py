@@ -50,7 +50,7 @@ class WorkflowState(dict):
     pass
 
 
-class OrchestratorAgent:
+class OrchestratorAgent(BaseAgent):
     """
     Orchestrator Agent - Coordinates all agents using LangGraph
 
@@ -84,7 +84,7 @@ class OrchestratorAgent:
         self,
         llm_gateway: LLMGateway,
         db_session: Session,
-        review_queue_service: ReviewQueueService,
+        review_queue_service: Optional[ReviewQueueService] = None,
         config: Optional[Dict[str, Any]] = None
     ):
         """
@@ -96,25 +96,71 @@ class OrchestratorAgent:
             review_queue_service: Review queue service for human-in-the-loop
             config: Orchestrator configuration
         """
-        self.llm = llm_gateway
-        self.db = db_session
-        self.review_queue = review_queue_service
-        self.config = config or {}
+        super().__init__(llm_gateway, db_session, config)
+        self.review_queue = review_queue_service or ReviewQueueService(db_session)
 
-        # Initialize all agents
+        # Initialize all agents with explicit kwargs to avoid constructor mismatches.
         self.agents = {
-            'onboarding': OnboardingAgent(llm_gateway, db_session, config),
-            'generator': ContractGeneratorAgent(llm_gateway, db_session, config),
-            'analyzer': ContractAnalyzerAgent(llm_gateway, db_session, config),
-            'disagreement': DisagreementProcessorAgent(llm_gateway, db_session, config),
-            'changes': ChangesAnalyzerAgent(llm_gateway, db_session, config),
-            'export': QuickExportAgent(llm_gateway, db_session, config)
+            'onboarding': OnboardingAgent(llm_gateway=llm_gateway, db_session=db_session, config=self.config),
+            'generator': ContractGeneratorAgent(llm_gateway=llm_gateway, db_session=db_session),
+            'analyzer': ContractAnalyzerAgent(llm_gateway=llm_gateway, db_session=db_session),
+            'disagreement': DisagreementProcessorAgent(llm_gateway=llm_gateway, db_session=db_session),
+            'changes': ChangesAnalyzerAgent(llm_gateway=llm_gateway, db_session=db_session),
+            'export': QuickExportAgent(llm_gateway=llm_gateway, db_session=db_session, config=self.config),
         }
 
         # Build workflow graph
         self.graph = self._build_graph()
 
         logger.info("OrchestratorAgent initialized with LangGraph")
+
+    def get_name(self) -> str:
+        return "OrchestratorAgent"
+
+    def execute(self, state: Dict[str, Any]) -> AgentResult:
+        """Adapter-friendly entrypoint so orchestrator can work via the legacy registry."""
+        try:
+            review_task_id = state.get('review_task_id')
+            review_decision = state.get('review_decision') or state.get('review_status')
+
+            if review_task_id and review_decision:
+                final_state = self.resume_workflow(
+                    task_id=review_task_id,
+                    review_decision=review_decision,
+                    comments=state.get('review_comments') or state.get('comments'),
+                )
+            else:
+                contract_id = state.get('contract_id')
+                file_path = state.get('file_path')
+                if not contract_id or not file_path:
+                    return AgentResult(
+                        success=False,
+                        data={},
+                        error='Missing contract_id or file_path',
+                    )
+
+                final_state = self.start_workflow(
+                    contract_id=contract_id,
+                    file_path=file_path,
+                    document_type=state.get('document_type', 'contract'),
+                    initial_data=state.get('initial_data') or state.get('data'),
+                )
+
+            final_state = dict(final_state)
+            error = final_state.get('error')
+            return AgentResult(
+                success=not bool(error),
+                data=final_state,
+                error=error,
+                next_action='completed' if not error and final_state.get('completed') else None,
+                metadata={
+                    'current_agent': final_state.get('current_agent'),
+                    'history_length': len(final_state.get('history', [])),
+                },
+            )
+        except Exception as exc:
+            logger.error(f"Orchestrator execute failed: {exc}")
+            return AgentResult(success=False, data={}, error=str(exc))
 
     def _build_graph(self) -> StateGraph:
         """Build LangGraph workflow"""

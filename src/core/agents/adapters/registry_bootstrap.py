@@ -115,7 +115,13 @@ def _create_agent_instance(
 
         elif agent_id == "orchestrator":
             from src.agents.orchestrator_agent import OrchestratorAgent
-            return OrchestratorAgent(llm_gateway=llm_gateway, db_session=db)
+            from src.services.review_queue_service import ReviewQueueService
+
+            return OrchestratorAgent(
+                llm_gateway=llm_gateway,
+                db_session=db,
+                review_queue_service=ReviewQueueService(db),
+            )
 
         else:
             logger.warning(f"Unknown agent_id: {agent_id}")
