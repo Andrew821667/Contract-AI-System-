@@ -1031,9 +1031,10 @@ class APIClient {
     return response.data;
   }
 
-  async analyzeContract(contractId: string): Promise<any> {
+  async analyzeContract(contractId: string, options?: { analysis_perspective?: string }): Promise<any> {
     const response = await this.client.post('/api/v1/contracts/analyze', {
       contract_id: contractId,
+      analysis_perspective: options?.analysis_perspective,
     });
     return response.data;
   }

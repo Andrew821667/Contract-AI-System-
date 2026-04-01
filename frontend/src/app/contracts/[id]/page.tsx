@@ -23,6 +23,7 @@ interface Risk {
   title: string
   description: string
   consequences: string
+  section_name?: string
 }
 
 interface Recommendation {
@@ -32,6 +33,18 @@ interface Recommendation {
   description: string
   reasoning: string
   expected_benefit: string
+}
+
+interface RequiredField {
+  title: string
+  description: string
+  snippet?: string
+  section_name?: string
+}
+
+interface AnalysisContext {
+  analysis_date?: string
+  analysis_perspective?: string
 }
 
 export default function ContractDetailPage() {
@@ -45,7 +58,10 @@ export default function ContractDetailPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
   const [analysisJustStarted, setAnalysisJustStarted] = useState(false)
-
+  const [showPerspectiveModal, setShowPerspectiveModal] = useState(false)
+  const [perspectiveOptions, setPerspectiveOptions] = useState<string[]>([])
+  const [selectedPerspective, setSelectedPerspective] = useState('')
+  const [customPerspective, setCustomPerspective] = useState('')
   const [refetchMs, setRefetchMs] = useState<number | false>(false)
 
   const { data, isLoading, isError, error } = useQuery({
@@ -54,7 +70,6 @@ export default function ContractDetailPage() {
     refetchInterval: refetchMs,
   })
 
-  // Auto-refetch while analyzing; reset when done
   const contractStatus = data?.contract?.status
   useEffect(() => {
     if (contractStatus === 'completed' || contractStatus === 'error') {
@@ -65,7 +80,7 @@ export default function ContractDetailPage() {
     }
   }, [contractStatus, analysisJustStarted])
 
-  const handleWsComplete = useCallback((msg: WSMessage) => {
+  const handleWsComplete = useCallback((_msg: WSMessage) => {
     setAnalysisJustStarted(false)
     queryClient.invalidateQueries({ queryKey: ['contract', contractId] })
   }, [queryClient, contractId])
@@ -89,16 +104,34 @@ export default function ContractDetailPage() {
   })
 
   const analyzeMutation = useMutation({
-    mutationFn: () => api.analyzeContract(contractId),
-    onSuccess: () => {
-      toast.success('Анализ запущен')
+    mutationFn: (analysisPerspective?: string) => api.analyzeContract(contractId, {
+      analysis_perspective: analysisPerspective,
+    }),
+    onSuccess: (response: any) => {
+      setShowPerspectiveModal(false)
+      setSelectedPerspective('')
+      setCustomPerspective('')
       setAnalysisJustStarted(true)
+      toast.success(response?.message || 'Анализ запущен')
       queryClient.invalidateQueries({ queryKey: ['contract', contractId] })
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Ошибка запуска анализа')
+      const detail = err?.response?.data?.detail
+      if (detail?.code === 'analysis_perspective_required') {
+        const options = Array.isArray(detail?.parties) ? detail.parties.filter(Boolean) : []
+        setPerspectiveOptions(options)
+        setSelectedPerspective(options[0] || '')
+        setCustomPerspective('')
+        setShowPerspectiveModal(true)
+        return
+      }
+      toast.error(err?.response?.data?.message || err?.response?.data?.detail || 'Ошибка запуска анализа')
     },
   })
+
+  const handleAnalyze = (analysisPerspective?: string) => {
+    analyzeMutation.mutate(analysisPerspective)
+  }
 
   const cancelMutation = useMutation({
     mutationFn: () => api.cancelAnalysis(contractId),
@@ -116,7 +149,7 @@ export default function ContractDetailPage() {
   const deleteMutation = useMutation({
     mutationFn: () => api.deleteContract(contractId, deleteReason),
     onSuccess: () => {
-      toast.success('Документ удалён')
+      toast.success('Документ удален')
       setShowDeleteModal(false)
       router.push('/contracts')
     },
@@ -140,6 +173,17 @@ export default function ContractDetailPage() {
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || 'Ошибка экспорта')
     }
+  }
+
+  const formatAnalysisDate = (value?: string) => {
+    if (!value) return null
+    const date = new Date(value.includes('T') ? value : `${value}T00:00:00`)
+    if (Number.isNaN(date.getTime())) return value
+    return date.toLocaleDateString('ru-RU', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    })
   }
 
   const contract = data?.contract
@@ -170,11 +214,12 @@ export default function ContractDetailPage() {
     lease: 'Договор аренды',
     purchase: 'Договор купли-продажи',
     employment: 'Трудовой договор',
-    unknown: 'Не определён',
+    unknown: 'Не определен',
   }
 
   const statusLabels: Record<string, { variant: 'success' | 'warning' | 'danger' | 'info' | 'default'; text: string }> = {
-    completed: { variant: 'success', text: 'Анализ завершён' },
+    completed: { variant: 'success', text: 'Анализ завершен' },
+    parsing: { variant: 'info', text: 'Подготовка анализа...' },
     analyzing: { variant: 'info', text: 'Анализируется...' },
     error: { variant: 'danger', text: 'Ошибка' },
     uploaded: { variant: 'default', text: 'Загружен' },
@@ -221,11 +266,75 @@ export default function ContractDetailPage() {
   const statusInfo = statusLabels[contract?.status] || statusLabels.pending
   const risks: Risk[] = analysis?.risks || []
   const recommendations: Recommendation[] = analysis?.recommendations || []
+  const requiredFields: RequiredField[] = analysis?.required_fields || []
+  const analysisContext: AnalysisContext = analysis?.analysis_context || {}
 
   return (
     <AppLayout title={contract?.file_name || 'Договор'}>
       <div className="max-w-7xl mx-auto">
-        {/* Contract Info */}
+        {showPerspectiveModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <Card className="w-full max-w-xl">
+              <h2 className="text-2xl font-bold text-gray-900 mb-3">Чьи интересы защищать при анализе</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Мы не смогли надежно определить сторону автоматически. Выберите сторону договора или укажите свой вариант.
+              </p>
+
+              {perspectiveOptions.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  {perspectiveOptions.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setSelectedPerspective(option)}
+                      className={`w-full rounded-lg border px-4 py-3 text-left transition ${
+                        selectedPerspective === option
+                          ? 'border-primary-500 bg-primary-50 text-primary-800'
+                          : 'border-gray-200 bg-white text-gray-700 hover:border-primary-300'
+                      }`}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Свой вариант</label>
+                <input
+                  type="text"
+                  value={customPerspective}
+                  onChange={(e) => setCustomPerspective(e.target.value)}
+                  placeholder="Например: Пациент, Покупатель, Арендатор"
+                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowPerspectiveModal(false)
+                    setCustomPerspective('')
+                  }}
+                >
+                  Отмена
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  loading={analyzeMutation.isPending}
+                  disabled={!customPerspective.trim() && !selectedPerspective}
+                  onClick={() => handleAnalyze(customPerspective.trim() || selectedPerspective)}
+                >
+                  Запустить анализ
+                </Button>
+              </div>
+            </Card>
+          </div>
+        )}
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -262,7 +371,7 @@ export default function ContractDetailPage() {
                     variant="primary"
                     size="sm"
                     loading={analyzeMutation.isPending}
-                    onClick={() => analyzeMutation.mutate()}
+                    onClick={() => handleAnalyze()}
                   >
                     🔍 Запустить анализ
                   </Button>
@@ -272,7 +381,7 @@ export default function ContractDetailPage() {
                     variant="outline"
                     size="sm"
                     loading={analyzeMutation.isPending}
-                    onClick={() => analyzeMutation.mutate()}
+                    onClick={() => handleAnalyze()}
                   >
                     🔄 Повторный анализ
                   </Button>
@@ -316,7 +425,6 @@ export default function ContractDetailPage() {
           </Card>
         </motion.div>
 
-        {/* Delete Confirmation Modal */}
         {showDeleteModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
             <motion.div
@@ -354,7 +462,6 @@ export default function ContractDetailPage() {
           </div>
         )}
 
-        {/* Analyzing Progress */}
         {(contract?.status === 'analyzing' || contract?.status === 'parsing' || analysisJustStarted) && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -370,7 +477,6 @@ export default function ContractDetailPage() {
                 </svg>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">Анализ выполняется...</h3>
 
-                {/* Progress bar */}
                 <div className="w-full bg-gray-200 rounded-full h-3 mb-3 overflow-hidden">
                   <motion.div
                     className="h-full rounded-full bg-primary-500"
@@ -380,7 +486,6 @@ export default function ContractDetailPage() {
                   />
                 </div>
                 <p className="text-sm font-medium text-gray-700 mb-1">{wsProgress}%</p>
-
                 <p className="text-sm text-gray-500 mb-2">{wsMessage}</p>
 
                 <div className="flex items-center justify-center gap-2 text-xs text-gray-400 mb-4">
@@ -402,10 +507,80 @@ export default function ContractDetailPage() {
           </motion.div>
         )}
 
-        {/* Analysis Results */}
         {analysis && contract?.status === 'completed' && (
           <>
-            {/* Risks Section */}
+            {(analysisContext.analysis_perspective || analysisContext.analysis_date) && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+                className="mb-8"
+              >
+                <Card>
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">Контекст анализа</h2>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-xl bg-amber-50 p-4 border border-amber-100">
+                      <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">В интересах стороны</p>
+                      <p className="text-base font-semibold text-gray-900">{analysisContext.analysis_perspective || 'Не указано'}</p>
+                    </div>
+                    <div className="rounded-xl bg-blue-50 p-4 border border-blue-100">
+                      <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Дата анализа</p>
+                      <p className="text-base font-semibold text-gray-900">{formatAnalysisDate(analysisContext.analysis_date) || 'Не указана'}</p>
+                    </div>
+                  </div>
+                </Card>
+              </motion.div>
+            )}
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.18 }}
+              className="mb-8"
+            >
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                Нужно заполнить ({requiredFields.length})
+              </h2>
+
+              {requiredFields.length === 0 ? (
+                <Card>
+                  <div className="text-center py-8">
+                    <div className="text-4xl mb-2">📝</div>
+                    <p className="text-gray-600">Незаполненных обязательных мест не найдено</p>
+                  </div>
+                </Card>
+              ) : (
+                <div className="space-y-4">
+                  {requiredFields.map((field, idx) => (
+                    <motion.div
+                      key={`${field.title}-${idx}`}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.06 * idx }}
+                    >
+                      <Card>
+                        <div className="flex items-start justify-between mb-3 gap-3">
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900">{field.title}</h3>
+                            {field.section_name && (
+                              <p className="text-xs text-gray-500 mt-1">Раздел: {field.section_name}</p>
+                            )}
+                          </div>
+                          <Badge variant="warning" size="sm">Требует заполнения</Badge>
+                        </div>
+                        <p className="text-gray-700 mb-3">{field.description}</p>
+                        {field.snippet && (
+                          <div className="rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm text-amber-900 whitespace-pre-wrap">
+                            {field.snippet}
+                          </div>
+                        )}
+                      </Card>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -420,7 +595,7 @@ export default function ContractDetailPage() {
                 <Card>
                   <div className="text-center py-8">
                     <div className="text-4xl mb-2">✅</div>
-                    <p className="text-gray-600">Критических рисков не обнаружено</p>
+                    <p className="text-gray-600">Существенных рисков не обнаружено</p>
                   </div>
                 </Card>
               ) : (
@@ -435,10 +610,15 @@ export default function ContractDetailPage() {
                         transition={{ delay: 0.1 * idx }}
                       >
                         <Card>
-                          <div className="flex items-start justify-between mb-3">
-                            <h3 className="text-lg font-semibold text-gray-900 flex-1">
-                              {risk.title}
-                            </h3>
+                          <div className="flex items-start justify-between mb-3 gap-3">
+                            <div className="flex-1">
+                              <h3 className="text-lg font-semibold text-gray-900">
+                                {risk.title}
+                              </h3>
+                              {risk.section_name && (
+                                <p className="text-xs text-gray-500 mt-1">Раздел: {risk.section_name}</p>
+                              )}
+                            </div>
                             <div className="flex items-center space-x-2 ml-4">
                               <Badge variant={severity.variant} size="sm">
                                 {severity.label}
@@ -464,7 +644,6 @@ export default function ContractDetailPage() {
               )}
             </motion.div>
 
-            {/* Recommendations Section */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -479,7 +658,11 @@ export default function ContractDetailPage() {
                 <Card>
                   <div className="text-center py-8">
                     <div className="text-4xl mb-2">👍</div>
-                    <p className="text-gray-600">Рекомендаций нет — договор в хорошем состоянии</p>
+                    <p className="text-gray-600">
+                      {risks.length > 0 || requiredFields.length > 0
+                        ? 'Рекомендации не сформированы автоматически. Ориентируйтесь на риски и обязательные поля для заполнения.'
+                        : 'Рекомендаций нет - явных проблем не обнаружено'}
+                    </p>
                   </div>
                 </Card>
               ) : (
@@ -525,16 +708,10 @@ export default function ContractDetailPage() {
           </>
         )}
 
-        {/* ML Quick Risk Assessment */}
-        <MLRiskSection contractId={contractId} contract={contract} onAnalyze={() => analyzeMutation.mutate()} />
-
-        {/* Version Comparison Section */}
+        <MLRiskSection contractId={contractId} contract={contract} onAnalyze={() => handleAnalyze()} />
         <VersionComparisonSection contractId={contractId} />
-
-        {/* Digital Verification Section */}
         <DigitalVerificationSection contractId={contractId} />
 
-        {/* Export Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -560,12 +737,10 @@ export default function ContractDetailPage() {
         </motion.div>
       </div>
 
-      {/* AI Panel (slide-in) */}
       <AIPanel contractId={contractId} />
     </AppLayout>
   )
 }
-
 
 // ==================== ML Quick Risk Assessment Section ====================
 

@@ -5,9 +5,10 @@ Contract Listing Routes
 Uses async DB sessions (asyncpg) when available for non-blocking queries.
 Falls back to sync sessions on SQLite (dev mode).
 """
+import json
 import os
 import time
-from typing import Optional, Any
+from typing import Optional, Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
@@ -23,8 +24,6 @@ from src.api.dependencies import get_current_user
 from .schemas import ContractListResponse
 
 
-# ── Contract list cache (30s TTL) ────────────────────────────────────────
-# Short-lived cache to reduce DB load when many users refresh the list page.
 _LIST_CACHE_TTL = 30
 _list_cache: dict[str, tuple[Any, float]] = {}
 _LIST_CACHE_MAX = 128
@@ -51,13 +50,35 @@ def _list_cache_set(key: str, data: Any) -> None:
     _list_cache[key] = (data, time.time() + _LIST_CACHE_TTL)
 
 
-router = APIRouter()
+def _load_meta(meta: Any) -> Dict[str, Any]:
+    if isinstance(meta, dict):
+        return meta
+    if isinstance(meta, str) and meta:
+        try:
+            loaded = json.loads(meta)
+            return loaded if isinstance(loaded, dict) else {}
+        except Exception:
+            return {}
+    return {}
 
-# Check if we're in async mode (PostgreSQL) or sync fallback (SQLite)
+
+def _json_field(value: Any) -> Dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            loaded = json.loads(value)
+            return loaded if isinstance(loaded, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+router = APIRouter()
 _ASYNC_MODE = AsyncSessionLocal is not None
 
 
-@router.get("", response_model=ContractListResponse)
+@router.get('', response_model=ContractListResponse)
 async def list_contracts(
     page: int = 1,
     page_size: int = 20,
@@ -66,29 +87,15 @@ async def list_contracts(
     search: Optional[str] = None,
     cursor: Optional[str] = None,
     current_user: User = Depends(get_current_user),
-    db=Depends(get_async_db)
+    db=Depends(get_async_db),
 ):
-    """
-    List contracts for current user
-
-    **Filters:**
-    - status: uploaded, analyzing, completed, error
-    - contract_type: supply, service, lease, etc.
-
-    **Pagination:**
-    - Offset mode (default): use `page` + `page_size`
-    - Cursor mode (faster for deep pages): pass `cursor` from previous response's `next_cursor`
-
-    **Returns:** Paginated list of contracts
-    """
+    """List contracts for current user."""
     try:
-        # Cap page_size
         if page_size > 100:
             page_size = 100
         if page < 1:
             page = 1
 
-        # Check cache (30s TTL)
         cache_key = _list_cache_key(
             current_user.id, page, page_size, status, contract_type, search, cursor
         )
@@ -96,14 +103,11 @@ async def list_contracts(
         if cached:
             return cached
 
-        # Build query using SQLAlchemy 2.0 select() style (works with both sync and async)
         stmt = select(Contract)
 
-        # Filter by user (non-admins can only see their own contracts)
         if current_user.role not in ['admin']:
             stmt = stmt.where(Contract.assigned_to == current_user.id)
 
-        # Apply filters (exclude deleted by default)
         if status:
             stmt = stmt.where(Contract.status == status)
         else:
@@ -112,38 +116,31 @@ async def list_contracts(
             stmt = stmt.where(Contract.contract_type == contract_type)
         if search:
             safe_search = search.replace('%', r'\%').replace('_', r'\_')
-            stmt = stmt.where(
-                Contract.file_name.ilike(f'%{safe_search}%', escape='\\')
-            )
+            stmt = stmt.where(Contract.file_name.ilike(f'%{safe_search}%', escape='\\'))
 
-        # Get total count
         count_stmt = select(func.count()).select_from(stmt.subquery())
-
         if _ASYNC_MODE:
             total_result = await db.execute(count_stmt)
             total = total_result.scalar()
         else:
             total = db.execute(count_stmt).scalar()
 
-        # Paginate — cursor-based if cursor provided, else offset
         if cursor:
-            # Cursor is "created_at:id" for keyset pagination (O(1) vs O(N) for offset)
             try:
-                cursor_ts, cursor_id = cursor.rsplit(":", 1)
+                cursor_ts, cursor_id = cursor.rsplit(':', 1)
                 from datetime import datetime
                 cursor_dt = datetime.fromisoformat(cursor_ts)
                 stmt = stmt.where(
                     or_(
                         Contract.created_at < cursor_dt,
-                        and_(Contract.created_at == cursor_dt, Contract.id < cursor_id)
+                        and_(Contract.created_at == cursor_dt, Contract.id < cursor_id),
                     )
                 )
             except (ValueError, TypeError):
-                pass  # Invalid cursor — fall through to normal ordering
+                pass
 
             stmt = stmt.order_by(Contract.created_at.desc(), Contract.id.desc()).limit(page_size)
         else:
-            # Offset mode for backward compat
             stmt = stmt.order_by(Contract.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
 
         if _ASYNC_MODE:
@@ -152,7 +149,6 @@ async def list_contracts(
         else:
             contracts = db.execute(stmt).scalars().all()
 
-        # Format response
         contracts_data = []
         for contract in contracts:
             contracts_data.append({
@@ -161,10 +157,9 @@ async def list_contracts(
                 'status': contract.status,
                 'contract_type': contract.contract_type,
                 'created_at': contract.created_at.isoformat() if contract.created_at else None,
-                'updated_at': contract.updated_at.isoformat() if contract.updated_at else None
+                'updated_at': contract.updated_at.isoformat() if contract.updated_at else None,
             })
 
-        # Build next_cursor for keyset pagination
         next_cursor = None
         if contracts_data and len(contracts_data) == page_size:
             last = contracts[-1]
@@ -181,21 +176,21 @@ async def list_contracts(
         _list_cache_set(cache_key, result)
         return result
 
-    except Exception as e:
-        logger.error(f"Error listing contracts: {e}", exc_info=True)
+    except Exception as exc:
+        logger.error(f"Error listing contracts: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
+            detail='Internal server error',
         )
 
 
-@router.get("/{contract_id}")
+@router.get('/{contract_id}')
 async def get_contract_details(
     contract_id: str,
     current_user: User = Depends(get_current_user),
-    db=Depends(get_async_db)
+    db=Depends(get_async_db),
 ):
-    """Get contract details including analysis results"""
+    """Get contract details including the latest analysis results."""
     try:
         stmt = select(Contract).where(Contract.id == contract_id)
 
@@ -208,18 +203,21 @@ async def get_contract_details(
         if not contract:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Contract not found"
+                detail='Contract not found',
             )
 
-        # Check ownership
         if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to view this contract"
+                detail="You don't have permission to view this contract",
             )
 
-        # Get analysis results if available
-        analysis_stmt = select(AnalysisResult).where(AnalysisResult.contract_id == contract_id)
+        analysis_stmt = (
+            select(AnalysisResult)
+            .where(AnalysisResult.contract_id == contract_id)
+            .order_by(AnalysisResult.created_at.desc(), AnalysisResult.version.desc())
+            .limit(1)
+        )
 
         if _ASYNC_MODE:
             analysis_result = await db.execute(analysis_stmt)
@@ -227,15 +225,24 @@ async def get_contract_details(
         else:
             analysis = db.execute(analysis_stmt).scalar_one_or_none()
 
-        # Load risks from contract_risks table
         risks_data = []
+        recs_data = []
+        required_fields = []
+        analysis_context: Dict[str, Any] = {}
+
         if analysis:
-            risks_stmt = select(ContractRisk).where(ContractRisk.contract_id == contract_id)
+            risks_stmt = select(ContractRisk).where(ContractRisk.analysis_id == analysis.id)
+            recs_stmt = select(ContractRecommendation).where(ContractRecommendation.analysis_id == analysis.id)
+
             if _ASYNC_MODE:
                 risks_result = await db.execute(risks_stmt)
+                recs_result = await db.execute(recs_stmt)
                 risks_rows = risks_result.scalars().all()
+                recs_rows = recs_result.scalars().all()
             else:
                 risks_rows = db.execute(risks_stmt).scalars().all()
+                recs_rows = db.execute(recs_stmt).scalars().all()
+
             risks_data = [
                 {
                     'id': r.id,
@@ -250,16 +257,6 @@ async def get_contract_details(
                 }
                 for r in risks_rows
             ]
-
-        # Load recommendations from contract_recommendations table
-        recs_data = []
-        if analysis:
-            recs_stmt = select(ContractRecommendation).where(ContractRecommendation.contract_id == contract_id)
-            if _ASYNC_MODE:
-                recs_result = await db.execute(recs_stmt)
-                recs_rows = recs_result.scalars().all()
-            else:
-                recs_rows = db.execute(recs_stmt).scalars().all()
             recs_data = [
                 {
                     'id': r.id,
@@ -274,16 +271,30 @@ async def get_contract_details(
                 for r in recs_rows
             ]
 
-        # Extract granular progress from meta_info
-        _progress = None
-        _progress_msg = None
-        try:
-            meta = contract.meta_info
-            if meta and isinstance(meta, dict):
-                _progress = meta.get("_progress")
-                _progress_msg = meta.get("_progress_msg")
-        except Exception:
-            pass
+            legal_issues = _json_field(analysis.legal_issues)
+            entities = _json_field(analysis.entities)
+            risk_meta = _json_field(analysis.risks_by_category)
+
+            required_fields = legal_issues.get('required_fields', [])
+            analysis_context = entities.get('analysis_context', {})
+            if not analysis_context:
+                analysis_context = {
+                    'analysis_date': risk_meta.get('analysis_date'),
+                    'analysis_perspective': risk_meta.get('analysis_perspective'),
+                }
+
+        meta = _load_meta(contract.meta_info)
+        progress = meta.get('_progress')
+        progress_message = meta.get('_progress_msg')
+
+        if progress is None and contract.status == 'completed':
+            progress = 100
+        if progress_message is None and contract.status == 'completed':
+            progress_message = 'Анализ завершен.'
+        if progress is None and contract.status == 'error':
+            progress = 0
+        if progress_message is None and contract.status == 'error':
+            progress_message = 'Ошибка анализа'
 
         return {
             'contract': {
@@ -291,36 +302,38 @@ async def get_contract_details(
                 'file_name': contract.file_name,
                 'status': contract.status,
                 'contract_type': contract.contract_type,
-                'progress': _progress,
-                'progress_message': _progress_msg,
+                'progress': progress,
+                'progress_message': progress_message,
                 'created_at': contract.created_at.isoformat() if contract.created_at else None,
                 'updated_at': contract.updated_at.isoformat() if contract.updated_at else None,
             },
             'analysis': {
                 'id': analysis.id if analysis else None,
+                'version': analysis.version if analysis else None,
                 'risks': risks_data,
                 'recommendations': recs_data,
-                'version': analysis.version if analysis else None
-            } if analysis else None
+                'required_fields': required_fields,
+                'analysis_context': analysis_context,
+            } if analysis else None,
         }
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error getting contract details: {e}", exc_info=True)
+    except Exception as exc:
+        logger.error(f"Error getting contract details: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
+            detail='Internal server error',
         )
 
 
-@router.get("/{contract_id}/download")
+@router.get('/{contract_id}/download')
 async def download_contract(
     contract_id: str,
     current_user: User = Depends(get_current_user),
-    db=Depends(get_async_db)
+    db=Depends(get_async_db),
 ):
-    """Download original contract file"""
+    """Download original contract file."""
     try:
         stmt = select(Contract).where(Contract.id == contract_id)
 
@@ -333,33 +346,32 @@ async def download_contract(
         if not contract:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Contract not found"
+                detail='Contract not found',
             )
 
-        # Check ownership
         if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to download this contract"
+                detail="You don't have permission to download this contract",
             )
 
         if not os.path.exists(contract.file_path):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Contract file not found on disk"
+                detail='Contract file not found on disk',
             )
 
         return FileResponse(
             path=contract.file_path,
             filename=contract.file_name,
-            media_type='application/octet-stream'
+            media_type='application/octet-stream',
         )
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error downloading contract: {e}", exc_info=True)
+    except Exception as exc:
+        logger.error(f"Error downloading contract: {exc}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
+            detail='Internal server error',
         )

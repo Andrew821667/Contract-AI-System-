@@ -132,7 +132,8 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         status_code=exc.status_code,
         content={
             "error": exc.detail if isinstance(exc.detail, str) else "Request error",
-            "message": exc.detail if isinstance(exc.detail, str) else str(exc.detail),
+            "message": exc.detail if isinstance(exc.detail, str) else (exc.detail.get("message") if isinstance(exc.detail, dict) else str(exc.detail)),
+            "detail": exc.detail,
             "details": None,
         }
     )

@@ -3,8 +3,10 @@
 Contract Analyzer Agent - Deep analysis of contracts with risk identification
 """
 import json
+import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from lxml import etree
 from loguru import logger
 
@@ -87,7 +89,7 @@ class ContractAnalyzerAgent(BaseAgent):
 
 Твоя задача — провести глубокий анализ договора и выявить:
 1. РИСКИ (финансовые, юридические, операционные, репутационные)
-   - Серьёзность: critical, significant, minor
+   - Серьёзность: critical, high, medium, low, info
    - Вероятность: high, medium, low
    - Последствия: качественная оценка (без денежных сумм)
 
@@ -141,6 +143,14 @@ class ContractAnalyzerAgent(BaseAgent):
             metadata = state.get('metadata', {})
             check_counterparty = state.get('check_counterparty', False)
             company_conditions = state.get('company_conditions', [])
+            self._clause_analyses = []
+            self._required_fields = []
+            self._placeholder_clause_ids = set()
+            self._full_text_analysis = None
+            analysis_context = {
+                'analysis_date': metadata.get('analysis_date') or datetime.now(ZoneInfo("Europe/Moscow")).date().isoformat(),
+                'analysis_perspective': metadata.get('analysis_perspective') or 'Интересы пользователя',
+            }
 
             if not contract_id or not parsed_xml:
                 return AgentResult(
@@ -151,11 +161,7 @@ class ContractAnalyzerAgent(BaseAgent):
 
             logger.info(f"Starting analysis for contract {contract_id}")
 
-            # 1. Get contract from DB
-            contract = self.db.query(Contract).filter(
-                Contract.id == contract_id
-            ).first()
-
+            contract = self.db.query(Contract).filter(Contract.id == contract_id).first()
             if not contract:
                 return AgentResult(
                     success=False,
@@ -163,13 +169,10 @@ class ContractAnalyzerAgent(BaseAgent):
                     error=f"Contract {contract_id} not found"
                 )
 
-            # 2. Create analysis result record
             analysis = self._create_analysis_record(contract)
-
-            # 3. Extract contract structure
             structure = self.clause_extractor.extract_structure(parsed_xml)
+            required_fields = self._extract_required_fields(parsed_xml)
 
-            # 4. Optional: Check counterparty
             counterparty_data = None
             if check_counterparty:
                 counterparty_data = self.metadata_analyzer.check_counterparties(parsed_xml, metadata)
@@ -187,7 +190,7 @@ class ContractAnalyzerAgent(BaseAgent):
                     contract.meta_info = meta
                     flag_modified(contract, "meta_info")
                     self.db.commit()
-                    logger.debug(f"Progress updated: {pct}% — {msg}")
+                    logger.debug(f"Progress updated: {pct}% - {msg}")
                 except Exception as exc:
                     logger.warning(f"Failed to update progress: {exc}")
                     try:
@@ -195,75 +198,84 @@ class ContractAnalyzerAgent(BaseAgent):
                     except Exception:
                         pass
 
-            # 5. Analyze with RAG context
-            _update_progress(35, "Поиск контекста в базе знаний...")
-            rag_context = self._get_rag_context(parsed_xml, metadata)
+            kb_available = self._has_available_rag_sources()
+            if kb_available:
+                _update_progress(35, "Поиск контекста в базе знаний...")
+            else:
+                _update_progress(35, "База знаний пуста, пропускаем поиск контекста...")
+            rag_context = self._get_rag_context(parsed_xml, metadata, kb_available=kb_available)
 
-            # 6. Identify risks
             _update_progress(40, "AI анализ: выявление рисков...")
             risks = self._identify_risks(
-                parsed_xml, structure, rag_context, counterparty_data,
-                company_conditions=company_conditions
+                parsed_xml,
+                structure,
+                rag_context,
+                counterparty_data,
+                company_conditions=company_conditions,
+                analysis_context=analysis_context,
             )
+            required_fields = list(getattr(self, '_required_fields', required_fields))
+            risks = self._filter_placeholder_risks(risks)
             _update_progress(60, f"Найдено {len(risks)} рисков, сохранение...")
             self._save_risks(analysis.id, contract.id, risks)
 
-            # 7. Generate recommendations
             _update_progress(65, "Генерация рекомендаций...")
             recommendations = self.recommendation_generator.generate_recommendations(
-                risks, rag_context, company_conditions=company_conditions
+                risks,
+                rag_context,
+                company_conditions=company_conditions,
             )
             _update_progress(72, f"Сохранение {len(recommendations)} рекомендаций...")
             self._save_recommendations(analysis.id, contract.id, recommendations)
 
-            # 8. Generate suggested changes (LLM)
             _update_progress(78, "Генерация предложений по изменениям...")
             suggested_changes = self.recommendation_generator.generate_suggested_changes(
                 parsed_xml, structure, risks, recommendations, rag_context
             )
             self._save_suggested_changes(analysis.id, contract.id, suggested_changes)
 
-            # 9. Generate annotations
             _update_progress(82, "Создание аннотаций...")
             annotations = self.recommendation_generator.generate_annotations(
                 risks, recommendations, suggested_changes
             )
             self._save_annotations(analysis.id, contract.id, annotations)
 
-            # 10. Predict dispute probability
             _update_progress(88, "Прогноз вероятности споров...")
             dispute_prediction = self.metadata_analyzer.predict_disputes(
                 parsed_xml, risks, rag_context
             )
 
-            # 11. Compare with templates (if available)
             _update_progress(92, "Сравнение с шаблонами...")
             template_comparison = self.metadata_analyzer.compare_with_templates(
                 parsed_xml, metadata.get('contract_type')
             )
 
-            # 12. Update analysis record with results
-            # Store metadata in risks_by_category as JSON
-            import json
+            analysis.entities = json.dumps({
+                'analysis_context': analysis_context,
+                'parties': structure.get('parties', []),
+            }, ensure_ascii=False)
+            analysis.legal_issues = json.dumps({
+                'required_fields': required_fields,
+            }, ensure_ascii=False)
             analysis.risks_by_category = json.dumps({
                 'risk_count': len(risks),
                 'recommendation_count': len(recommendations),
                 'suggested_changes_count': len(suggested_changes),
-                'dispute_probability': dispute_prediction.get('score'),
+                'dispute_probability': dispute_prediction.get('overall_score', dispute_prediction.get('score')),
                 'template_comparison': template_comparison,
-                'counterparty_checked': counterparty_data is not None
+                'counterparty_checked': counterparty_data is not None,
+                'analysis_date': analysis_context.get('analysis_date'),
+                'analysis_perspective': analysis_context.get('analysis_perspective'),
+                'required_fields_count': len(required_fields),
             }, ensure_ascii=False)
             self.db.commit()
             self.db.refresh(analysis)
 
-            # 13. Determine next action
             next_action = self.metadata_analyzer.determine_next_action(risks, dispute_prediction)
-
-            logger.info(f"Analysis completed: {len(risks)} risks, {len(recommendations)} recommendations")
-
-            # Get detailed clause analyses if available
             clause_analyses = getattr(self, '_clause_analyses', [])
             full_text_analysis = getattr(self, '_full_text_analysis', None)
+
+            logger.info(f"Analysis completed: {len(risks)} risks, {len(recommendations)} recommendations")
 
             return AgentResult(
                 success=True,
@@ -272,18 +284,23 @@ class ContractAnalyzerAgent(BaseAgent):
                     'contract_id': contract.id,
                     'risks': [self._risk_to_dict(r) for r in risks],
                     'recommendations': [self._recommendation_to_dict(r) for r in recommendations],
+                    'required_fields': required_fields,
                     'suggested_changes': [self._change_to_dict(c) for c in suggested_changes],
                     'annotations': [self._annotation_to_dict(a) for a in annotations],
                     'dispute_prediction': dispute_prediction,
                     'template_comparison': template_comparison,
                     'counterparty_data': counterparty_data,
+                    'analysis_context': analysis_context,
                     'clause_analyses': clause_analyses,
-                    'full_text_analysis': full_text_analysis,  # Полнотекстовый анализ (missing clauses, balance, etc.)
+                    'full_text_analysis': full_text_analysis,
                     'disclaimer': 'Результаты AI-анализа носят рекомендательный характер и не являются юридической консультацией. Перед принятием решений проконсультируйтесь с квалифицированным юристом.'
                 },
                 next_action=next_action,
                 metadata={
-                    'message': f"Analysis completed: {len(risks)} risks identified, {len(recommendations)} recommendations, {len(clause_analyses)} clauses analyzed"
+                    'message': (
+                        f"Analysis completed: {len(risks)} risks identified, {len(recommendations)} recommendations, "
+                        f"{len(required_fields)} required fields, {len(clause_analyses)} clauses analyzed"
+                    )
                 }
             )
 
@@ -618,8 +635,40 @@ class ContractAnalyzerAgent(BaseAgent):
             logger.error(f"Counterparty check failed: {e}")
             return {}
 
+    def _has_available_rag_sources(self) -> bool:
+        """Return True only when there is indexed knowledge to search."""
+        try:
+            from pathlib import Path
+            from ..models.database import LegalDocument
+
+            indexed_docs = self.db.query(LegalDocument).filter(
+                LegalDocument.status == 'active',
+                LegalDocument.is_vectorized.is_(True)
+            ).count()
+            if indexed_docs > 0:
+                return True
+
+            enhanced_dir = Path("data/chroma_enhanced")
+            kb_file = enhanced_dir / "company_kb.json"
+            if kb_file.exists() and kb_file.stat().st_size > 2:
+                return True
+
+            if enhanced_dir.exists():
+                for child in enhanced_dir.iterdir():
+                    if child.name.startswith("."):
+                        continue
+                    if child.is_file() and child.stat().st_size > 0:
+                        return True
+                    if child.is_dir():
+                        return True
+
+            return False
+        except Exception as exc:
+            logger.warning(f"Failed to inspect knowledge base state: {exc}")
+            return False
+
     def _get_rag_context(
-        self, xml_content: str, metadata: Dict[str, Any]
+        self, xml_content: str, metadata: Dict[str, Any], kb_available: Optional[bool] = None
     ) -> Dict[str, Any]:
         """Get RAG context (analogues + precedents + legal norms) + contract summary"""
         try:
@@ -660,6 +709,17 @@ class ContractAnalyzerAgent(BaseAgent):
                 'party_count': len(parties)
             }
 
+            if kb_available is None:
+                kb_available = self._has_available_rag_sources()
+
+            if not kb_available:
+                logger.info("Knowledge base is empty, skipping RAG lookup")
+                return {
+                    'sources': [],
+                    'context': '',
+                    'contract_summary': contract_summary
+                }
+
             # Search RAG if available
             rag_results = []
             rag_context = ""
@@ -675,33 +735,6 @@ class ContractAnalyzerAgent(BaseAgent):
                     f"[{r['metadata'].get('type', 'unknown')}] {r['text']}"
                     for r in rag_results
                 ])
-
-            # Fallback: try EnhancedRAGSystem if main rag_system has no results
-            if not rag_results:
-                try:
-                    from ..services.enhanced_rag import EnhancedRAGSystem, CHROMA_AVAILABLE
-                    if CHROMA_AVAILABLE:
-                        enhanced_rag = EnhancedRAGSystem()
-                        query = f"Договор {contract_type}: {subject}"
-                        enhanced_results = enhanced_rag.search(
-                            query=query,
-                            top_k=5,
-                            search_contracts=True,
-                            search_kb=True,
-                            search_legal=True,
-                        )
-                        if enhanced_results:
-                            rag_results = [
-                                {'text': r.content, 'metadata': r.metadata}
-                                for r in enhanced_results
-                            ]
-                            rag_context = "\n\n".join([
-                                f"[{r.source}] {r.content[:500]}"
-                                for r in enhanced_results
-                            ])
-                            logger.info(f"Enhanced RAG returned {len(enhanced_results)} results")
-                except Exception as erag_err:
-                    logger.debug(f"Enhanced RAG not available: {erag_err}")
 
             return {
                 'sources': rag_results,
@@ -1092,7 +1125,7 @@ JSON формат:
   "risks": [
     {{
       "risk_type": "financial|legal|operational|reputational",
-      "severity": "critical|significant|minor",
+      "severity": "critical|high|medium|low",
       "probability": "high|medium|low",
       "title": "краткое название риска",
       "description": "ПОДРОБНОЕ описание риска",
@@ -1186,74 +1219,71 @@ JSON формат:
             'improvement_priority': 'medium'
         }
 
-    def _extract_plain_text(self, xml_content: str) -> str:
-        """
-        Извлечь чистый текст из XML (без тегов).
-        Используется для полнотекстового анализа.
-        """
-        try:
-            tree = parse_xml_safely(xml_content)
-            # Собираем весь текст из всех элементов
-            all_text = ''.join(tree.itertext())
-            # Убираем множественные пробелы и пустые строки
-            import re
-            all_text = re.sub(r'\n\s*\n', '\n\n', all_text)
-            all_text = re.sub(r' +', ' ', all_text)
-            return all_text.strip()
-        except Exception as e:
-            logger.warning(f"XML plain text extraction failed: {e}, using raw content")
-            # Fallback: убираем XML-теги регулярками
-            import re
-            text = re.sub(r'<[^>]+>', ' ', xml_content)
-            text = re.sub(r'\s+', ' ', text)
-            return text.strip()
-
     def _identify_risks(
         self,
         xml_content: str,
         structure: Dict[str, Any],
         rag_context: Dict[str, Any],
         counterparty_data: Optional[Dict[str, Any]],
-        company_conditions: Optional[List[Dict[str, Any]]] = None
+        company_conditions: Optional[List[Dict[str, Any]]] = None,
+        analysis_context: Optional[Dict[str, Any]] = None,
     ) -> List[ContractRisk]:
         """
-        Двухпроходный анализ рисков:
-        Проход 1 — полнотекстовый анализ всего договора (системные риски, взаимосвязи)
-        Проход 2 — детальный поклаузульный анализ (конкретика по каждому пункту)
+        Two-pass risk analysis:
+        Pass 1 - full-text review for systemic risks and cross-section issues.
+        Pass 2 - clause-level review for concrete, localized risks.
         """
         from config.settings import settings
 
         all_risks: List[ContractRisk] = []
-        full_text_result = None
+        self._full_text_analysis = None
 
-        # ═══ ПРОХОД 1: Полнотекстовый анализ ═══
         if getattr(settings, 'full_text_analysis', True):
             try:
                 plain_text = self._extract_plain_text(xml_content)
-                logger.info(f"Pass 1: Full-text analysis — {len(plain_text)} chars (~{len(plain_text)//4} tokens)")
+                logger.info(f"Pass 1: Full-text analysis - {len(plain_text)} chars (~{len(plain_text)//4} tokens)")
 
                 full_text_result = self.risk_analyzer.analyze_full_text(
                     plain_text=plain_text,
                     rag_context=rag_context,
-                    company_conditions=company_conditions
+                    company_conditions=company_conditions,
+                    analysis_context=analysis_context,
                 )
+                self._full_text_analysis = full_text_result
 
-                # Извлекаем риски из полнотекстового анализа
-                ft_risks_data = full_text_result.get('risks', [])
-                for risk_data in ft_risks_data:
+                type_mapping = {
+                    'compliance': 'legal',
+                    'regulatory': 'legal',
+                    'contractual': 'legal',
+                    'process': 'operational',
+                    'business': 'operational',
+                }
+                severity_mapping = {
+                    'significant': 'high',
+                    'minor': 'low',
+                    'warning': 'medium',
+                }
+                allowed_types = {'financial', 'legal', 'operational', 'reputational', 'general'}
+                allowed_severities = {'critical', 'high', 'medium', 'low', 'info'}
+                allowed_probabilities = {'high', 'medium', 'low'}
+
+                for risk_data in full_text_result.get('risks', []):
                     try:
-                        raw_type = risk_data.get('type', risk_data.get('risk_type', 'legal'))
-                        allowed_types = ('financial', 'legal', 'operational', 'reputational', 'compliance')
-                        risk_type = raw_type if raw_type in allowed_types else 'legal'
+                        raw_type = (risk_data.get('type', risk_data.get('risk_type', 'legal')) or 'legal').lower()
+                        raw_severity = (risk_data.get('severity', 'medium') or 'medium').lower()
+                        raw_probability = (risk_data.get('probability', 'medium') or 'medium').lower()
 
-                        raw_severity = risk_data.get('severity', 'medium')
-                        allowed_severities = ('critical', 'high', 'significant', 'medium', 'minor', 'low')
-                        severity = raw_severity if raw_severity in allowed_severities else 'medium'
+                        normalized_type = type_mapping.get(raw_type, raw_type)
+                        if normalized_type not in allowed_types:
+                            normalized_type = 'legal'
+                        normalized_severity = severity_mapping.get(raw_severity, raw_severity)
+                        if normalized_severity not in allowed_severities:
+                            normalized_severity = 'medium'
 
                         risk = ContractRisk(
-                            risk_type=risk_type,
-                            severity=severity,
-                            probability=risk_data.get('probability', 'medium'),
+                            risk_type=normalized_type,
+                            severity=normalized_severity,
+                            probability=raw_probability if raw_probability in allowed_probabilities else 'medium',
                             title=risk_data.get('title', 'Риск')[:255],
                             description=risk_data.get('description', ''),
                             consequences=risk_data.get('consequences', ''),
@@ -1261,59 +1291,67 @@ JSON формат:
                             section_name='full_text_analysis',
                         )
                         all_risks.append(risk)
-                    except Exception as e:
-                        logger.error(f"Failed to create full-text risk: {e}")
+                    except Exception as exc:
+                        logger.error(f"Failed to create full-text risk: {exc}")
 
-                # Сохраняем дополнительные данные (missing_clauses, balance, etc.)
-                self._full_text_analysis = full_text_result
                 logger.info(f"Pass 1 complete: {len(all_risks)} risks from full-text analysis")
+            except Exception as exc:
+                logger.error(f"Full-text analysis failed, continuing with clause-level: {exc}")
 
-            except Exception as e:
-                logger.error(f"Full-text analysis failed, continuing with clause-level: {e}")
-
-        # ═══ ПРОХОД 2: Поклаузульный анализ ═══
         try:
             logger.info("Pass 2: Clause-level analysis...")
             clauses = self.clause_extractor.extract_clauses(xml_content)
             logger.info(f"Extracted {len(clauses)} clauses for analysis")
 
             if not clauses:
-                logger.warning("No clauses extracted, skipping clause-level analysis")
+                logger.warning("No clauses extracted, falling back to legacy method")
                 if not all_risks:
-                    return self._identify_risks_legacy(xml_content, structure, rag_context, counterparty_data)
+                    return self._identify_risks_legacy(
+                        xml_content, structure, rag_context, counterparty_data, analysis_context
+                    )
                 return all_risks
 
             max_clauses = settings.llm_test_max_clauses if settings.llm_test_mode else len(clauses)
             batch_size = settings.llm_batch_size
-
-            logger.info(f"Will analyze {min(len(clauses), max_clauses)} clauses in batches of {batch_size}")
+            logger.info(f"Will analyze {min(len(clauses), max_clauses)} clauses (smart batching)")
 
             all_clause_analyses = self.risk_analyzer.analyze_clauses_batch(
                 clauses[:max_clauses],
                 rag_context,
                 batch_size=batch_size,
-                company_conditions=company_conditions
+                company_conditions=company_conditions,
+                analysis_context=analysis_context,
             )
-            logger.info(f"Pass 2: Batch analysis returned {len(all_clause_analyses)} results")
+            logger.info(f"Batch analysis returned {len(all_clause_analyses)} results")
 
-            # Извлекаем риски из поклаузульного анализа
             clause_risks = self.risk_analyzer.identify_risks(all_clause_analyses)
             all_risks.extend(clause_risks)
 
-            # Сохраняем детальные анализы пунктов для отображения в UI
             if all_clause_analyses:
+                self._merge_required_fields_from_analyses(all_clause_analyses)
                 self._store_clause_analyses(all_clause_analyses)
-                logger.info(f"Pass 2 complete: {len(clause_risks)} clause-level risks")
+                logger.info(
+                    f"Pass 2 complete: {len(clause_risks)} clause-level risks from {len(all_clause_analyses)} clauses"
+                )
+            else:
+                logger.warning("No clauses were successfully analyzed, using legacy method")
+                if not all_risks:
+                    return self._identify_risks_legacy(
+                        xml_content, structure, rag_context, counterparty_data, analysis_context
+                    )
 
-        except Exception as e:
-            logger.error(f"Clause-level analysis failed: {e}")
+            logger.info(f"Total risks (both passes): {len(all_risks)}")
+            return all_risks
+
+        except Exception as exc:
+            logger.error(f"Detailed risk identification failed: {exc}")
             import traceback
             traceback.print_exc()
             if not all_risks:
-                return self._identify_risks_legacy(xml_content, structure, rag_context, counterparty_data)
-
-        logger.info(f"Total risks (both passes): {len(all_risks)}")
-        return all_risks
+                return self._identify_risks_legacy(
+                    xml_content, structure, rag_context, counterparty_data, analysis_context
+                )
+            return all_risks
 
     def _store_clause_analyses(self, analyses: List[Dict[str, Any]]):
         """Store detailed clause analyses for UI display"""
@@ -1322,19 +1360,148 @@ JSON формат:
             self._clause_analyses = []
         self._clause_analyses = analyses
 
+    def _extract_required_fields(self, xml_content: str) -> List[Dict[str, Any]]:
+        """Extract explicit placeholders and blanks that must be filled by the user."""
+        clauses = self.clause_extractor.extract_clauses(xml_content)
+        required_fields: List[Dict[str, Any]] = []
+        placeholder_clause_ids: set[str] = set()
+        patterns = [
+            re.compile(r"_{2,}"),
+            re.compile(r"\[(?:[^\]]*(?:указать|заполнить|вписать|определить)[^\]]*)\]", re.IGNORECASE),
+        ]
+
+        for clause in clauses:
+            clause_text = clause.get('text', '')
+            matches = []
+            for pattern in patterns:
+                matches.extend(list(pattern.finditer(clause_text)))
+            if not matches:
+                continue
+
+            placeholder_clause_ids.add(clause.get('id', ''))
+            for match in matches:
+                start = max(0, match.start() - 60)
+                end = min(len(clause_text), match.end() + 60)
+                snippet = clause_text[start:end].strip()
+                required_fields.append({
+                    'title': clause.get('title') or 'Нужно заполнить поле',
+                    'description': 'В договоре есть незаполненное место, которое нужно заполнить до использования документа.',
+                    'snippet': snippet,
+                    'section_name': clause.get('title') or clause.get('id', ''),
+                    'xpath_location': clause.get('xpath', ''),
+                })
+
+        self._required_fields = self._dedupe_required_fields(required_fields)
+        self._placeholder_clause_ids = placeholder_clause_ids
+        return self._required_fields
+
+    def _merge_required_fields_from_analyses(self, analyses: List[Dict[str, Any]]) -> None:
+        """Merge LLM-detected placeholders with regex-detected placeholders."""
+        existing = list(getattr(self, '_required_fields', []))
+        for analysis in analyses:
+            for item in analysis.get('required_fields', []):
+                existing.append({
+                    'title': item.get('title') or 'Нужно заполнить поле',
+                    'description': item.get('description') or 'В договоре есть незаполненное место.',
+                    'snippet': item.get('snippet') or '',
+                    'section_name': analysis.get('clause_id', ''),
+                    'xpath_location': analysis.get('clause_xpath', ''),
+                })
+        self._required_fields = self._dedupe_required_fields(existing)
+
+    @staticmethod
+    def _dedupe_required_fields(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        seen: set[str] = set()
+        deduped: List[Dict[str, Any]] = []
+        for item in items:
+            key = '|'.join([
+                item.get('section_name', ''),
+                item.get('xpath_location', ''),
+                item.get('snippet', ''),
+            ]).strip().lower()
+            if key and key not in seen:
+                seen.add(key)
+                deduped.append(item)
+        return deduped
+
+    def _filter_placeholder_risks(self, risks: List[ContractRisk]) -> List[ContractRisk]:
+        """Remove pseudo-risks caused by placeholders/metadata and deduplicate obvious repeats."""
+        placeholder_clause_ids = getattr(self, '_placeholder_clause_ids', set())
+        technical_markers = [
+            'uuid', 'метадан', 'metadata', 'parsed_at', 'file_name', 'дата создания',
+            'author', 'автор', 'title', 'без названия', 'docx',
+        ]
+        filtered: List[ContractRisk] = []
+        for risk in risks:
+            combined = ' '.join([risk.title or '', risk.description or '']).lower()
+            is_placeholder_clause = (risk.section_name or '') in placeholder_clause_ids
+            mentions_placeholder = any(marker in combined for marker in [
+                'незаполн', 'пропуск', 'пустое поле', '___', 'placeholder', 'не заполн',
+            ])
+            mentions_technical_metadata = any(marker in combined for marker in technical_markers)
+            if is_placeholder_clause and mentions_placeholder:
+                continue
+            if mentions_technical_metadata:
+                continue
+            filtered.append(risk)
+        return self._dedupe_risks(filtered)
+
+    @staticmethod
+    def _dedupe_risks(risks: List[ContractRisk]) -> List[ContractRisk]:
+        """Collapse obviously duplicated risks while preserving the strongest variant."""
+        severity_rank = {'info': 0, 'low': 1, 'medium': 2, 'high': 3, 'critical': 4}
+        probability_rank = {'low': 1, 'medium': 2, 'high': 3}
+        deduped: dict[str, ContractRisk] = {}
+
+        for risk in risks:
+            normalized_title = re.sub(r'\s+', ' ', re.sub(r'[^a-zа-я0-9]+', ' ', (risk.title or '').lower())).strip()
+            fallback_title = re.sub(
+                r'\s+',
+                ' ',
+                re.sub(r'[^a-zа-я0-9]+', ' ', (risk.description or '').lower())[:120],
+            ).strip()
+            key = '|'.join([
+                risk.risk_type or 'general',
+                normalized_title or fallback_title,
+            ]).strip('|')
+
+            if not key:
+                key = f"risk-{id(risk)}"
+
+            existing = deduped.get(key)
+            if existing is None:
+                deduped[key] = risk
+                continue
+
+            existing_score = (
+                severity_rank.get(existing.severity or 'info', 0),
+                probability_rank.get(existing.probability or 'low', 1),
+                len(existing.description or ''),
+            )
+            current_score = (
+                severity_rank.get(risk.severity or 'info', 0),
+                probability_rank.get(risk.probability or 'low', 1),
+                len(risk.description or ''),
+            )
+            if current_score > existing_score:
+                deduped[key] = risk
+
+        return list(deduped.values())
+
     def _identify_risks_legacy(
         self,
         xml_content: str,
         structure: Dict[str, Any],
         rag_context: Dict[str, Any],
-        counterparty_data: Optional[Dict[str, Any]]
+        counterparty_data: Optional[Dict[str, Any]],
+        analysis_context: Optional[Dict[str, Any]] = None,
     ) -> List[ContractRisk]:
         logger.info("⚠️ DEBUG: _identify_risks_legacy called (OLD method, NO batching, EXPENSIVE!)")
         """Legacy risk identification method (fallback)"""
         try:
             # Prepare prompt
             prompt = self._build_risk_identification_prompt(
-                xml_content, structure, rag_context, counterparty_data
+                xml_content, structure, rag_context, counterparty_data, analysis_context
             )
 
             # Call LLM
@@ -1353,7 +1520,7 @@ JSON формат:
             for risk_dict in risks_data.get('risks', []):
                 risk = ContractRisk(
                     risk_type=risk_dict.get('risk_type', 'legal'),
-                    severity=risk_dict.get('severity', 'minor'),
+                    severity=risk_dict.get('severity', 'medium'),
                     probability=risk_dict.get('probability'),
                     title=risk_dict.get('title', ''),
                     description=risk_dict.get('description', ''),
@@ -1375,54 +1542,69 @@ JSON формат:
         xml_content: str,
         structure: Dict[str, Any],
         rag_context: Dict[str, Any],
-        counterparty_data: Optional[Dict[str, Any]]
+        counterparty_data: Optional[Dict[str, Any]],
+        analysis_context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Build prompt for risk identification"""
-        # Извлекаем чистый текст для полноценного анализа
-        plain_text = self._extract_plain_text(xml_content)
-        prompt = "Проанализируй этот договор и выяви ВСЕ риски. Все ответы ТОЛЬКО на русском языке.\n\n"
-        prompt += "ПОЛНЫЙ ТЕКСТ ДОГОВОРА:\n"
-        prompt += plain_text
-        prompt += "\n\n"
+        prompt = "Проанализируй договор и выяви только реальные существенные риски.\n\n"
+        prompt += "<user_document>\n"
+        prompt += xml_content[:5000]
+        prompt += "\n</user_document>\n\n"
 
         prompt += "СТРУКТУРА ДОГОВОРА:\n"
         prompt += json.dumps(structure, ensure_ascii=False, indent=2)
         prompt += "\n\n"
 
         if rag_context.get('context'):
-            prompt += "ПРАВОВОЙ КОНТЕКСТ (из базы знаний):\n"
-            prompt += rag_context['context'][:5000]
+            prompt += "РЕЛЕВАНТНЫЙ ПРАВОВОЙ КОНТЕКСТ (из RAG):\n"
+            prompt += rag_context['context'][:3000]
             prompt += "\n\n"
 
         if counterparty_data:
-            prompt += "COUNTERPARTY CHECK RESULTS:\n"
+            prompt += "РЕЗУЛЬТАТЫ ПРОВЕРКИ КОНТРАГЕНТА:\n"
             prompt += json.dumps(counterparty_data, ensure_ascii=False, indent=2)
             prompt += "\n\n"
 
-        prompt += """Identify ALL risks in these categories:
-- financial (price, payment, penalties)
-- legal (compliance, validity, enforceability)
-- operational (execution, delivery, quality)
-- reputational (brand, relationships)
+        if analysis_context:
+            prompt += "ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА АНАЛИЗА:\n"
+            if analysis_context.get('analysis_date'):
+                prompt += (
+                    f"- Текущая дата анализа: {analysis_context['analysis_date']}. "
+                    "Оценивай все даты относительно этой даты.\n"
+                )
+            if analysis_context.get('analysis_perspective'):
+                prompt += (
+                    f"- Анализируй договор в интересах стороны: {analysis_context['analysis_perspective']}.\n"
+                )
+            prompt += (
+                "- Не считай рисками служебные метаданные файла и парсинга.\n"
+                "- Незаполненные поля, пропуски и шаблонные плейсхолдеры не являются рисками сами по себе.\n\n"
+            )
 
-For each risk, provide:
+        prompt += """Выделяй риски только по категориям:
+- financial
+- legal
+- operational
+- reputational
+
+Верни JSON:
 {
   "risks": [
     {
-      "risk_type": "financial|legal|operational|reputational",
-      "severity": "critical|significant|minor",
+      "risk_type": "financial|legal|operational|reputational|general",
+      "severity": "critical|high|medium|low|info",
       "probability": "high|medium|low",
-      "title": "Short title",
-      "description": "Detailed description",
-      "consequences": "Qualitative consequences (no monetary)",
-      "xpath_location": "XPath to problem section",
-      "section_name": "Section name",
-      "rag_sources": ["Source 1", "Source 2"]
+      "title": "Краткое название риска",
+      "description": "Подробное описание риска",
+      "consequences": "Качественные последствия",
+      "xpath_location": "XPath к проблемному месту",
+      "section_name": "Раздел",
+      "rag_sources": ["Источник 1", "Источник 2"]
     }
   ]
 }
 
-Return ONLY valid JSON, no additional text."""
+Верни ТОЛЬКО валидный JSON, без дополнительного текста."""
 
         return prompt
 
@@ -1722,7 +1904,37 @@ Return ONLY valid JSON."""
 
     def _save_risks(self, analysis_id: str, contract_id: str, risks: List[ContractRisk]):
         """Save risks to database"""
+        allowed_types = {'financial', 'legal', 'operational', 'reputational', 'general'}
+        type_mapping = {
+            'compliance': 'legal',
+            'regulatory': 'legal',
+            'contractual': 'legal',
+            'process': 'operational',
+            'business': 'operational',
+        }
+        allowed_severities = {'critical', 'high', 'medium', 'low', 'info'}
+        severity_mapping = {
+            'significant': 'high',
+            'minor': 'low',
+            'warning': 'medium',
+        }
+        allowed_probabilities = {'high', 'medium', 'low'}
+
         for risk in risks:
+            raw_type = (risk.risk_type or 'legal').lower()
+            normalized_type = type_mapping.get(raw_type, raw_type)
+            if normalized_type not in allowed_types:
+                normalized_type = 'legal'
+            risk.risk_type = normalized_type
+
+            raw_severity = (risk.severity or 'medium').lower()
+            normalized_severity = severity_mapping.get(raw_severity, raw_severity)
+            if normalized_severity not in allowed_severities:
+                normalized_severity = 'medium'
+            risk.severity = normalized_severity
+
+            raw_probability = (risk.probability or 'medium').lower()
+            risk.probability = raw_probability if raw_probability in allowed_probabilities else 'medium'
             risk.analysis_id = analysis_id
             risk.contract_id = contract_id
             self.db.add(risk)

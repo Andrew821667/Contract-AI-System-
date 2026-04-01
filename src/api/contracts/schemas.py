@@ -19,6 +19,7 @@ class AnalysisResultRequest(BaseModel):
     contract_id: str
     check_counterparty: bool = True
     counterparty_tin: Optional[str] = None
+    analysis_perspective: Optional[str] = None
 
 
 class AnalysisResultResponse(BaseModel):
