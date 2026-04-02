@@ -58,6 +58,13 @@ export interface DemoLinkResponse {
   max_llm_requests: number;
 }
 
+export interface GenerationContractTypeOption {
+  code: string;
+  name: string;
+  source: string;
+  has_template: boolean;
+}
+
 // Digital Contract types
 export interface DigitalContract {
   id: string;
@@ -1065,6 +1072,11 @@ class APIClient {
     params: Record<string, any>;
   }): Promise<any> {
     const response = await this.client.post('/api/v1/contracts/generate', data);
+    return response.data;
+  }
+
+  async getGenerationContractTypes(): Promise<GenerationContractTypeOption[]> {
+    const response = await this.client.get<GenerationContractTypeOption[]>('/api/v1/contracts/generate/types');
     return response.data;
   }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { toast } from 'react-hot-toast'
@@ -10,17 +10,35 @@ import api from '@/services/api'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
 import AppLayout from '@/components/AppLayout'
 
-const contractTypes = [
-  { value: 'supply', label: 'Договор поставки', icon: '📦', description: 'Поставка товаров и продукции' },
-  { value: 'service', label: 'Договор оказания услуг', icon: '🛠️', description: 'Оказание различных услуг' },
-  { value: 'lease', label: 'Договор аренды', icon: '🏢', description: 'Аренда помещений и имущества' },
-  { value: 'purchase', label: 'Договор купли-продажи', icon: '💰', description: 'Купля-продажа имущества' },
-  { value: 'confidentiality', label: 'Соглашение о конфиденциальности (NDA)', icon: '🔒', description: 'Защита конфиденциальной информации' },
-  { value: 'employment', label: 'Трудовой договор', icon: '👔', description: 'Трудовые отношения' },
-  { value: 'loan', label: 'Договор займа', icon: '🏦', description: 'Займ денежных средств' },
-  { value: 'license', label: 'Лицензионный договор', icon: '📄', description: 'Передача прав на использование' },
-  { value: 'construction', label: 'Договор подряда', icon: '🏗️', description: 'Строительные и подрядные работы' },
-]
+type ContractTypeCard = {
+  value: string
+  label: string
+  icon: string
+  description: string
+  source: 'builtin' | 'analysis'
+  hasTemplate?: boolean
+}
+
+const contractTypeMeta: Record<string, { label: string; icon: string; description: string }> = {
+  supply: { label: 'Договор поставки', icon: '📦', description: 'Поставка товаров и продукции' },
+  service: { label: 'Договор оказания услуг', icon: '🛠️', description: 'Оказание различных услуг' },
+  lease: { label: 'Договор аренды', icon: '🏢', description: 'Аренда помещений и имущества' },
+  purchase: { label: 'Договор купли-продажи', icon: '💰', description: 'Купля-продажа имущества' },
+  confidentiality: { label: 'Соглашение о конфиденциальности (NDA)', icon: '🔒', description: 'Защита конфиденциальной информации' },
+  employment: { label: 'Трудовой договор', icon: '👔', description: 'Трудовые отношения' },
+  loan: { label: 'Договор займа', icon: '🏦', description: 'Займ денежных средств' },
+  licensing: { label: 'Лицензионный договор', icon: '📄', description: 'Передача прав на использование' },
+  contract_work: { label: 'Договор подряда', icon: '🏗️', description: 'Строительные и подрядные работы' },
+}
+
+const defaultContractTypes: ContractTypeCard[] = Object.entries(contractTypeMeta).map(([value, meta]) => ({
+  value,
+  label: meta.label,
+  icon: meta.icon,
+  description: meta.description,
+  source: 'builtin',
+  hasTemplate: ['supply', 'service', 'lease'].includes(value),
+}))
 
 const templates = [
   { id: 'tpl_supply_001', name: 'Базовый шаблон поставки', type: 'supply' },
@@ -33,6 +51,7 @@ export default function GenerateContractPage() {
   const router = useRouter()
   const [step, setStep] = useState(1)
   const [generating, setGenerating] = useState(false)
+  const [contractTypes, setContractTypes] = useState<ContractTypeCard[]>(defaultContractTypes)
   const [formData, setFormData] = useState({
     contractType: '',
     templateId: '',
@@ -47,6 +66,52 @@ export default function GenerateContractPage() {
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
+
+  useEffect(() => {
+    let active = true
+
+    api.getGenerationContractTypes()
+      .then((items) => {
+        if (!active || !items.length) return
+
+        const mapped: ContractTypeCard[] = items.map((item) => {
+          const known = contractTypeMeta[item.code]
+          return {
+            value: item.code,
+            label: item.name || known?.label || item.code,
+            icon: known?.icon || (item.source === 'analysis' ? '🧠' : '🧾'),
+            description: known?.description || (
+              item.source === 'analysis'
+                ? 'Добавлен автоматически из ранее проанализированного договора'
+                : 'Тип договора'
+            ),
+            source: item.source === 'analysis' ? 'analysis' : 'builtin',
+            hasTemplate: item.has_template,
+          }
+        })
+
+        setContractTypes(mapped)
+      })
+      .catch(() => {
+        if (active) {
+          setContractTypes(defaultContractTypes)
+        }
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const availableTemplates = useMemo(
+    () => templates.filter((t) => t.type === formData.contractType),
+    [formData.contractType]
+  )
+
+  const selectedType = useMemo(
+    () => contractTypes.find((type) => type.value === formData.contractType),
+    [contractTypes, formData.contractType]
+  )
 
   const handleGenerate = async () => {
     setGenerating(true)
@@ -75,7 +140,7 @@ export default function GenerateContractPage() {
     }
   }
 
-  const isStep1Valid = formData.contractType && formData.templateId
+  const isStep1Valid = Boolean(formData.contractType) && (availableTemplates.length === 0 || Boolean(formData.templateId))
   const isStep2Valid = formData.partyA && formData.partyB && formData.amount
 
   if (!isReady) return null
@@ -123,7 +188,7 @@ export default function GenerateContractPage() {
                     key={type.value}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => handleInputChange('contractType', type.value)}
+                    onClick={() => setFormData((prev) => ({ ...prev, contractType: type.value, templateId: '' }))}
                     className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${
                       formData.contractType === type.value
                         ? 'border-primary-500 bg-primary-50'
@@ -133,9 +198,16 @@ export default function GenerateContractPage() {
                     <div className="flex items-start gap-3">
                       <span className="text-3xl">{type.icon}</span>
                       <div className="flex-1">
-                        <h3 className="font-semibold text-stone-800 mb-1">
-                          {type.label}
-                        </h3>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-semibold text-stone-800">
+                            {type.label}
+                          </h3>
+                          {type.source === 'analysis' && (
+                            <span className="px-2 py-0.5 text-[10px] uppercase tracking-wide rounded-full bg-amber-100 text-amber-700">
+                              Из анализа
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-stone-600">{type.description}</p>
                       </div>
                     </div>
@@ -146,11 +218,10 @@ export default function GenerateContractPage() {
 
             {formData.contractType && (
               <Card>
-                <h2 className="text-2xl font-bold mb-4">Выберите шаблон</h2>
-                <div className="space-y-3">
-                  {templates
-                    .filter((t) => t.type === formData.contractType)
-                    .map((template) => (
+                <h2 className="text-2xl font-bold mb-4">Шаблон</h2>
+                {availableTemplates.length > 0 ? (
+                  <div className="space-y-3">
+                    {availableTemplates.map((template) => (
                       <motion.div
                         key={template.id}
                         whileHover={{ scale: 1.01 }}
@@ -174,7 +245,17 @@ export default function GenerateContractPage() {
                         </div>
                       </motion.div>
                     ))}
-                </div>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 text-amber-900">
+                    <p className="font-semibold mb-1">
+                      Для типа «{selectedType?.label || formData.contractType}» отдельный шаблон пока не найден.
+                    </p>
+                    <p className="text-sm">
+                      Генерация будет выполнена в универсальном AI-режиме без заранее заданного шаблона.
+                    </p>
+                  </div>
+                )}
               </Card>
             )}
 

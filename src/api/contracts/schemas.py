@@ -43,6 +43,13 @@ class ContractGenerateResponse(BaseModel):
     message: str
 
 
+class ContractTypeOption(BaseModel):
+    code: str
+    name: str
+    source: str
+    has_template: bool = False
+
+
 class DisagreementGenerateRequest(BaseModel):
     contract_id: str
     analysis_id: str

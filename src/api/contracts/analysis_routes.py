@@ -253,6 +253,7 @@ def _analyze_contract_sync(
             'check_counterparty': check_counterparty,
             'company_conditions': company_conditions,
             'metadata': {
+                'contract_type': contract.contract_type,
                 'counterparty_tin': counterparty_tin,
                 'uploaded_by': user_id,
                 'analysis_perspective': analysis_perspective,
@@ -268,6 +269,13 @@ def _analyze_contract_sync(
         if result.success:
             _set_progress(70, 'Анализ завершён, извлечение клауз...')
             logger.info(f"Contract {contract_id} analyzed successfully")
+
+            detected_contract_type = None
+            if result.data and isinstance(result.data, dict):
+                detected_contract_type = result.data.get('contract_type')
+            if detected_contract_type:
+                contract.contract_type = detected_contract_type
+                db.commit()
 
             try:
                 xml_content = parsed_xml if isinstance(parsed_xml, str) else str(parsed_xml)

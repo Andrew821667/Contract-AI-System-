@@ -12,17 +12,34 @@ from src.models.auth_models import User
 from src.agents.contract_generator_agent import ContractGeneratorAgent
 from src.agents.disagreement_processor_agent import DisagreementProcessorAgent
 from src.services.llm_gateway import LLMGateway
+from src.utils.contract_types import get_generation_contract_types as get_generation_contract_type_catalog
 from config.settings import settings
 from src.api.dependencies import get_current_user
 
 from .schemas import (
     ContractGenerateRequest,
     ContractGenerateResponse,
+    ContractTypeOption,
     DisagreementGenerateRequest,
 )
 
 
 router = APIRouter()
+
+
+@router.get("/generate/types", response_model=list[ContractTypeOption])
+async def list_generation_contract_types(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return contract types available for generation: built-in + analyzed custom types."""
+    include_all = current_user.role == "admin"
+    items = get_generation_contract_type_catalog(
+        db,
+        user_id=current_user.id,
+        include_all=include_all,
+    )
+    return [ContractTypeOption(**item) for item in items]
 
 
 @router.post("/generate", response_model=ContractGenerateResponse)

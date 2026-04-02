@@ -23,6 +23,7 @@ from ..models.analyzer_models import (
     ContractSuggestedChange
 )
 from ..models.database import Contract, AnalysisResult
+from ..utils.contract_types import infer_contract_type_from_xml, is_meaningful_contract_type
 from ..utils.xml_security import parse_xml_safely, XMLSecurityError
 from config.settings import settings
 
@@ -204,6 +205,15 @@ class ContractAnalyzerAgent(BaseAgent):
             else:
                 _update_progress(35, "База знаний пуста, пропускаем поиск контекста...")
             rag_context = self._get_rag_context(parsed_xml, metadata, kb_available=kb_available)
+            detected_contract_type = infer_contract_type_from_xml(
+                parsed_xml,
+                fallback=metadata.get('contract_type') or contract.contract_type,
+                file_name=contract.file_name,
+            )
+            if is_meaningful_contract_type(detected_contract_type):
+                contract.contract_type = detected_contract_type
+                self.db.commit()
+                metadata['contract_type'] = detected_contract_type
 
             _update_progress(40, "AI анализ: выявление рисков...")
             risks = self._identify_risks(
@@ -291,6 +301,7 @@ class ContractAnalyzerAgent(BaseAgent):
                     'template_comparison': template_comparison,
                     'counterparty_data': counterparty_data,
                     'analysis_context': analysis_context,
+                    'contract_type': detected_contract_type,
                     'clause_analyses': clause_analyses,
                     'full_text_analysis': full_text_analysis,
                     'disclaimer': 'Результаты AI-анализа носят рекомендательный характер и не являются юридической консультацией. Перед принятием решений проконсультируйтесь с квалифицированным юристом.'

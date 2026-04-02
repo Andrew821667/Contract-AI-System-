@@ -48,25 +48,49 @@ st.markdown("### 1️⃣ Тип договора")
 try:
     from src.utils.contract_types import (
         CONTRACT_TYPES, CONTRACT_CATEGORIES,
-        get_contracts_by_category, get_contract_type_name,
+        get_contracts_by_category, get_contract_type_name, get_generation_contract_types,
     )
+    from src.models.database import SessionLocal
     has_types = True
 except ImportError:
     has_types = False
     st.error("Не удалось загрузить справочник типов договоров")
 
 if has_types:
+    dynamic_contracts = []
+    try:
+        db = SessionLocal()
+        dynamic_contracts = [
+            (item["code"], item["name"])
+            for item in get_generation_contract_types(db, include_all=True)
+            if item.get("source") == "analysis"
+        ]
+    except Exception as exc:
+        st.warning(f"Не удалось загрузить типы из проанализированных договоров: {exc}")
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+    categories = dict(CONTRACT_CATEGORIES)
+    if dynamic_contracts:
+        categories["Из анализа"] = [code for code, _ in dynamic_contracts]
+
     col1, col2 = st.columns([1, 2])
 
     with col1:
         category = st.selectbox(
             "Категория",
-            list(CONTRACT_CATEGORIES.keys()),
+            list(categories.keys()),
             help="Выберите категорию для фильтрации типов"
         )
 
     with col2:
-        contracts_in_category = get_contracts_by_category(category)
+        if category == "Из анализа":
+            contracts_in_category = dynamic_contracts
+        else:
+            contracts_in_category = get_contracts_by_category(category)
         type_options = {name: code for code, name in contracts_in_category}
         selected_type_name = st.selectbox(
             "Тип договора",
