@@ -10,6 +10,7 @@ from loguru import logger
 
 # Import original parser
 from .document_parser import DocumentParser as BaseDocumentParser
+from ..utils.xml_security import parse_xml_safely
 
 
 class ExtendedDocumentParser(BaseDocumentParser):
@@ -61,7 +62,9 @@ class ExtendedDocumentParser(BaseDocumentParser):
     def _parse_xml(self, file_path: str) -> str:
         """XML passthrough"""
         with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read()
+            xml_content = f.read()
+        parse_xml_safely(xml_content)
+        return xml_content
 
     def _parse_pdf_extended(self, file_path: str, enable_ocr: bool) -> str:
         """

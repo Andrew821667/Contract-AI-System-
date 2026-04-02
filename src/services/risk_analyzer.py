@@ -44,6 +44,7 @@ class RiskAnalyzer:
         logger.info(f"Full-text analysis: {len(plain_text)} chars (~{estimated_tokens} tokens)")
 
         rag_block = ""
+        contract_context_block = self._build_contract_context_block(rag_context)
         if rag_context:
             precedents = rag_context.get('precedents') or rag_context.get('context', '')
             norms = rag_context.get('norms', '')
@@ -61,6 +62,7 @@ class RiskAnalyzer:
 пропущенные существенные условия и реальные риски для выбранной стороны.
 
 ПОЛНЫЙ ТЕКСТ ДОГОВОРА:
+{contract_context_block}
 {plain_text}{rag_block}{conditions_block}{directives_block}
 
 ЗАДАЧА:
@@ -76,6 +78,11 @@ class RiskAnalyzer:
 - Не считай рисками служебные метаданные файла и технические поля парсинга.
 - Незаполненные поля, пропуски, шаблонные подстановки вида ___, [указать ...], [заполнить ...]
   не являются рисками сами по себе.
+- Если для корректной формулировки не хватает фактических данных, не выдумывай их.
+- Если не хватает данных по предмету договора, цене, срокам, объему, реквизитам, спецификации или иным
+  переменным условиям, добавляй это в required_fields и формулируй прямой вопрос пользователю.
+- Если предмет договора описан слишком общо и без пользовательских данных не может быть конкретизирован,
+  это может быть риском, но недостающие сведения по предмету все равно перечисляй в required_fields.
 
 Верни JSON:
 {{
@@ -107,6 +114,16 @@ class RiskAnalyzer:
       "importance": "critical|high|medium",
       "description": "Почему это важно",
       "suggested_text": "Рекомендуемая формулировка"
+    }}
+  ],
+  "required_fields": [
+    {{
+      "title": "Что нужно уточнить у пользователя",
+      "description": "Почему без этих данных нельзя корректно завершить документ",
+      "snippet": "Фрагмент договора или краткая привязка к месту",
+      "needs_user_input": true,
+      "user_question": "Какой именно вопрос нужно задать пользователю",
+      "missing_data_points": ["какие данные нужны"]
     }}
   ],
   "balance_assessment": {{
@@ -147,6 +164,7 @@ class RiskAnalyzer:
                 'risks': [],
                 'compliance_issues': [],
                 'missing_clauses': [],
+                'required_fields': [],
                 'balance_assessment': {'score': 0.5, 'description': 'Анализ не удался'},
                 'dispute_forecast': {'probability': 0.5, 'key_triggers': [], 'recommendation': ''},
                 'summary': 'Полнотекстовый анализ не удался, используются результаты поклаузульного анализа.',
@@ -419,7 +437,59 @@ class RiskAnalyzer:
             '- Незаполненные поля, пропуски, шаблонные подстановки вида ___, [указать ...], '
             '[заполнить ...] не являются рисками сами по себе. Возвращай их только в required_fields.'
         )
+        lines.append(
+            '- Проект договора готовится к подписанию. Отсутствие живых подписей, печатей, '
+            'подписантских линий и М.П. в черновике не является риском и не требует замечания.'
+        )
+        lines.append(
+            '- Не считай риском отсутствие приложенной выписки ЕГРЮЛ, доверенности или иных внешних '
+            'подтверждающих документов о полномочиях подписанта, если в самом тексте нет прямого '
+            'противоречия, просрочки или явного несоответствия полномочий.'
+        )
+        lines.append(
+            '- Не называй дату "будущей", если она не позже текущей даты анализа.'
+        )
+        lines.append(
+            '- Если для корректной правки или заполнения пункта не хватает фактических данных, не выдумывай их. '
+            'Возвращай такие случаи в required_fields и явно указывай, какие сведения нужно запросить у пользователя.'
+        )
+        lines.append(
+            '- Если проблема связана с предметом договора, различай две вещи: '
+            '1) юридический риск из-за неопределенности предмета; '
+            '2) конкретные данные, которые нужно запросить у пользователя для заполнения или уточнения предмета.'
+        )
         return '\n'.join(lines)
+
+    @staticmethod
+    def _build_contract_context_block(rag_context: Optional[Dict[str, Any]]) -> str:
+        if not rag_context:
+            return ''
+
+        summary = rag_context.get('contract_summary') or {}
+        if not isinstance(summary, dict) or not summary:
+            return ''
+
+        contract_type = summary.get('type') or 'не указан'
+        subject = summary.get('subject') or 'не указан'
+        parties = summary.get('parties') or []
+        parties_text = 'не указаны'
+        if isinstance(parties, list) and parties:
+            formatted = []
+            for party in parties[:6]:
+                if not isinstance(party, dict):
+                    continue
+                name = party.get('name') or 'Не указано'
+                role = party.get('role')
+                formatted.append(f"{name} ({role})" if role and role != 'unknown' else name)
+            if formatted:
+                parties_text = ', '.join(formatted)
+
+        return (
+            "КОНТЕКСТ ДОГОВОРА:\n"
+            f"- Тип договора: {contract_type}\n"
+            f"- Стороны: {parties_text}\n"
+            f"- Предмет договора: {subject}\n"
+        )
 
     def _build_batch_analysis_prompt(
         self,
@@ -451,13 +521,17 @@ class RiskAnalyzer:
 
         return f"""Проанализируй следующие пункты договора на наличие рисков.
 
-{clauses_text}{rag_info}{conditions_block}{directives_block}
+{self._build_contract_context_block(rag_context)}{clauses_text}{rag_info}{conditions_block}{directives_block}
 
 Для каждого пункта:
 1. Выдели только реальные юридические, финансовые, операционные и репутационные риски.
 2. Если в пункте есть только незаполненное поле или шаблонный пропуск, не создавай риск.
 3. Такие места перечисляй отдельно в required_fields.
 4. Если есть стандарты компании, проверь соответствие им.
+5. Если данных для правки или заполнения не хватает, не выдумывай значения. Формулируй required_fields так,
+   чтобы было ясно, что именно нужно запросить у пользователя.
+6. Если проблема связана с предметом договора, отдельно укажи риск неопределенности предмета и отдельно -
+   какие данные по предмету нужно получить от пользователя.
 
 Верни JSON:
 {{
@@ -483,7 +557,10 @@ class RiskAnalyzer:
         {{
           "title": "Что нужно заполнить",
           "description": "Почему это поле нужно заполнить",
-          "snippet": "Фрагмент с пропуском"
+          "snippet": "Фрагмент с пропуском",
+          "needs_user_input": true,
+          "user_question": "Какой вопрос нужно задать пользователю",
+          "missing_data_points": ["какие данные нужны"]
         }}
       ],
       "compliance_status": "compliant|non_compliant|partial|not_applicable",
@@ -518,6 +595,11 @@ class RiskAnalyzer:
 ТИП: {clause['type']}
 ТЕКСТ: {clause['text']}{rag_info}{directives_block}
 
+ВАЖНО:
+- Если в пункте не хватает данных для заполнения или корректной правки, не придумывай их.
+- Такие случаи возвращай в required_fields с прямым вопросом пользователю.
+- Если проблема касается предмета договора, отдельно опиши риск и отдельно перечисли, что нужно уточнить у пользователя.
+
 Верни JSON:
 {{
   "risks": [
@@ -538,7 +620,10 @@ class RiskAnalyzer:
     {{
       "title": "Что нужно заполнить",
       "description": "Почему это поле обязательно заполнить",
-      "snippet": "Фрагмент с пропуском"
+      "snippet": "Фрагмент с пропуском",
+      "needs_user_input": true,
+      "user_question": "Какой вопрос нужно задать пользователю",
+      "missing_data_points": ["какие данные нужны"]
     }}
   ],
   "strengths": ["сильные стороны на русском"],

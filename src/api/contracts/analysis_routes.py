@@ -13,12 +13,14 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from loguru import logger
 
 from src.models.database import get_db
 from src.models import Contract, AnalysisResult
 from src.models.auth_models import User
-from src.services.document_parser import DocumentParser
+from src.models.analyzer_models import ContractRecommendation
+from src.services.document_parser_extended import ExtendedDocumentParser
 from src.agents.contract_analyzer_agent import ContractAnalyzerAgent
 from src.services.llm_gateway import LLMGateway
 from src.services.digital_service import DigitalContractService
@@ -33,6 +35,8 @@ from .schemas import (
     AnalysisResultResponse,
     BatchAnalysisRequest,
     BatchAnalysisResponse,
+    RecommendationDecisionRequest,
+    RecommendationDecisionResponse,
 )
 
 
@@ -61,7 +65,7 @@ def _resolve_analysis_perspective(contract: Contract, request_data: AnalysisResu
     if cached:
         return cached
 
-    parser = DocumentParser()
+    parser = ExtendedDocumentParser()
     parsed_xml = parser.parse(contract.file_path)
     if not parsed_xml:
         raise HTTPException(
@@ -135,6 +139,33 @@ def _resolve_analysis_perspective(contract: Contract, request_data: AnalysisResu
 
 def _current_analysis_date() -> str:
     return datetime.now(ZoneInfo('Europe/Moscow')).date().isoformat()
+
+
+def _recommendation_workflow_payload(analysis: AnalysisResult) -> Dict[str, Any]:
+    payload = _load_meta(analysis.recommendations)
+    workflow = payload.get('workflow')
+    if not isinstance(workflow, dict):
+        payload['workflow'] = {}
+    return payload
+
+
+def _workflow_summary(workflow: Dict[str, Any], recommendation_ids: List[int]) -> Dict[str, int]:
+    accepted = 0
+    rejected = 0
+    for recommendation_id in recommendation_ids:
+        state = workflow.get(str(recommendation_id), {})
+        decision = state.get('decision')
+        if decision == 'accepted':
+            accepted += 1
+        elif decision == 'rejected':
+            rejected += 1
+    total = len(recommendation_ids)
+    return {
+        'accepted': accepted,
+        'rejected': rejected,
+        'pending': max(total - accepted - rejected, 0),
+        'total': total,
+    }
 
 
 async def analyze_contract_background(
@@ -214,7 +245,7 @@ def _analyze_contract_sync(
         _set_progress(5, 'Загрузка документа...')
         db.commit()
 
-        parser = DocumentParser()
+        parser = ExtendedDocumentParser()
         _set_progress(10, 'Парсинг документа...')
         parsed_xml = parser.parse(contract.file_path)
 
@@ -224,6 +255,12 @@ def _analyze_contract_sync(
             _set_progress(0, 'Ошибка парсинга документа')
             logger.error(f"Failed to parse contract {contract_id}")
             return
+
+        meta = _load_meta(contract.meta_info)
+        meta['xml'] = parsed_xml if isinstance(parsed_xml, str) else str(parsed_xml)
+        contract.meta_info = meta
+        flag_modified(contract, 'meta_info')
+        db.commit()
 
         _set_progress(20, 'Документ распознан, подготовка к анализу...')
 
@@ -430,6 +467,90 @@ async def analyze_contract(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail='Error starting analysis'
         )
+
+
+@router.post(
+    '/{contract_id}/recommendations/{recommendation_id}/decision',
+    response_model=RecommendationDecisionResponse,
+)
+async def update_recommendation_decision(
+    contract_id: str,
+    recommendation_id: int,
+    request_data: RecommendationDecisionRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Persist user decision for a recommendation to build a final result set."""
+    try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Contract not found')
+
+        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to update this contract",
+            )
+
+        analysis = (
+            db.query(AnalysisResult)
+            .filter(AnalysisResult.contract_id == contract_id)
+            .order_by(AnalysisResult.created_at.desc(), AnalysisResult.version.desc())
+            .first()
+        )
+        if not analysis:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Analysis not found')
+
+        recommendation = (
+            db.query(ContractRecommendation)
+            .filter(
+                ContractRecommendation.id == recommendation_id,
+                ContractRecommendation.analysis_id == analysis.id,
+                ContractRecommendation.contract_id == contract_id,
+            )
+            .first()
+        )
+        if not recommendation:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Recommendation not found')
+
+        payload = _recommendation_workflow_payload(analysis)
+        workflow = payload['workflow']
+        workflow[str(recommendation_id)] = {
+            'decision': request_data.decision,
+            'updated_at': datetime.now(ZoneInfo('Europe/Moscow')).isoformat(),
+            'updated_by': current_user.id,
+        }
+
+        recommendation_ids = [
+            rec_id for (rec_id,) in db.query(ContractRecommendation.id).filter(
+                ContractRecommendation.analysis_id == analysis.id
+            ).all()
+        ]
+        summary = _workflow_summary(workflow, recommendation_ids)
+        payload['summary'] = summary
+
+        analysis.recommendations = payload
+        flag_modified(analysis, 'recommendations')
+        db.commit()
+
+        return RecommendationDecisionResponse(
+            contract_id=contract_id,
+            recommendation_id=recommendation_id,
+            decision=request_data.decision,
+            summary=summary,
+            message='Решение по рекомендации сохранено.',
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f'Failed to update recommendation decision: {exc}', exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail='Internal server error'
+        )
+
+
 @router.post("/{contract_id}/analyze/cancel")
 async def cancel_analysis(
     contract_id: str,
@@ -448,6 +569,11 @@ async def cancel_analysis(
         raise HTTPException(status_code=409, detail="Анализ не запущен")
 
     contract.status = 'uploaded'
+    meta = _load_meta(contract.meta_info)
+    meta['_progress'] = 0
+    meta['_progress_msg'] = 'Анализ остановлен'
+    contract.meta_info = meta
+    flag_modified(contract, 'meta_info')
     db.commit()
     logger.info(f"Analysis cancelled for contract {contract_id} by user {current_user.id}")
     return {"ok": True, "message": "Анализ остановлен"}
@@ -476,7 +602,7 @@ async def analyze_contract_stream(
     parsed_xml = (contract.meta_info or {}).get('xml')
     if not parsed_xml:
         # Parse on the fly
-        parser = DocumentParser()
+        parser = ExtendedDocumentParser()
         try:
             parsed_xml = parser.parse(contract.file_path)
         except Exception as e:

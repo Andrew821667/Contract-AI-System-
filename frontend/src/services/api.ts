@@ -30,6 +30,21 @@ export interface LoginRequest {
   password: string;
 }
 
+export interface ContractRecommendationDecisionSummary {
+  accepted: number;
+  rejected: number;
+  pending: number;
+  total: number;
+}
+
+export interface ContractRecommendationDecisionResponse {
+  contract_id: string;
+  recommendation_id: number;
+  decision: 'accepted' | 'rejected';
+  summary: ContractRecommendationDecisionSummary;
+  message: string;
+}
+
 export interface RegisterRequest {
   email: string;
   name: string;
@@ -1056,6 +1071,18 @@ class APIClient {
     return response.data;
   }
 
+  async setRecommendationDecision(
+    contractId: string,
+    recommendationId: number,
+    decision: 'accepted' | 'rejected'
+  ): Promise<ContractRecommendationDecisionResponse> {
+    const response = await this.client.post<ContractRecommendationDecisionResponse>(
+      `/api/v1/contracts/${contractId}/recommendations/${recommendationId}/decision`,
+      { decision }
+    );
+    return response.data;
+  }
+
   async listContracts(params?: {
     page?: number;
     limit?: number;
@@ -1080,11 +1107,20 @@ class APIClient {
     return response.data;
   }
 
-  async exportContract(contractId: string, format: string): Promise<Blob> {
+  async exportContract(
+    contractId: string,
+    format: string,
+    options?: {
+      allowLossyConversion?: boolean;
+    }
+  ): Promise<Blob> {
     const response = await this.client.get(
       `/api/v1/contracts/${contractId}/export`,
       {
-        params: { format },
+        params: {
+          format,
+          allow_lossy_conversion: options?.allowLossyConversion || false,
+        },
         responseType: 'blob',
       }
     );

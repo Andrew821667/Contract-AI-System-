@@ -31,6 +31,18 @@ class AnalysisResultResponse(BaseModel):
     message: str
 
 
+class RecommendationDecisionRequest(BaseModel):
+    decision: str = Field(..., pattern='^(accepted|rejected)$')
+
+
+class RecommendationDecisionResponse(BaseModel):
+    contract_id: str
+    recommendation_id: int
+    decision: str
+    summary: Dict[str, int]
+    message: str
+
+
 class ContractGenerateRequest(BaseModel):
     contract_type: str = Field(..., description="Type of contract (supply, service, lease, etc.)")
     template_id: Optional[str] = None
@@ -60,6 +72,7 @@ class ExportRequest(BaseModel):
     contract_id: str
     export_format: str = Field(..., description="Format: docx, pdf, txt, json, xml, all")
     include_analysis: bool = False
+    allow_lossy_conversion: bool = False
 
 
 class ContractListResponse(BaseModel):

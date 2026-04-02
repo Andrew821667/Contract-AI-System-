@@ -3,9 +3,11 @@
 Contract Export Routes
 """
 from io import BytesIO
+from pathlib import Path
+from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from loguru import logger
 
@@ -21,6 +23,62 @@ from .schemas import ExportRequest
 
 
 router = APIRouter()
+
+
+_MEDIA_TYPES = {
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'pdf': 'application/pdf',
+    'txt': 'text/plain; charset=utf-8',
+    'json': 'application/json',
+    'xml': 'application/xml',
+}
+
+
+def _ensure_contract_access(contract: Contract, current_user: User) -> None:
+    if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission to export this contract")
+
+
+def _build_export_agent(db: Session) -> QuickExportAgent:
+    llm_gateway = LLMGateway(model=settings.llm_quick_model)
+    return QuickExportAgent(llm_gateway=llm_gateway, db_session=db)
+
+
+def _run_single_export(
+    contract_id: str,
+    export_format: str,
+    include_analysis: bool,
+    allow_lossy_conversion: bool,
+    user_id: str,
+    db: Session,
+) -> str:
+    agent = _build_export_agent(db)
+    result = agent.execute({
+        'contract_id': contract_id,
+        'export_format': export_format,
+        'include_analysis': include_analysis,
+        'allow_lossy_conversion': allow_lossy_conversion,
+        'user_id': user_id,
+    })
+
+    if not result.success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Export failed: {result.error}",
+        )
+
+    file_path = (result.data.get('file_paths') or {}).get(export_format)
+    if not file_path:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Экспорт в формат {export_format.upper()} недоступен для этого документа",
+        )
+    if not Path(file_path).exists():
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Export file was not created",
+        )
+    return file_path
 
 
 @router.post("/export")
@@ -47,27 +105,38 @@ async def export_contract(
         contract = db.query(Contract).filter(Contract.id == request_data.contract_id).first()
         if not contract:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
-        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission to export this contract")
+        _ensure_contract_access(contract, current_user)
 
-        llm_gateway = LLMGateway(model=settings.llm_quick_model)
-        agent = QuickExportAgent(llm_gateway=llm_gateway, db_session=db)
-
-        result = agent.execute({
-            'contract_id': request_data.contract_id,
-            'export_format': request_data.export_format,
-            'include_analysis': request_data.include_analysis,
-            'user_id': current_user.id
-        })
-
-        if result.success:
-            logger.info(f"Contract exported: {request_data.contract_id} to {request_data.export_format}")
-            return result.data
-        else:
+        if request_data.export_format == 'all':
+            agent = _build_export_agent(db)
+            result = agent.execute({
+                'contract_id': request_data.contract_id,
+                'export_format': request_data.export_format,
+                'include_analysis': request_data.include_analysis,
+                'allow_lossy_conversion': request_data.allow_lossy_conversion,
+                'user_id': current_user.id,
+            })
+            if result.success:
+                logger.info(f"Contract exported: {request_data.contract_id} to {request_data.export_format}")
+                return result.data
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Export failed: {result.error}"
+                detail=f"Export failed: {result.error}",
             )
+
+        file_path = _run_single_export(
+            contract_id=request_data.contract_id,
+            export_format=request_data.export_format,
+            include_analysis=request_data.include_analysis,
+            allow_lossy_conversion=request_data.allow_lossy_conversion,
+            user_id=current_user.id,
+            db=db,
+        )
+        return {
+            'contract_id': request_data.contract_id,
+            'file_path': file_path,
+            'format': request_data.export_format,
+        }
 
     except HTTPException:
         raise
@@ -76,6 +145,47 @@ async def export_contract(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Internal server error"
+        )
+
+
+@router.get("/{contract_id}/export")
+async def download_exported_contract(
+    contract_id: str,
+    format: str = Query(..., pattern='^(docx|pdf|txt|json|xml)$'),
+    include_analysis: bool = Query(False),
+    allow_lossy_conversion: bool = Query(False),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Stream exported file for the frontend download flow."""
+    try:
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if not contract:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
+        _ensure_contract_access(contract, current_user)
+
+        file_path = _run_single_export(
+            contract_id=contract_id,
+            export_format=format,
+            include_analysis=include_analysis,
+            allow_lossy_conversion=allow_lossy_conversion,
+            user_id=current_user.id,
+            db=db,
+        )
+
+        download_name = f"{Path(contract.file_name or contract_id).stem}.{format}"
+        return FileResponse(
+            path=file_path,
+            media_type=_MEDIA_TYPES.get(format, 'application/octet-stream'),
+            filename=download_name,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error streaming export for {contract_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error",
         )
 
 

@@ -25,6 +25,11 @@ from ..models.analyzer_models import (
 from ..models.database import Contract, AnalysisResult
 from ..utils.contract_types import infer_contract_type_from_xml, is_meaningful_contract_type
 from ..utils.xml_security import parse_xml_safely, XMLSecurityError
+from ..utils.analysis_filters import (
+    should_ignore_future_date_risk,
+    should_ignore_required_field,
+    should_ignore_signatory_authority_risk,
+)
 from config.settings import settings
 
 # Optional RAG import
@@ -116,6 +121,10 @@ class ContractAnalyzerAgent(BaseAgent):
 
 Всегда возвращай структурированный JSON со всеми выявленными проблемами.
 Используй RAG-источники (прецеденты, правовые нормы, аналоги) для обоснования анализа.
+- Если в договоре не хватает фактических данных для заполнения или редактуры, не выдумывай их.
+- Такие случаи помечай как требующие ввода пользователя и формулируй, какие данные нужно запросить.
+- Если проблема связана с предметом договора, отдельно различай юридический риск и перечень данных,
+  которые нужно получить от пользователя для корректного заполнения предмета.
 """
 
     def execute(self, state: Dict[str, Any]) -> AgentResult:
@@ -152,6 +161,7 @@ class ContractAnalyzerAgent(BaseAgent):
                 'analysis_date': metadata.get('analysis_date') or datetime.now(ZoneInfo("Europe/Moscow")).date().isoformat(),
                 'analysis_perspective': metadata.get('analysis_perspective') or 'Интересы пользователя',
             }
+            self._analysis_context = analysis_context
 
             if not contract_id or not parsed_xml:
                 return AgentResult(
@@ -234,13 +244,14 @@ class ContractAnalyzerAgent(BaseAgent):
                 risks,
                 rag_context,
                 company_conditions=company_conditions,
+                required_fields=required_fields,
             )
             _update_progress(72, f"Сохранение {len(recommendations)} рекомендаций...")
             self._save_recommendations(analysis.id, contract.id, recommendations)
 
             _update_progress(78, "Генерация предложений по изменениям...")
             suggested_changes = self.recommendation_generator.generate_suggested_changes(
-                parsed_xml, structure, risks, recommendations, rag_context
+                parsed_xml, structure, risks, recommendations, rag_context, required_fields=required_fields
             )
             self._save_suggested_changes(analysis.id, contract.id, suggested_changes)
 
@@ -408,6 +419,39 @@ class ContractAnalyzerAgent(BaseAgent):
             import traceback
             traceback.print_exc()
             return {}
+
+    def _extract_plain_text(self, xml_content: str) -> str:
+        """Convert normalized XML into stable plain text for full-document analysis."""
+        try:
+            root = parse_xml_safely(xml_content)
+            clause_nodes = root.findall('.//clauses/clause')
+            chunks: List[str] = []
+
+            if clause_nodes:
+                for clause in clause_nodes:
+                    title = (clause.findtext('title', '') or '').strip()
+                    paragraphs = [
+                        ' '.join((paragraph.text or '').split())
+                        for paragraph in clause.findall('.//paragraph')
+                        if (paragraph.text or '').strip()
+                    ]
+                    clause_text = '\n'.join(part for part in [title, *paragraphs] if part).strip()
+                    if clause_text:
+                        chunks.append(clause_text)
+                if chunks:
+                    return '\n\n'.join(chunks)
+
+            for text in root.itertext():
+                cleaned = ' '.join((text or '').split())
+                if cleaned:
+                    chunks.append(cleaned)
+            return '\n'.join(chunks)
+        except XMLSecurityError as exc:
+            logger.warning(f"Plain text extraction blocked by XML security: {exc}")
+            return ''
+        except Exception as exc:
+            logger.error(f"Plain text extraction failed: {exc}")
+            return ''
 
     def _extract_contract_clauses(self, xml_content: str) -> List[Dict[str, Any]]:
         """
@@ -1261,6 +1305,12 @@ JSON формат:
                     analysis_context=analysis_context,
                 )
                 self._full_text_analysis = full_text_result
+                self._merge_required_fields_from_analyses([{
+                    'clause_id': 'full_text_analysis',
+                    'clause_title': 'Полнотекстовый анализ',
+                    'clause_xpath': '',
+                    'required_fields': full_text_result.get('required_fields', []),
+                }])
 
                 type_mapping = {
                     'compliance': 'legal',
@@ -1400,6 +1450,8 @@ JSON формат:
                     'snippet': snippet,
                     'section_name': clause.get('title') or clause.get('id', ''),
                     'xpath_location': clause.get('xpath', ''),
+                    'needs_user_input': True,
+                    'autofill_blocked': True,
                 })
 
         self._required_fields = self._dedupe_required_fields(required_fields)
@@ -1415,16 +1467,22 @@ JSON формат:
                     'title': item.get('title') or 'Нужно заполнить поле',
                     'description': item.get('description') or 'В договоре есть незаполненное место.',
                     'snippet': item.get('snippet') or '',
-                    'section_name': analysis.get('clause_id', ''),
+                    'section_name': analysis.get('clause_title') or analysis.get('clause_id', ''),
                     'xpath_location': analysis.get('clause_xpath', ''),
+                    'needs_user_input': item.get('needs_user_input', True),
+                    'user_question': item.get('user_question') or '',
+                    'missing_data_points': item.get('missing_data_points') or [],
+                    'autofill_blocked': item.get('autofill_blocked', item.get('needs_user_input', True)),
                 })
         self._required_fields = self._dedupe_required_fields(existing)
 
-    @staticmethod
-    def _dedupe_required_fields(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _dedupe_required_fields(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         seen: set[str] = set()
         deduped: List[Dict[str, Any]] = []
         for item in items:
+            item = self._enrich_required_field(item)
+            if self._should_ignore_required_field(item):
+                continue
             key = '|'.join([
                 item.get('section_name', ''),
                 item.get('xpath_location', ''),
@@ -1435,9 +1493,67 @@ JSON формат:
                 deduped.append(item)
         return deduped
 
+    @staticmethod
+    def _enrich_required_field(item: Dict[str, Any]) -> Dict[str, Any]:
+        enriched = dict(item)
+        title = (enriched.get('title') or '').strip()
+        snippet = (enriched.get('snippet') or '').strip()
+        description = (enriched.get('description') or '').strip()
+        combined = ' '.join([title, snippet, description]).lower()
+
+        enriched.setdefault('needs_user_input', True)
+        enriched.setdefault('autofill_blocked', bool(enriched.get('needs_user_input', True)))
+
+        if not enriched.get('missing_data_points'):
+            missing_data_points: List[str] = []
+            if any(marker in combined for marker in ('предмет', 'товар', 'услуг', 'работ', 'объект', 'спецификац')):
+                missing_data_points = ['точное описание предмета', 'объем/количество', 'ключевые характеристики или спецификация']
+            elif any(marker in combined for marker in ('оплат', 'цен', 'стоим', 'сумм', 'тариф')):
+                missing_data_points = ['сумма или цена', 'срок оплаты', 'порядок оплаты']
+            elif any(marker in combined for marker in ('срок', 'дата', 'период', 'календар')):
+                missing_data_points = ['конкретная дата или срок', 'событие-триггер начала/окончания']
+            elif any(marker in combined for marker in ('банк', 'бик', 'к/с', 'р/с', 'счёт', 'счет', 'инн', 'кпп')):
+                missing_data_points = ['полные реквизиты', 'банковские данные']
+            enriched['missing_data_points'] = missing_data_points
+
+        if not enriched.get('user_question'):
+            if any(marker in combined for marker in ('предмет', 'товар', 'услуг', 'работ', 'объект', 'спецификац')):
+                enriched['user_question'] = (
+                    'Уточните предмет договора: что именно передается, выполняется или оказывается, '
+                    'в каком объеме и с какими характеристиками?'
+                )
+            elif any(marker in combined for marker in ('оплат', 'цен', 'стоим', 'сумм', 'тариф')):
+                enriched['user_question'] = (
+                    'Какие точные денежные условия нужно подставить: сумма, цена, валюта, срок и порядок оплаты?'
+                )
+            elif any(marker in combined for marker in ('срок', 'дата', 'период', 'календар')):
+                enriched['user_question'] = (
+                    'Какую точную дату, срок или событие-триггер нужно указать в этом пункте?'
+                )
+            else:
+                enriched['user_question'] = (
+                    'Какие именно данные нужно получить от пользователя, чтобы корректно заполнить этот пункт без выдумывания условий?'
+                )
+
+        if any(marker in combined for marker in ('предмет', 'товар', 'услуг', 'работ', 'объект', 'спецификац')):
+            enriched['description'] = (
+                'Система не должна придумывать предмет договора или его параметры. '
+                'Нужно запросить у пользователя конкретные данные и только после этого заполнять документ.'
+            )
+        elif not description:
+            enriched['description'] = 'В договоре есть незаполненное место. Для корректного заполнения нужны данные от пользователя.'
+
+        return enriched
+
+    @staticmethod
+    def _should_ignore_required_field(item: Dict[str, Any]) -> bool:
+        return should_ignore_required_field(item)
+
     def _filter_placeholder_risks(self, risks: List[ContractRisk]) -> List[ContractRisk]:
         """Remove pseudo-risks caused by placeholders/metadata and deduplicate obvious repeats."""
         placeholder_clause_ids = getattr(self, '_placeholder_clause_ids', set())
+        analysis_context = getattr(self, '_analysis_context', {}) or {}
+        analysis_date_iso = analysis_context.get('analysis_date')
         technical_markers = [
             'uuid', 'метадан', 'metadata', 'parsed_at', 'file_name', 'дата создания',
             'author', 'автор', 'title', 'без названия', 'docx',
@@ -1453,6 +1569,10 @@ JSON формат:
             if is_placeholder_clause and mentions_placeholder:
                 continue
             if mentions_technical_metadata:
+                continue
+            if should_ignore_future_date_risk(' '.join([risk.title or '', risk.description or '', risk.consequences or '']), analysis_date_iso):
+                continue
+            if should_ignore_signatory_authority_risk(' '.join([risk.title or '', risk.description or '', risk.consequences or ''])):
                 continue
             filtered.append(risk)
         return self._dedupe_risks(filtered)
@@ -1589,7 +1709,10 @@ JSON формат:
                 )
             prompt += (
                 "- Не считай рисками служебные метаданные файла и парсинга.\n"
-                "- Незаполненные поля, пропуски и шаблонные плейсхолдеры не являются рисками сами по себе.\n\n"
+                "- Незаполненные поля, пропуски и шаблонные плейсхолдеры не являются рисками сами по себе.\n"
+                "- Проект договора готовится к подписанию: отсутствие живых подписей, печатей и М.П. в черновике не является риском.\n"
+                "- Не требуй выписку ЕГРЮЛ, доверенность или иные внешние подтверждения полномочий подписанта, если в тексте нет прямого противоречия полномочиям.\n"
+                "- Не называй дату будущей, если она не позже текущей даты анализа.\n\n"
             )
 
         prompt += """Выделяй риски только по категориям:

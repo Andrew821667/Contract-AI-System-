@@ -229,6 +229,12 @@ async def get_contract_details(
         recs_data = []
         required_fields = []
         analysis_context: Dict[str, Any] = {}
+        recommendation_summary = {
+            'accepted': 0,
+            'rejected': 0,
+            'pending': 0,
+            'total': 0,
+        }
 
         if analysis:
             risks_stmt = select(ContractRisk).where(ContractRisk.analysis_id == analysis.id)
@@ -257,8 +263,15 @@ async def get_contract_details(
                 }
                 for r in risks_rows
             ]
-            recs_data = [
-                {
+            recommendation_meta = _json_field(analysis.recommendations)
+            recommendation_workflow = recommendation_meta.get('workflow', {})
+            if not isinstance(recommendation_workflow, dict):
+                recommendation_workflow = {}
+
+            recs_data = []
+            for r in recs_rows:
+                decision_payload = recommendation_workflow.get(str(r.id), {})
+                recs_data.append({
                     'id': r.id,
                     'category': r.category,
                     'priority': r.priority,
@@ -267,9 +280,17 @@ async def get_contract_details(
                     'reasoning': r.reasoning,
                     'expected_benefit': r.expected_benefit,
                     'implementation_complexity': r.implementation_complexity,
+                    'decision': decision_payload.get('decision', 'pending'),
+                    'decided_at': decision_payload.get('updated_at'),
+                })
+
+            if recs_data:
+                recommendation_summary = {
+                    'accepted': sum(1 for rec in recs_data if rec.get('decision') == 'accepted'),
+                    'rejected': sum(1 for rec in recs_data if rec.get('decision') == 'rejected'),
+                    'pending': sum(1 for rec in recs_data if rec.get('decision') not in {'accepted', 'rejected'}),
+                    'total': len(recs_data),
                 }
-                for r in recs_rows
-            ]
 
             legal_issues = _json_field(analysis.legal_issues)
             entities = _json_field(analysis.entities)
@@ -312,6 +333,7 @@ async def get_contract_details(
                 'version': analysis.version if analysis else None,
                 'risks': risks_data,
                 'recommendations': recs_data,
+                'recommendation_summary': recommendation_summary,
                 'required_fields': required_fields,
                 'analysis_context': analysis_context,
             } if analysis else None,

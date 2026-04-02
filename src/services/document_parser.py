@@ -11,9 +11,10 @@ from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 from lxml import etree
 from docx import Document
+from docx.document import Document as DocxDocument
 from docx.oxml.text.paragraph import CT_P
 from docx.oxml.table import CT_Tbl
-from docx.table import Table
+from docx.table import Table, _Cell
 from docx.text.paragraph import Paragraph
 import pypdf
 import pdfplumber
@@ -38,7 +39,7 @@ class DocumentParser:
     XML_CACHE_TTL = 3600  # 1 hour
 
     def __init__(self):
-        self.supported_formats = ['.docx', '.pdf', '.txt']
+        self.supported_formats = ['.docx', '.pdf', '.txt', '.xml']
         self._ocr_service = None
         self._redis = _get_redis()
 
@@ -114,6 +115,8 @@ class DocumentParser:
             result = self.parse_pdf(file_path)
         elif ext == '.txt':
             result = self.parse_txt(file_path)
+        elif ext == '.xml':
+            result = self.parse_xml(file_path)
         else:
             result = None
 
@@ -126,6 +129,14 @@ class DocumentParser:
                 logger.debug(f"Redis cache write failed: {e}")
 
         return result
+
+    def parse_xml(self, xml_path: str) -> str:
+        """Safe XML passthrough for already-normalized XML documents."""
+        logger.info(f"Parsing XML: {xml_path}")
+        with open(xml_path, 'r', encoding='utf-8', errors='replace') as f:
+            xml_str = f.read()
+        parse_xml_safely(xml_str)
+        return xml_str
 
     def parse_docx(self, docx_path: str) -> str:
         """
@@ -491,36 +502,38 @@ class DocumentParser:
     def _extract_sections_docx(self, doc: Document) -> List[Dict[str, Any]]:
         """
         Извлечение разделов из DOCX
-        Определяет структуру по заголовкам (Heading 1, 2, 3)
+        Определяет структуру по заголовкам и нумерованным разделам
         """
         sections = []
         current_section = None
 
-        for para in doc.paragraphs:
-            # Проверяем, является ли параграф заголовком
-            if para.style.name.startswith('Heading'):
-                # Сохраняем предыдущую секцию
+        for block in self._iter_block_items_docx(doc):
+            if not isinstance(block, Paragraph):
+                continue
+
+            text = block.text.strip()
+            if not text:
+                continue
+
+            if self._is_docx_section_heading(block):
                 if current_section:
                     sections.append(current_section)
 
-                # Начинаем новую секцию
                 current_section = {
-                    "title": para.text.strip(),
-                    "type": self._classify_section_type(para.text),
+                    "title": text,
+                    "type": self._classify_section_type(text),
                     "paragraphs": []
                 }
-            else:
-                # Обычный параграф
-                text = para.text.strip()
-                if text:
-                    if current_section is None:
-                        # Если ещё нет секции, создаём дефолтную
-                        current_section = {
-                            "title": "Преамбула",
-                            "type": "preamble",
-                            "paragraphs": []
-                        }
-                    current_section["paragraphs"].append(text)
+                continue
+
+            if current_section is None:
+                current_section = {
+                    "title": "Преамбула",
+                    "type": "preamble",
+                    "paragraphs": []
+                }
+
+            current_section["paragraphs"].append(text)
 
         # Добавляем последнюю секцию
         if current_section:
@@ -535,10 +548,6 @@ class DocumentParser:
         """
         sections = []
 
-        # Разбиваем по паттернам заголовков
-        # Паттерн: цифра с точкой в начале строки
-        section_pattern = r'^(\d+\.?\s+[^\n]*)'
-
         lines = text.split('\n')
         current_section = None
 
@@ -548,7 +557,7 @@ class DocumentParser:
                 continue
 
             # Проверяем, является ли строка заголовком
-            if re.match(section_pattern, line):
+            if self._is_section_heading_text(line):
                 # Сохраняем предыдущую секцию
                 if current_section:
                     sections.append(current_section)
@@ -575,6 +584,47 @@ class DocumentParser:
             sections.append(current_section)
 
         return sections
+
+    def _iter_block_items_docx(self, parent):
+        """Итерирует по параграфам и таблицам DOCX в исходном порядке."""
+        if isinstance(parent, DocxDocument):
+            parent_elm = parent.element.body
+        elif isinstance(parent, _Cell):
+            parent_elm = parent._tc
+        else:
+            raise TypeError(f"Unsupported parent type: {type(parent)!r}")
+
+        for child in parent_elm.iterchildren():
+            if isinstance(child, CT_P):
+                yield Paragraph(child, parent)
+            elif isinstance(child, CT_Tbl):
+                yield Table(child, parent)
+
+    def _is_docx_section_heading(self, paragraph: Paragraph) -> bool:
+        """Определяет, является ли абзац заголовком раздела договора."""
+        text = paragraph.text.strip()
+        if not text:
+            return False
+
+        style_name = getattr(getattr(paragraph, "style", None), "name", "") or ""
+        if style_name.startswith('Heading'):
+            return True
+
+        return self._is_section_heading_text(text)
+
+    @staticmethod
+    def _is_section_heading_text(text: str) -> bool:
+        """Проверка, похожа ли строка на заголовок раздела."""
+        normalized = text.strip()
+        if not normalized or len(normalized) > 200:
+            return False
+
+        patterns = (
+            r'^\d+\.\s+\S+',                  # 1. Предмет договора
+            r'^(раздел|статья|глава)\s+\d+',  # Раздел 1
+            r'^приложение\s*№?\s*\d+',        # Приложение №1
+        )
+        return any(re.match(pattern, normalized, re.IGNORECASE) for pattern in patterns)
 
     def _extract_tables_docx(self, doc: Document) -> List[List[List[str]]]:
         """Извлечение таблиц из DOCX"""

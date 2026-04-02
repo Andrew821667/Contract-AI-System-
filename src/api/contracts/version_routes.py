@@ -15,7 +15,7 @@ from src.models.database import get_db
 from src.models import Contract
 from src.models.auth_models import User
 from src.models.changes_models import ContractVersion, ContractChange, ChangeAnalysisResult
-from src.services.document_parser import DocumentParser
+from src.services.document_parser_extended import ExtendedDocumentParser
 from src.services.document_diff_service import DocumentDiffService
 from src.utils.file_validator import save_uploaded_file_securely, FileValidationError
 from src.api.dependencies import get_current_user
@@ -195,7 +195,7 @@ async def compare_versions(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Target version file not found on disk")
 
         # Parse both files
-        parser = DocumentParser()
+        parser = ExtendedDocumentParser()
         old_xml = parser.parse(from_version.file_path)
         new_xml = parser.parse(to_version.file_path)
 

@@ -8,6 +8,7 @@ import { toast } from 'react-hot-toast'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
+import Modal from '@/components/ui/Modal'
 import api, { DigitalContract, VerificationResult, RiskPredictionResponse, ContractVersionInfo, CompareChange, CompareResult } from '@/services/api'
 import { useAnalysisWebSocket, WSMessage } from '@/hooks/useAnalysisWebSocket'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
@@ -27,12 +28,15 @@ interface Risk {
 }
 
 interface Recommendation {
+  id: number
   priority: string
   category: string
   title: string
   description: string
   reasoning: string
   expected_benefit: string
+  decision?: 'pending' | 'accepted' | 'rejected'
+  decided_at?: string | null
 }
 
 interface RequiredField {
@@ -40,11 +44,22 @@ interface RequiredField {
   description: string
   snippet?: string
   section_name?: string
+  needs_user_input?: boolean
+  user_question?: string
+  missing_data_points?: string[]
+  autofill_blocked?: boolean
 }
 
 interface AnalysisContext {
   analysis_date?: string
   analysis_perspective?: string
+}
+
+interface RecommendationSummary {
+  accepted: number
+  rejected: number
+  pending: number
+  total: number
 }
 
 export default function ContractDetailPage() {
@@ -63,6 +78,9 @@ export default function ContractDetailPage() {
   const [selectedPerspective, setSelectedPerspective] = useState('')
   const [customPerspective, setCustomPerspective] = useState('')
   const [refetchMs, setRefetchMs] = useState<number | false>(false)
+  const [decisionLoadingId, setDecisionLoadingId] = useState<number | null>(null)
+  const [pendingLossyExport, setPendingLossyExport] = useState<'docx' | 'pdf' | null>(null)
+  const [lossyExportLoading, setLossyExportLoading] = useState(false)
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['contract', contractId],
@@ -158,20 +176,75 @@ export default function ContractDetailPage() {
     },
   })
 
-  const handleExport = async (format: string) => {
+  const runExport = async (format: string, allowLossyConversion = false) => {
     try {
-      const blob = await api.exportContract(contractId, format)
+      const blob = await api.exportContract(contractId, format, { allowLossyConversion })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `contract_${contractId}.${format}`
+      const exportBaseName = (contract?.file_name || `contract_${contractId}`).replace(/\.[^.]+$/, '')
+      const needsWarning = (format === 'docx' && originalExtension !== 'docx') || (format === 'pdf' && originalExtension !== 'pdf')
+      const downloadSuffix = allowLossyConversion && needsWarning ? '_converted' : ''
+      a.download = `${exportBaseName}${downloadSuffix}.${format}`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
-      toast.success(`Экспорт в ${format.toUpperCase()} выполнен`)
+      toast.success(
+        allowLossyConversion
+          ? `Конверсия в ${format.toUpperCase()} выполнена с предупреждением о возможной потере форматирования`
+          : `Экспорт в ${format.toUpperCase()} выполнен`
+      )
     } catch (err: any) {
       toast.error(err?.response?.data?.detail || 'Ошибка экспорта')
+    }
+  }
+
+  const handleExport = async (format: string) => {
+    const needsLossyWarning =
+      (format === 'docx' && originalExtension !== 'docx') ||
+      (format === 'pdf' && originalExtension !== 'pdf')
+
+    if (needsLossyWarning) {
+      setPendingLossyExport(format as 'docx' | 'pdf')
+      return
+    }
+
+    await runExport(format)
+  }
+
+  const handleRecommendationDecision = async (
+    recommendationId: number,
+    decision: 'accepted' | 'rejected'
+  ) => {
+    try {
+      setDecisionLoadingId(recommendationId)
+      const result = await api.setRecommendationDecision(contractId, recommendationId, decision)
+      toast.success(
+        decision === 'accepted'
+          ? 'Рекомендация принята и попадет в итоговый результат'
+          : 'Рекомендация отклонена'
+      )
+      queryClient.setQueryData(['contract', contractId], (oldData: any) => {
+        if (!oldData?.analysis) return oldData
+        return {
+          ...oldData,
+          analysis: {
+            ...oldData.analysis,
+            recommendations: (oldData.analysis.recommendations || []).map((item: Recommendation) =>
+              item.id === recommendationId
+                ? { ...item, decision, decided_at: new Date().toISOString() }
+                : item
+            ),
+            recommendation_summary: result.summary,
+          },
+        }
+      })
+      queryClient.invalidateQueries({ queryKey: ['contract', contractId] })
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Не удалось сохранить решение по рекомендации')
+    } finally {
+      setDecisionLoadingId(null)
     }
   }
 
@@ -201,6 +274,7 @@ export default function ContractDetailPage() {
 
   const getPriorityLabel = (priority: string) => {
     const map: Record<string, string> = {
+      critical: 'Критичный',
       high: 'Высокий',
       medium: 'Средний',
       low: 'Низкий',
@@ -264,14 +338,89 @@ export default function ContractDetailPage() {
   }
 
   const statusInfo = statusLabels[contract?.status] || statusLabels.pending
+  const originalExtension = (contract?.file_name?.split('.').pop() || '').toLowerCase()
   const risks: Risk[] = analysis?.risks || []
   const recommendations: Recommendation[] = analysis?.recommendations || []
   const requiredFields: RequiredField[] = analysis?.required_fields || []
   const analysisContext: AnalysisContext = analysis?.analysis_context || {}
+  const recommendationSummary: RecommendationSummary = analysis?.recommendation_summary || {
+    accepted: recommendations.filter((item) => item.decision === 'accepted').length,
+    rejected: recommendations.filter((item) => item.decision === 'rejected').length,
+    pending: recommendations.filter((item) => item.decision !== 'accepted' && item.decision !== 'rejected').length,
+    total: recommendations.length,
+  }
+  const acceptedRecommendations = recommendations.filter((item) => item.decision === 'accepted')
+
+  const getRecommendationDecisionBadge = (decision?: string) => {
+    if (decision === 'accepted') {
+      return { variant: 'success' as const, label: 'Принята' }
+    }
+    if (decision === 'rejected') {
+      return { variant: 'danger' as const, label: 'Отклонена' }
+    }
+    return { variant: 'default' as const, label: 'Ожидает решения' }
+  }
 
   return (
     <AppLayout title={contract?.file_name || 'Договор'}>
       <div className="max-w-7xl mx-auto">
+        <Modal
+          isOpen={pendingLossyExport !== null}
+          onClose={() => {
+            if (lossyExportLoading) return
+            setPendingLossyExport(null)
+          }}
+          title={`Предупреждение о конверсии в ${pendingLossyExport?.toUpperCase() || ''}`}
+          size="md"
+        >
+          <div className="space-y-4">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-semibold text-amber-900 mb-2">
+                Исходный файл не является {pendingLossyExport?.toUpperCase()}-документом.
+              </p>
+              <p className="text-sm text-amber-900">
+                Мы сформируем best-effort версию по разобранному содержимому договора. Исходное форматирование,
+                переносы страниц, таблицы, подписи, штампы, колонтитулы и визуальная верстка могут измениться.
+              </p>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-sm font-semibold text-gray-900 mb-2">Что безопаснее</p>
+              <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
+                <li>Для сохранения исходного оформления используйте экспорт в родной формат документа.</li>
+                <li>XML, JSON и TXT отражают содержимое документа, а не оригинальную верстку.</li>
+                <li>Конвертированный файл подходит для редактирования и сверки текста, но не как точная копия оригинала.</li>
+              </ul>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={lossyExportLoading}
+                onClick={() => setPendingLossyExport(null)}
+              >
+                Отмена
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={lossyExportLoading}
+                onClick={async () => {
+                  if (!pendingLossyExport) return
+                  try {
+                    setLossyExportLoading(true)
+                    await runExport(pendingLossyExport, true)
+                    setPendingLossyExport(null)
+                  } finally {
+                    setLossyExportLoading(false)
+                  }
+                }}
+              >
+                Продолжить конверсию
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
         {showPerspectiveModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
             <Card className="w-full max-w-xl">
@@ -341,7 +490,7 @@ export default function ContractDetailPage() {
           className="mb-8"
         >
           <Card>
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex flex-col gap-5">
               <div>
                 <h1 className="text-3xl font-bold text-gray-900 mb-2">
                   {contract?.file_name || 'Договор'}
@@ -365,61 +514,63 @@ export default function ContractDetailPage() {
                 </div>
               </div>
 
-              <div className="flex items-center space-x-3 flex-shrink-0">
-                {contract?.status === 'uploaded' && (
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    loading={analyzeMutation.isPending}
-                    onClick={() => handleAnalyze()}
-                  >
-                    🔍 Запустить анализ
-                  </Button>
-                )}
-                {contract?.status === 'completed' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    loading={analyzeMutation.isPending}
-                    onClick={() => handleAnalyze()}
-                  >
-                    🔄 Повторный анализ
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => useAIPanelStore.getState().openPanel(contractId)}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                    </svg>
-                    AI Помощник
-                  </span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => router.push(`/negotiations?doc=${contractId}`)}
-                >
-                  <span className="flex items-center gap-1.5">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
-                    </svg>
-                    Переговоры
-                  </span>
-                </Button>
-                {isAdmin && contract?.status !== 'deleted' && (
+              <div className="w-full border-t border-gray-100 pt-4">
+                <div className="flex w-full flex-wrap items-center justify-start gap-3">
+                  {contract?.status === 'uploaded' && (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      loading={analyzeMutation.isPending}
+                      onClick={() => handleAnalyze()}
+                    >
+                      🔍 Запустить анализ
+                    </Button>
+                  )}
+                  {contract?.status === 'completed' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      loading={analyzeMutation.isPending}
+                      onClick={() => handleAnalyze()}
+                    >
+                      🔄 Повторный анализ
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
-                    className="!text-red-600 !border-red-200 hover:!bg-red-50"
-                    onClick={() => setShowDeleteModal(true)}
+                    onClick={() => useAIPanelStore.getState().openPanel(contractId)}
                   >
-                    Удалить
+                    <span className="flex items-center gap-1.5">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      AI Помощник
+                    </span>
                   </Button>
-                )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push(`/negotiations?doc=${contractId}`)}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
+                      </svg>
+                      Переговоры
+                    </span>
+                  </Button>
+                  {isAdmin && contract?.status !== 'deleted' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="!text-red-600 !border-red-200 hover:!bg-red-50"
+                      onClick={() => setShowDeleteModal(true)}
+                    >
+                      Удалить
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </Card>
@@ -566,9 +717,31 @@ export default function ContractDetailPage() {
                               <p className="text-xs text-gray-500 mt-1">Раздел: {field.section_name}</p>
                             )}
                           </div>
-                          <Badge variant="warning" size="sm">Требует заполнения</Badge>
+                          <Badge variant="warning" size="sm">
+                            {field.needs_user_input ? 'Нужны данные пользователя' : 'Требует заполнения'}
+                          </Badge>
                         </div>
                         <p className="text-gray-700 mb-3">{field.description}</p>
+                        {(field.user_question || (field.missing_data_points && field.missing_data_points.length > 0)) && (
+                          <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 mb-3">
+                            <p className="text-sm font-semibold text-blue-900 mb-1">Что нужно запросить у пользователя</p>
+                            {field.user_question && (
+                              <p className="text-sm text-blue-800">{field.user_question}</p>
+                            )}
+                            {field.missing_data_points && field.missing_data_points.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {field.missing_data_points.map((item, itemIndex) => (
+                                  <span
+                                    key={`${item}-${itemIndex}`}
+                                    className="inline-flex rounded-full bg-white px-2.5 py-1 text-xs font-medium text-blue-800 border border-blue-200"
+                                  >
+                                    {item}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
                         {field.snippet && (
                           <div className="rounded-lg border border-amber-100 bg-amber-50 p-3 text-sm text-amber-900 whitespace-pre-wrap">
                             {field.snippet}
@@ -667,24 +840,70 @@ export default function ContractDetailPage() {
                 </Card>
               ) : (
                 <div className="space-y-4">
+                  <Card className="bg-stone-50 border border-stone-200">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Итоговый результат по рекомендациям</h3>
+                    <div className="grid gap-3 sm:grid-cols-4">
+                      <div className="rounded-xl bg-green-50 border border-green-100 p-4">
+                        <p className="text-xs uppercase tracking-wide text-green-700/70 mb-1">Принято</p>
+                        <p className="text-2xl font-bold text-green-800">{recommendationSummary.accepted}</p>
+                      </div>
+                      <div className="rounded-xl bg-red-50 border border-red-100 p-4">
+                        <p className="text-xs uppercase tracking-wide text-red-700/70 mb-1">Отклонено</p>
+                        <p className="text-2xl font-bold text-red-800">{recommendationSummary.rejected}</p>
+                      </div>
+                      <div className="rounded-xl bg-amber-50 border border-amber-100 p-4">
+                        <p className="text-xs uppercase tracking-wide text-amber-700/70 mb-1">Ожидает решения</p>
+                        <p className="text-2xl font-bold text-amber-800">{recommendationSummary.pending}</p>
+                      </div>
+                      <div className="rounded-xl bg-blue-50 border border-blue-100 p-4">
+                        <p className="text-xs uppercase tracking-wide text-blue-700/70 mb-1">Всего</p>
+                        <p className="text-2xl font-bold text-blue-800">{recommendationSummary.total}</p>
+                      </div>
+                    </div>
+                    {acceptedRecommendations.length > 0 && (
+                      <div className="mt-4 rounded-xl bg-white border border-green-100 p-4">
+                        <p className="text-sm font-semibold text-gray-900 mb-2">Войдут в итоговый результат</p>
+                        <div className="flex flex-wrap gap-2">
+                          {acceptedRecommendations.map((item) => (
+                            <Badge key={item.id} variant="success" size="sm">
+                              {item.title}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </Card>
                   {recommendations.map((rec, idx) => (
                     <motion.div
-                      key={idx}
+                      key={rec.id}
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.1 * idx }}
                     >
-                      <Card>
-                        <div className="flex items-start justify-between mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {rec.title}
-                          </h3>
-                          <Badge
-                            variant={rec.priority === 'high' ? 'danger' : rec.priority === 'medium' ? 'warning' : 'info'}
-                            size="sm"
-                          >
-                            {getPriorityLabel(rec.priority)}
-                          </Badge>
+                      <Card className={
+                        rec.decision === 'accepted'
+                          ? 'bg-green-50 border border-green-200'
+                          : rec.decision === 'rejected'
+                            ? 'bg-red-50 border border-red-200'
+                            : ''
+                      }>
+                        <div className="flex items-start justify-between mb-2 gap-3">
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              {rec.title}
+                            </h3>
+                            <div className="flex items-center gap-2 mt-2 flex-wrap">
+                              <Badge
+                                variant={rec.priority === 'critical' || rec.priority === 'high' ? 'danger' : rec.priority === 'medium' ? 'warning' : 'info'}
+                                size="sm"
+                              >
+                                {getPriorityLabel(rec.priority)}
+                              </Badge>
+                              <Badge variant={getRecommendationDecisionBadge(rec.decision).variant} size="sm">
+                                {getRecommendationDecisionBadge(rec.decision).label}
+                              </Badge>
+                            </div>
+                          </div>
                         </div>
                         <p className="text-gray-700 mb-3">{rec.description}</p>
                         {rec.reasoning && (
@@ -699,6 +918,28 @@ export default function ContractDetailPage() {
                             <span className="text-sm text-green-600">{rec.expected_benefit}</span>
                           </div>
                         )}
+                        <div className="mt-4 flex flex-wrap gap-3">
+                          <Button
+                            variant={rec.decision === 'accepted' ? 'success' : 'outline'}
+                            size="sm"
+                            loading={decisionLoadingId === rec.id && rec.decision !== 'accepted'}
+                            disabled={decisionLoadingId === rec.id}
+                            onClick={() => handleRecommendationDecision(rec.id, 'accepted')}
+                            className={rec.decision === 'accepted' ? '' : '!border-green-600 !text-green-700 hover:!bg-green-600 hover:!text-white'}
+                          >
+                            Принять
+                          </Button>
+                          <Button
+                            variant={rec.decision === 'rejected' ? 'danger' : 'outline'}
+                            size="sm"
+                            loading={decisionLoadingId === rec.id && rec.decision !== 'rejected'}
+                            disabled={decisionLoadingId === rec.id}
+                            onClick={() => handleRecommendationDecision(rec.id, 'rejected')}
+                            className={rec.decision === 'rejected' ? '' : '!border-red-500 !text-red-600 hover:!bg-red-600 hover:!text-white'}
+                          >
+                            Отклонить
+                          </Button>
+                        </div>
                       </Card>
                     </motion.div>
                   ))}
@@ -722,9 +963,14 @@ export default function ContractDetailPage() {
             <div className="flex flex-wrap gap-3">
               <Button variant="outline" size="sm" onClick={() => handleExport('docx')}>
                 📄 DOCX
+                {originalExtension !== 'docx' ? ' *' : ''}
               </Button>
               <Button variant="outline" size="sm" onClick={() => handleExport('pdf')}>
                 📑 PDF
+                {originalExtension !== 'pdf' ? ' *' : ''}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleExport('xml')}>
+                🧩 XML
               </Button>
               <Button variant="outline" size="sm" onClick={() => handleExport('json')}>
                 📊 JSON
@@ -732,6 +978,10 @@ export default function ContractDetailPage() {
               <Button variant="outline" size="sm" onClick={() => handleExport('txt')}>
                 📝 TXT
               </Button>
+            </div>
+            <div className="mt-4 rounded-xl border border-amber-100 bg-amber-50 p-3 text-sm text-amber-900">
+              Форматы, отмеченные <span className="font-semibold">*</span>, будут созданы через конверсию по разобранному содержимому
+              документа. Перед скачиванием мы отдельно предупредим о риске потери исходного форматирования.
             </div>
           </Card>
         </motion.div>

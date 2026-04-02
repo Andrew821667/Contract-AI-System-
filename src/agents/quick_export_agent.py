@@ -3,13 +3,19 @@
 Quick Export Agent - Fast export of contracts to various formats
 """
 import os
-from typing import Dict, Any, Optional
-from datetime import datetime
+import json
+import re
+import shutil
+from pathlib import Path
+from typing import Dict, Any, Optional, List
+from datetime import datetime, timezone
 from loguru import logger
 
 from .base_agent import BaseAgent, AgentResult
 from ..services.llm_gateway import LLMGateway
+from ..services.document_parser_extended import ExtendedDocumentParser
 from ..models.database import Contract, ExportLog
+from ..utils.xml_security import parse_xml_safely
 
 
 class QuickExportAgent(BaseAgent):
@@ -17,9 +23,9 @@ class QuickExportAgent(BaseAgent):
     Agent for quick export of contracts
 
     Capabilities:
-    - Export to DOCX (with formatting)
-    - Export to PDF
+    - Export original DOCX/PDF без потери форматирования
     - Export to plain text
+    - Export canonical XML
     - Export metadata (JSON)
     - Batch export
     - Export logging
@@ -47,8 +53,9 @@ class QuickExportAgent(BaseAgent):
 
         Expected state:
         - contract_id: ID of contract to export
-        - export_format: 'docx', 'pdf', 'txt', 'json', 'all'
+        - export_format: 'docx', 'pdf', 'txt', 'json', 'xml', 'all'
         - include_analysis: Include analysis results (default: False)
+        - allow_lossy_conversion: Allow best-effort cross-format conversion
         - user_id: ID of user requesting export
 
         Returns:
@@ -59,6 +66,7 @@ class QuickExportAgent(BaseAgent):
             contract_id = state.get('contract_id')
             export_format = state.get('export_format', 'docx')
             include_analysis = state.get('include_analysis', False)
+            allow_lossy_conversion = state.get('allow_lossy_conversion', False)
             user_id = state.get('user_id')
 
             if not contract_id:
@@ -86,13 +94,13 @@ class QuickExportAgent(BaseAgent):
             file_paths = {}
 
             if export_format == 'all':
-                formats = ['docx', 'pdf', 'txt', 'json']
+                formats = ['docx', 'pdf', 'txt', 'json', 'xml']
             else:
                 formats = [export_format]
 
             for fmt in formats:
                 try:
-                    file_path = self._export_format(contract, fmt, include_analysis)
+                    file_path = self._export_format(contract, fmt, include_analysis, allow_lossy_conversion)
                     file_paths[fmt] = file_path
                 except Exception as e:
                     logger.error(f"Failed to export {fmt}: {e}")
@@ -125,208 +133,135 @@ class QuickExportAgent(BaseAgent):
         self,
         contract: Contract,
         format: str,
-        include_analysis: bool
+        include_analysis: bool,
+        allow_lossy_conversion: bool,
     ) -> str:
         """Export contract to specific format"""
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        base_name = f"{contract.file_name.replace('.docx', '')}_{timestamp}"
+        safe_stem = Path(contract.file_name or f"contract_{contract.id}").stem
+        safe_stem = safe_stem.replace('/', '_').replace('\\', '_')
+        base_name = f"{safe_stem}_{timestamp}"
 
         if format == 'docx':
-            return self._export_docx(contract, base_name, include_analysis)
+            return self._export_docx(contract, base_name, include_analysis, allow_lossy_conversion)
         elif format == 'pdf':
-            return self._export_pdf(contract, base_name, include_analysis)
+            return self._export_pdf(contract, base_name, include_analysis, allow_lossy_conversion)
         elif format == 'txt':
             return self._export_txt(contract, base_name, include_analysis)
         elif format == 'json':
             return self._export_json(contract, base_name, include_analysis)
+        elif format == 'xml':
+            return self._export_xml(contract, base_name, include_analysis)
         else:
             raise ValueError(f"Unsupported format: {format}")
 
-    def _export_docx(self, contract: Contract, base_name: str, include_analysis: bool) -> str:
-        """Export to DOCX with proper formatting"""
+    def _export_docx(
+        self,
+        contract: Contract,
+        base_name: str,
+        include_analysis: bool,
+        allow_lossy_conversion: bool = False,
+    ) -> str:
+        """Export DOCX preserving original formatting whenever possible."""
         output_path = os.path.join(self.export_dir, f"{base_name}.docx")
+        original_ext = self._get_original_extension(contract)
 
-        try:
-            from docx import Document
-            from docx.shared import Inches, Pt, RGBColor
-            from docx.enum.text import WD_ALIGN_PARAGRAPH
-
-            # Create document
-            doc = Document()
-
-            # Title
-            title = doc.add_heading(f'Экспорт договора: {contract.file_name}', 0)
-            title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-            # Metadata section
-            doc.add_heading('Информация о документе', 1)
-            metadata_table = doc.add_table(rows=5, cols=2)
-            metadata_table.style = 'Light Grid Accent 1'
-
-            metadata_rows = [
-                ('Файл:', contract.file_name),
-                ('Тип документа:', contract.document_type or 'Не определён'),
-                ('Тип договора:', contract.contract_type or 'Не определён'),
-                ('Дата загрузки:', contract.upload_date.strftime('%d.%m.%Y %H:%M') if contract.upload_date else 'N/A'),
-                ('Статус:', contract.status or 'Не определён'),
-            ]
-
-            for i, (label, value) in enumerate(metadata_rows):
-                row = metadata_table.rows[i]
-                row.cells[0].text = label
-                row.cells[1].text = str(value)
-
-            # Analysis results if requested
-            if include_analysis and contract.analysis_results:
-                doc.add_page_break()
-                doc.add_heading('Результаты анализа', 1)
-
-                for analysis in contract.analysis_results:
-                    doc.add_heading(f'Анализ версии {getattr(analysis, "version", "N/A")}', 2)
-
-                    if hasattr(analysis, 'risks'):
-                        doc.add_heading('Выявленные риски', 3)
-
-                        for risk in analysis.risks[:10]:  # Limit to 10
-                            p = doc.add_paragraph(style='List Bullet')
-                            severity = getattr(risk, 'severity', 'unknown').upper()
-                            risk_type = getattr(risk, 'risk_type', 'general')
-                            description = getattr(risk, 'description', 'Нет описания')
-
-                            run = p.add_run(f'[{severity}] {risk_type}: ')
-                            run.bold = True
-
-                            # Color code by severity
-                            if severity == 'CRITICAL':
-                                run.font.color.rgb = RGBColor(220, 53, 69)  # Red
-                            elif severity == 'HIGH':
-                                run.font.color.rgb = RGBColor(253, 126, 20)  # Orange
-                            elif severity == 'MEDIUM':
-                                run.font.color.rgb = RGBColor(255, 193, 7)  # Yellow
-                            else:
-                                run.font.color.rgb = RGBColor(40, 167, 69)  # Green
-
-                            p.add_run(description)
-
-            # Footer
-            doc.add_page_break()
-            footer_para = doc.add_paragraph()
-            footer_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            footer_run = footer_para.add_run(
-                f'Документ создан автоматически системой Contract AI\n'
-                f'{datetime.now().strftime("%d.%m.%Y %H:%M")}'
-            )
-            footer_run.font.size = Pt(9)
-            footer_run.font.color.rgb = RGBColor(128, 128, 128)
-
-            # Save document
-            doc.save(output_path)
-
-            logger.info(f"DOCX export completed: {output_path}")
+        if original_ext == '.docx' and not include_analysis:
+            shutil.copy2(contract.file_path, output_path)
+            logger.info(f"DOCX export completed by copying original file: {output_path}")
             return output_path
 
-        except Exception as e:
-            logger.error(f"DOCX export failed: {e}")
-            # Fallback: copy original file if exists
-            import shutil
-            if os.path.exists(contract.file_path):
-                try:
-                    shutil.copy(contract.file_path, output_path)
-                    logger.info(f"DOCX export fallback: copied original file")
-                    return output_path
-                except Exception as e:
-                    logger.warning(f"DOCX export fallback copy failed: {e}")
+        if include_analysis and original_ext == '.docx':
+            from ..models.database import AnalysisResult
+            from ..services.annotated_docx_service import AnnotatedDocxService
 
-            # Last resort: create placeholder
-            with open(output_path.replace('.docx', '.txt'), 'w', encoding='utf-8') as f:
-                f.write(f"DOCX Export Failed: {str(e)}\n")
-                f.write(f"Contract: {contract.file_name}\n")
-            return output_path.replace('.docx', '.txt')
+            analysis = (
+                self.db.query(AnalysisResult)
+                .filter(AnalysisResult.contract_id == contract.id)
+                .order_by(AnalysisResult.created_at.desc(), AnalysisResult.version.desc())
+                .first()
+            )
+            if not analysis:
+                raise ValueError("Не найден результат анализа для аннотированного DOCX")
 
-    def _export_pdf(self, contract: Contract, base_name: str, include_analysis: bool) -> str:
-        """Export to PDF with professional formatting"""
+            service = AnnotatedDocxService()
+            docx_bytes = service.create_annotated_docx(contract, analysis, self.db)
+            with open(output_path, 'wb') as f:
+                f.write(docx_bytes)
+            logger.info(f"Annotated DOCX export completed: {output_path}")
+            return output_path
+
+        if allow_lossy_conversion:
+            xml_content = self._get_canonical_xml(contract)
+            self._write_reconstructed_docx(contract, output_path, xml_content)
+            logger.info(f"Best-effort DOCX conversion completed: {output_path}")
+            return output_path
+
+        raise ValueError(
+            "Экспорт в DOCX без потери форматирования доступен только для исходных DOCX-файлов. "
+            "Для кросс-конверсии подтвердите предупреждение о возможной потере форматирования."
+        )
+
+    def _export_pdf(
+        self,
+        contract: Contract,
+        base_name: str,
+        include_analysis: bool,
+        allow_lossy_conversion: bool = False,
+    ) -> str:
+        """Export PDF preserving original formatting whenever possible."""
         output_path = os.path.join(self.export_dir, f"{base_name}.pdf")
-
-        try:
-            from ..utils.pdf_generator import PDFGenerator
-
-            # Prepare data for PDF
-            data = {
-                'summary': f'Договор: {contract.file_name}',
-                'statistics': {
-                    'Тип документа': contract.document_type or 'Не определён',
-                    'Тип договора': contract.contract_type or 'Не определён',
-                    'Дата загрузки': contract.upload_date.strftime('%d.%m.%Y %H:%M') if contract.upload_date else 'N/A',
-                    'Статус': contract.status or 'Не определён',
-                    'Уровень риска': contract.risk_level or 'Не оценен',
-                },
-                'risks': [],
-                'recommendations': []
-            }
-
-            # Add analysis results if requested
-            if include_analysis and contract.analysis_results:
-                for analysis in contract.analysis_results:
-                    if hasattr(analysis, 'risks'):
-                        for risk in analysis.risks[:10]:  # Limit to 10 risks
-                            data['risks'].append({
-                                'severity': getattr(risk, 'severity', 'unknown'),
-                                'type': getattr(risk, 'risk_type', 'general'),
-                                'description': getattr(risk, 'description', ''),
-                                'impact': getattr(risk, 'impact', ''),
-                                'recommendation': getattr(risk, 'recommendation', '')
-                            })
-
-            # Metadata
-            metadata = {
-                'Файл': contract.file_name,
-                'ID': str(contract.id),
-                'Экспортировано': datetime.now().strftime('%d.%m.%Y %H:%M')
-            }
-
-            # Generate PDF
-            generator = PDFGenerator()
-            generator.generate_contract_report(
-                output_path=output_path,
-                title=f'Экспорт договора: {contract.file_name}',
-                data=data,
-                metadata=metadata
-            )
-
-            logger.info(f"PDF export completed: {output_path}")
+        original_ext = self._get_original_extension(contract)
+        if original_ext == '.pdf' and not include_analysis:
+            shutil.copy2(contract.file_path, output_path)
+            logger.info(f"PDF export completed by copying original file: {output_path}")
             return output_path
 
-        except Exception as e:
-            logger.error(f"PDF export failed: {e}")
-            # Fallback to simple text file
-            with open(output_path.replace('.pdf', '.txt'), 'w', encoding='utf-8') as f:
-                f.write(f"PDF Export Failed: {str(e)}\n")
-                f.write(f"Contract: {contract.file_name}\n")
-            return output_path.replace('.pdf', '.txt')
+        if allow_lossy_conversion:
+            xml_content = self._get_canonical_xml(contract)
+            self._write_reconstructed_pdf(contract, output_path, xml_content)
+            logger.info(f"Best-effort PDF conversion completed: {output_path}")
+            return output_path
+
+        raise ValueError(
+            "Экспорт в PDF без потери форматирования доступен только для исходных PDF-файлов. "
+            "Для кросс-конверсии подтвердите предупреждение о возможной потере форматирования."
+        )
 
     def _export_txt(self, contract: Contract, base_name: str, include_analysis: bool) -> str:
         """Export to plain text"""
         output_path = os.path.join(self.export_dir, f"{base_name}.txt")
+        original_ext = self._get_original_extension(contract)
+        if original_ext == '.txt' and not include_analysis:
+            shutil.copy2(contract.file_path, output_path)
+            logger.info(f"TXT export completed by copying original file: {output_path}")
+            return output_path
 
-        content = []
-        content.append("=" * 80)
-        content.append(f"CONTRACT: {contract.file_name}")
-        content.append("=" * 80)
-        content.append(f"Type: {contract.document_type}")
-        content.append(f"Upload Date: {contract.upload_date}")
-        content.append(f"Status: {contract.status}")
-        content.append("")
+        xml_content = self._get_canonical_xml(contract)
+        content: List[str] = [self._xml_to_plain_text(xml_content)]
 
         if include_analysis and contract.analysis_results:
-            content.append("ANALYSIS RESULTS")
-            content.append("-" * 80)
-            for analysis in contract.analysis_results:
-                content.append(f"Analysis ID: {analysis.id}")
-                content.append(f"Version: {analysis.version}")
-                content.append("")
-
-        content.append("=" * 80)
-
+            latest = sorted(
+                contract.analysis_results,
+                key=lambda item: (item.created_at or datetime(1970, 1, 1, tzinfo=timezone.utc), item.version or 0),
+                reverse=True,
+            )[0]
+            content.extend([
+                "",
+                "",
+                "=" * 80,
+                "РЕЗУЛЬТАТЫ АНАЛИЗА",
+                "=" * 80,
+                json.dumps(
+                    {
+                        'analysis_id': latest.id,
+                        'version': latest.version,
+                        'created_at': latest.created_at.isoformat() if latest.created_at else None,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+            ])
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write('\n'.join(content))
 
@@ -351,6 +286,11 @@ class QuickExportAgent(BaseAgent):
         }
 
         if include_analysis and contract.analysis_results:
+            latest = sorted(
+                contract.analysis_results,
+                key=lambda item: (item.created_at or datetime(1970, 1, 1, tzinfo=timezone.utc), item.version or 0),
+                reverse=True,
+            )[0]
             data['analysis_results'] = [
                 {
                     'id': a.id,
@@ -359,12 +299,314 @@ class QuickExportAgent(BaseAgent):
                 }
                 for a in contract.analysis_results
             ]
+            data['latest_analysis'] = {
+                'id': latest.id,
+                'version': latest.version,
+                'entities': latest.entities,
+                'compliance_issues': latest.compliance_issues,
+                'legal_issues': latest.legal_issues,
+                'risks_by_category': latest.risks_by_category,
+                'recommendations': latest.recommendations,
+            }
 
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
         logger.info(f"JSON export: {output_path}")
         return output_path
+
+    def _export_xml(self, contract: Contract, base_name: str, include_analysis: bool) -> str:
+        """Export canonical XML used by the parser/analysis pipeline."""
+        output_path = os.path.join(self.export_dir, f"{base_name}.xml")
+        original_ext = self._get_original_extension(contract)
+
+        if original_ext == '.xml' and not include_analysis:
+            shutil.copy2(contract.file_path, output_path)
+            logger.info(f"XML export completed by copying original file: {output_path}")
+            return output_path
+
+        xml_content = self._get_canonical_xml(contract)
+        parse_xml_safely(xml_content)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(xml_content)
+
+        logger.info(f"XML export completed: {output_path}")
+        return output_path
+
+    @staticmethod
+    def _get_original_extension(contract: Contract) -> str:
+        return Path(contract.file_name or contract.file_path or '').suffix.lower()
+
+    def _get_canonical_xml(self, contract: Contract) -> str:
+        meta_info = contract.meta_info if isinstance(contract.meta_info, dict) else {}
+        cached_xml = meta_info.get('xml') if isinstance(meta_info, dict) else None
+        if isinstance(cached_xml, str) and cached_xml.strip():
+            return cached_xml
+
+        parser = ExtendedDocumentParser()
+        xml_content = parser.parse(contract.file_path)
+        return xml_content if isinstance(xml_content, str) else str(xml_content)
+
+    @staticmethod
+    def _looks_like_document_title(text: str) -> bool:
+        normalized = " ".join(text.split())
+        if not normalized or len(normalized) > 200:
+            return False
+        return bool(re.match(r'^(договор|соглашение|контракт|акт|протокол)\b', normalized, re.IGNORECASE))
+
+    @classmethod
+    def _extract_structured_content(cls, xml_content: str) -> List[Dict[str, Any]]:
+        root = parse_xml_safely(xml_content)
+        items: List[Dict[str, Any]] = []
+        title_added = False
+
+        document_title = (root.findtext('./metadata/title', '') or '').strip()
+        if document_title and document_title.lower() not in {'без названия', 'untitled'}:
+            items.append({'kind': 'title', 'text': document_title})
+            title_added = True
+
+        for clause in root.findall('./clauses/clause'):
+            title = (clause.findtext('title', '') or '').strip()
+            if title and not (clause.get('type') == 'preamble' and title.lower() == 'преамбула'):
+                items.append({'kind': 'heading', 'text': title})
+
+            for paragraph in clause.findall('.//paragraph'):
+                paragraph_text = ''.join(paragraph.itertext()).strip()
+                if paragraph_text:
+                    if not title_added and cls._looks_like_document_title(paragraph_text):
+                        items.append({'kind': 'title', 'text': paragraph_text})
+                        title_added = True
+                        continue
+                    items.append({'kind': 'paragraph', 'text': paragraph_text})
+
+        for table in root.findall('./tables/table'):
+            rows: List[List[str]] = []
+            has_meaningful_cell = False
+            for row in table.findall('./row'):
+                row_values: List[str] = []
+                for cell in row.findall('./cell'):
+                    cell_text = ''.join(cell.itertext()).strip()
+                    row_values.append(cell_text)
+                    if cell_text:
+                        has_meaningful_cell = True
+                if row_values:
+                    rows.append(row_values)
+            if has_meaningful_cell:
+                items.append({'kind': 'table', 'rows': rows})
+
+        if not items:
+            for text in root.xpath('.//text()'):
+                clean = str(text).strip()
+                if clean:
+                    items.append({'kind': 'paragraph', 'text': clean})
+
+        return items
+
+    def _write_reconstructed_docx(self, contract: Contract, output_path: str, xml_content: str) -> None:
+        from docx import Document
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.shared import Pt, Cm
+
+        document = Document()
+
+        for section in document.sections:
+            section.top_margin = Cm(2)
+            section.bottom_margin = Cm(2)
+            section.left_margin = Cm(3)
+            section.right_margin = Cm(1.5)
+
+        normal_style = document.styles['Normal']
+        normal_style.font.name = 'Times New Roman'
+        normal_style.font.size = Pt(12)
+
+        content_items = self._extract_structured_content(xml_content)
+        fallback_title = Path(contract.file_name or f"contract_{contract.id}").stem
+        has_title = any(item['kind'] == 'title' for item in content_items)
+
+        if not has_title and not content_items:
+            title_paragraph = document.add_paragraph()
+            title_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            title_run = title_paragraph.add_run(fallback_title)
+            title_run.bold = True
+            title_run.font.size = Pt(14)
+            title_run.font.name = 'Times New Roman'
+
+        for item in content_items:
+            if item['kind'] == 'table':
+                rows = item.get('rows') or []
+                if not rows:
+                    continue
+                max_cols = max(len(row) for row in rows)
+                table = document.add_table(rows=len(rows), cols=max_cols)
+                table.style = 'Table Grid'
+                for row_idx, row_values in enumerate(rows):
+                    for col_idx in range(max_cols):
+                        table.rows[row_idx].cells[col_idx].text = row_values[col_idx] if col_idx < len(row_values) else ''
+                continue
+
+            text = item.get('text', '').strip()
+            if not text:
+                continue
+
+            paragraph = document.add_paragraph()
+            run = paragraph.add_run(text)
+            run.font.name = 'Times New Roman'
+
+            if item['kind'] == 'title':
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                run.bold = True
+                run.font.size = Pt(14)
+                paragraph.paragraph_format.space_after = Pt(12)
+            elif item['kind'] == 'heading':
+                run.bold = True
+                run.font.size = Pt(12)
+                paragraph.paragraph_format.space_before = Pt(10)
+                paragraph.paragraph_format.space_after = Pt(4)
+            else:
+                run.font.size = Pt(12)
+                paragraph.paragraph_format.first_line_indent = Cm(1.25)
+                paragraph.paragraph_format.space_after = Pt(4)
+
+        document.save(output_path)
+
+    def _write_reconstructed_pdf(self, contract: Contract, output_path: str, xml_content: str) -> None:
+        from xml.sax.saxutils import escape
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import cm
+            from reportlab.lib import colors
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table as PDFTable, TableStyle
+            from reportlab.pdfbase import pdfmetrics
+            from reportlab.pdfbase.ttfonts import TTFont
+        except ImportError as exc:
+            raise ValueError(
+                "Конверсия в PDF временно недоступна: в окружении отсутствует библиотека reportlab"
+            ) from exc
+
+        styles = getSampleStyleSheet()
+        base_font = 'Helvetica'
+        font_candidates = [
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            '/Library/Fonts/Arial Unicode.ttf',
+            '/System/Library/Fonts/Supplemental/Arial Unicode.ttf',
+        ]
+        for font_path in font_candidates:
+            if os.path.exists(font_path):
+                try:
+                    pdfmetrics.registerFont(TTFont('ContractAIExport', font_path))
+                    base_font = 'ContractAIExport'
+                    break
+                except Exception:
+                    continue
+
+        title_style = ParagraphStyle(
+            'ContractExportTitle',
+            parent=styles['Title'],
+            fontName=base_font,
+            fontSize=15,
+            leading=18,
+            spaceAfter=14,
+        )
+        heading_style = ParagraphStyle(
+            'ContractExportHeading',
+            parent=styles['Heading2'],
+            fontName=base_font,
+            fontSize=12,
+            leading=15,
+            spaceBefore=10,
+            spaceAfter=6,
+        )
+        body_style = ParagraphStyle(
+            'ContractExportBody',
+            parent=styles['BodyText'],
+            fontName=base_font,
+            fontSize=10,
+            leading=14,
+            spaceAfter=6,
+        )
+
+        def _safe_paragraph(text: str, style: ParagraphStyle) -> Paragraph:
+            return Paragraph(escape(text).replace('\n', '<br/>'), style)
+
+        doc = SimpleDocTemplate(
+            output_path,
+            pagesize=A4,
+            leftMargin=2.5 * cm,
+            rightMargin=1.5 * cm,
+            topMargin=2 * cm,
+            bottomMargin=2 * cm,
+        )
+        story: List[Any] = []
+        content_items = self._extract_structured_content(xml_content)
+        fallback_title = Path(contract.file_name or f"contract_{contract.id}").stem
+        has_title = any(item['kind'] == 'title' for item in content_items)
+
+        if not has_title and not content_items:
+            story.append(_safe_paragraph(fallback_title, title_style))
+            story.append(Spacer(1, 6))
+
+        for item in content_items:
+            if item['kind'] == 'table':
+                rows = item.get('rows') or []
+                if not rows:
+                    continue
+                max_cols = max(len(row) for row in rows)
+                normalized_rows = []
+                for row in rows:
+                    normalized_rows.append([
+                        _safe_paragraph((row[col_idx] if col_idx < len(row) else '').strip() or ' ', body_style)
+                        for col_idx in range(max_cols)
+                    ])
+                pdf_table = PDFTable(normalized_rows, repeatRows=1)
+                pdf_table.setStyle(TableStyle([
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                    ('TOPPADDING', (0, 0), (-1, -1), 4),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ]))
+                story.append(pdf_table)
+                story.append(Spacer(1, 8))
+                continue
+
+            text = item.get('text', '').strip()
+            if not text:
+                continue
+            if item['kind'] == 'title':
+                story.append(_safe_paragraph(text, title_style))
+            elif item['kind'] == 'heading':
+                story.append(_safe_paragraph(text, heading_style))
+            else:
+                story.append(_safe_paragraph(text, body_style))
+
+        if not story:
+            story.append(_safe_paragraph(fallback_title, title_style))
+
+        doc.build(story)
+
+    @staticmethod
+    def _xml_to_plain_text(xml_content: str) -> str:
+        root = parse_xml_safely(xml_content)
+        lines: List[str] = []
+
+        for clause in root.findall('.//clause'):
+            title = (clause.findtext('title', '') or '').strip()
+            if title:
+                lines.append(title)
+            for paragraph in clause.findall('.//paragraph'):
+                text = (paragraph.text or '').strip()
+                if text:
+                    lines.append(text)
+
+        if not lines:
+            for text in root.xpath('.//text()'):
+                clean = str(text).strip()
+                if clean:
+                    lines.append(clean)
+
+        return '\n'.join(lines)
 
     def _log_export(
         self,
@@ -375,24 +617,22 @@ class QuickExportAgent(BaseAgent):
     ) -> Optional[ExportLog]:
         """Log export to database"""
         try:
-            # Find first successful export path
-            file_path = None
-            for path in file_paths.values():
-                if path:
-                    file_path = path
-                    break
-
-            if not file_path:
+            successful_paths = {fmt: path for fmt, path in file_paths.items() if path}
+            if not successful_paths:
                 return None
-
-            file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
 
             export_log = ExportLog(
                 contract_id=contract_id,
-                export_format=export_format,
-                file_path=file_path,
-                file_size=file_size,
-                exported_by=user_id
+                exported_by=user_id,
+                export_type='quick_export',
+                meta_info={
+                    'requested_format': export_format,
+                    'file_paths': successful_paths,
+                    'file_sizes': {
+                        fmt: os.path.getsize(path) if path and os.path.exists(path) else 0
+                        for fmt, path in successful_paths.items()
+                    },
+                },
             )
 
             self.db.add(export_log)
