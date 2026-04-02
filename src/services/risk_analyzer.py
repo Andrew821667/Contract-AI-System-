@@ -7,12 +7,13 @@ Risk Analyzer - Identify and assess contract risks
 """
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from loguru import logger
 
 from ..models.analyzer_models import ContractRisk
 from ..services.llm_gateway import LLMGateway
+from config.settings import settings
 
 
 class RiskAnalyzer:
@@ -31,6 +32,15 @@ class RiskAnalyzer:
 
     def __init__(self, llm_gateway: LLMGateway):
         self.llm = llm_gateway
+
+    def _is_local_provider(self) -> bool:
+        detector = getattr(self.llm, "is_local_provider", None)
+        if callable(detector):
+            try:
+                return bool(detector())
+            except Exception:
+                return False
+        return getattr(self.llm, "provider", None) == "ollama"
 
     def analyze_full_text(
         self,
@@ -179,10 +189,17 @@ class RiskAnalyzer:
         parallel: bool = True,
         company_conditions: Optional[List[Dict[str, Any]]] = None,
         analysis_context: Optional[Dict[str, Any]] = None,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> List[Dict[str, Any]]:
         """Analyze clauses with adaptive batching and optional parallel execution."""
         if not clauses:
             return []
+
+        is_local_provider = self._is_local_provider()
+        if is_local_provider:
+            batch_size = min(batch_size, max(1, int(getattr(settings, "llm_local_batch_size", 3))))
+            parallel = bool(parallel and getattr(settings, "llm_local_max_concurrent_batches", 1) > 1)
+            logger.info("Local LLM mode enabled: batch_size={}, parallel={}", batch_size, parallel)
 
         total_chars = sum(len(c.get('text', '')[:500]) + len(c.get('title', '')) + 30 for c in clauses)
         logger.info(
@@ -202,6 +219,7 @@ class RiskAnalyzer:
 
         if not parallel or len(batches) == 1:
             all_analyses: List[Dict[str, Any]] = []
+            completed_batches = 0
             for batch_index, batch_clauses in batches:
                 logger.info(
                     f"Sequential clause analysis batch {batch_index // clauses_per_batch + 1}: "
@@ -219,14 +237,29 @@ class RiskAnalyzer:
                 except Exception as exc:
                     logger.error(f"Sequential batch analysis failed: {exc}")
                     all_analyses.extend(self._get_fallback_analysis(c) for c in batch_clauses)
+                completed_batches += 1
+                if progress_callback:
+                    progress_callback(completed_batches, len(batches))
+            self._raise_if_local_analysis_failed(all_analyses, len(clauses), is_local_provider)
             return all_analyses
 
-        return self._analyze_batches_parallel(
+        all_analyses = self._analyze_batches_parallel(
             batches,
             rag_context,
             company_conditions=company_conditions,
             analysis_context=analysis_context,
+            max_concurrent=max(
+                1,
+                int(
+                    getattr(settings, "llm_local_max_concurrent_batches", 1)
+                    if is_local_provider
+                    else settings.max_concurrent_batches
+                ),
+            ),
+            progress_callback=progress_callback,
         )
+        self._raise_if_local_analysis_failed(all_analyses, len(clauses), is_local_provider)
+        return all_analyses
 
     def _analyze_batches_parallel(
         self,
@@ -235,6 +268,7 @@ class RiskAnalyzer:
         company_conditions: Optional[List[Dict[str, Any]]] = None,
         analysis_context: Optional[Dict[str, Any]] = None,
         max_concurrent: int = 3,
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> List[Dict[str, Any]]:
         """Run batch analyses in parallel using ThreadPoolExecutor."""
         results_map: Dict[int, List[Dict[str, Any]]] = {}
@@ -258,9 +292,13 @@ class RiskAnalyzer:
                 executor.submit(_process_batch, idx, batch): idx
                 for idx, (_, batch) in enumerate(batches)
             }
+            completed_batches = 0
             for future in as_completed(futures):
                 batch_idx, analyses = future.result()
                 results_map[batch_idx] = analyses
+                completed_batches += 1
+                if progress_callback:
+                    progress_callback(completed_batches, len(batches))
 
         ordered: List[Dict[str, Any]] = []
         for batch_idx in sorted(results_map.keys()):
@@ -382,6 +420,7 @@ class RiskAnalyzer:
             for idx, analysis in enumerate(analyses):
                 analysis.setdefault('clause_number', idx + 1)
                 analysis.setdefault('required_fields', [])
+                analysis.setdefault('analysis_status', 'ok')
             return analyses
         except (json.JSONDecodeError, AttributeError) as exc:
             logger.error(f"JSON decode failed: {exc}")
@@ -644,8 +683,26 @@ class RiskAnalyzer:
             'issues': [],
             'required_fields': [],
             'overall_risk_level': 'unknown',
+            'analysis_status': 'fallback',
             'error': 'Analysis failed - fallback used',
         }
+
+    @staticmethod
+    def _raise_if_local_analysis_failed(
+        analyses: List[Dict[str, Any]],
+        expected_count: int,
+        is_local_provider: bool,
+    ) -> None:
+        """Fail fast for local models when every clause fell back and nothing useful was analyzed."""
+        if not is_local_provider or not analyses:
+            return
+
+        fallback_count = sum(1 for item in analyses if item.get('analysis_status') == 'fallback')
+        if fallback_count >= expected_count:
+            raise RuntimeError(
+                "Локальная LLM не вернула ни одного валидного результата по пунктам договора. "
+                "Анализ остановлен, чтобы не оставлять документ в подвешенном состоянии."
+            )
 
 
 __all__ = ['RiskAnalyzer']

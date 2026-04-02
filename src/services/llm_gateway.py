@@ -7,7 +7,7 @@ import asyncio
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, Literal, Optional, Union
-from tenacity import retry, stop_after_attempt, wait_exponential
+from tenacity import Retrying, stop_after_attempt, wait_exponential
 from loguru import logger
 from datetime import datetime, timezone
 from config.settings import settings
@@ -110,6 +110,22 @@ class LLMGateway:
 
         logger.info(f"LLM Gateway initialized with provider: {self.provider}")
 
+    def is_local_provider(self) -> bool:
+        """Return True for self-hosted/local providers that need stricter guardrails."""
+        return self.provider == "ollama"
+
+    def get_timeout(self) -> int:
+        """Provider-aware request timeout in seconds."""
+        if self.is_local_provider():
+            return max(1, int(getattr(settings, "llm_local_timeout", settings.llm_timeout)))
+        return max(1, int(settings.llm_timeout))
+
+    def get_retry_attempts(self) -> int:
+        """Provider-aware retry attempts."""
+        if self.is_local_provider():
+            return max(1, int(getattr(settings, "llm_local_retry_attempts", 1)))
+        return max(1, int(getattr(settings, "llm_retry_attempts", 3)))
+
     def _generate_cache_key(self, prompt: str, system_prompt: Optional[str], temperature: float, max_tokens: int, response_format: str) -> str:
         """Генерирует хэш-ключ для кэширования"""
         cache_string = f"{self.provider}:{self.model}:{prompt}:{system_prompt}:{temperature}:{max_tokens}:{response_format}"
@@ -173,10 +189,6 @@ class LLMGateway:
             logger.warning(f"Cache save failed: {e}")
             db_session.rollback()
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10)
-    )
     def call(
         self,
         prompt: str,
@@ -202,6 +214,40 @@ class LLMGateway:
         Returns:
             str 8;8 dict 2 7028A8<>AB8 >B response_format
         """
+        retry_attempts = kwargs.pop("retry_attempts", None)
+        retry_attempts = max(1, int(retry_attempts or self.get_retry_attempts()))
+
+        for attempt in Retrying(
+            stop=stop_after_attempt(retry_attempts),
+            wait=wait_exponential(multiplier=1, min=2, max=10),
+            reraise=True,
+        ):
+            with attempt:
+                return self._call_once(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    response_format=response_format,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    use_cache=use_cache,
+                    db_session=db_session,
+                    **kwargs,
+                )
+
+        raise RuntimeError("LLM call exhausted retries without returning a response")
+
+    def _call_once(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        response_format: Literal["text", "json"] = "text",
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        use_cache: bool = True,
+        db_session = None,
+        **kwargs
+    ) -> Union[str, Dict[str, Any]]:
+        """Single LLM request attempt without outer retry loop."""
         temperature = temperature if temperature is not None else settings.llm_temperature
         max_tokens = max_tokens if max_tokens is not None else settings.llm_max_tokens
 
@@ -397,13 +443,21 @@ class LLMGateway:
             logger.warning(f"Model {model} is not a DeepSeek model, forcing deepseek-chat")
             model = "deepseek-chat"
 
-        logger.info(f"🔍 DEBUG: API call with model = {model}, self.model = {self.model}, prompt_len={sum(len(m['content']) for m in messages)}")
+        timeout = kwargs.pop("timeout", None)
+        if timeout is None:
+            timeout = self.get_timeout()
+
+        logger.info(
+            f"🔍 DEBUG: API call with model = {model}, self.model = {self.model}, "
+            f"prompt_len={sum(len(m['content']) for m in messages)}, timeout={timeout}s"
+        )
         try:
             response = self._client.chat.completions.create(
                 model=model,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                timeout=timeout,
             )
         except Exception as e:
             logger.error(f"API call failed: {type(e).__name__}: {e}")

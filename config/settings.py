@@ -62,6 +62,14 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.0
     llm_max_tokens: int = 16000  # Увеличено для полнотекстового анализа
     llm_timeout: int = 180  # Увеличено: full-text анализ может занять больше времени
+    llm_retry_attempts: int = 3
+
+    # Local LLM safety rails (Ollama and similar slow self-hosted providers)
+    llm_local_timeout: int = 45
+    llm_local_retry_attempts: int = 1
+    llm_local_full_text_analysis: bool = False
+    llm_local_batch_size: int = 3
+    llm_local_max_concurrent_batches: int = 1
 
     # Full-text analysis — отправка всего текста договора в LLM
     full_text_analysis: bool = True  # True = двухпроходный (full-text + clause-level), False = только clause-level

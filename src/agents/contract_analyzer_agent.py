@@ -209,6 +209,8 @@ class ContractAnalyzerAgent(BaseAgent):
                     except Exception:
                         pass
 
+            self._progress_updater = _update_progress
+
             kb_available = self._has_available_rag_sources()
             if kb_available:
                 _update_progress(35, "Поиск контекста в базе знаний...")
@@ -1292,8 +1294,17 @@ JSON формат:
 
         all_risks: List[ContractRisk] = []
         self._full_text_analysis = None
+        is_local_provider = self.risk_analyzer._is_local_provider()
+        use_full_text = getattr(settings, 'full_text_analysis', True)
 
-        if getattr(settings, 'full_text_analysis', True):
+        if is_local_provider and not getattr(settings, 'llm_local_full_text_analysis', False):
+            use_full_text = False
+            progress_updater = getattr(self, '_progress_updater', None)
+            if callable(progress_updater):
+                progress_updater(40, "Локальная LLM: анализируем по разделам без полного прохода...")
+            logger.info("Skipping full-text analysis for local LLM provider")
+
+        if use_full_text:
             try:
                 plain_text = self._extract_plain_text(xml_content)
                 logger.info(f"Pass 1: Full-text analysis - {len(plain_text)} chars (~{len(plain_text)//4} tokens)")
@@ -1376,12 +1387,25 @@ JSON формат:
             batch_size = settings.llm_batch_size
             logger.info(f"Will analyze {min(len(clauses), max_clauses)} clauses (smart batching)")
 
+            def _on_batch_progress(completed_batches: int, total_batches: int) -> None:
+                progress_updater = getattr(self, '_progress_updater', None)
+                if not callable(progress_updater) or total_batches <= 0:
+                    return
+                start_pct = 42
+                end_pct = 58
+                pct = start_pct + int(((end_pct - start_pct) * completed_batches) / total_batches)
+                progress_updater(
+                    min(end_pct, pct),
+                    f"AI анализ: обработка разделов {completed_batches}/{total_batches}..."
+                )
+
             all_clause_analyses = self.risk_analyzer.analyze_clauses_batch(
                 clauses[:max_clauses],
                 rag_context,
                 batch_size=batch_size,
                 company_conditions=company_conditions,
                 analysis_context=analysis_context,
+                progress_callback=_on_batch_progress,
             )
             logger.info(f"Batch analysis returned {len(all_clause_analyses)} results")
 
@@ -1408,6 +1432,8 @@ JSON формат:
             logger.error(f"Detailed risk identification failed: {exc}")
             import traceback
             traceback.print_exc()
+            if is_local_provider:
+                raise
             if not all_risks:
                 return self._identify_risks_legacy(
                     xml_content, structure, rag_context, counterparty_data, analysis_context
