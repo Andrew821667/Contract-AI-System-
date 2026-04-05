@@ -77,6 +77,9 @@ export default function ContractDetailPage() {
   const [perspectiveOptions, setPerspectiveOptions] = useState<string[]>([])
   const [selectedPerspective, setSelectedPerspective] = useState('')
   const [customPerspective, setCustomPerspective] = useState('')
+  const [showTemplateModal, setShowTemplateModal] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+  const [templateType, setTemplateType] = useState('')
   const [refetchMs, setRefetchMs] = useState<number | false>(false)
   const [decisionLoadingId, setDecisionLoadingId] = useState<number | null>(null)
   const [pendingLossyExport, setPendingLossyExport] = useState<'docx' | 'pdf' | null>(null)
@@ -173,6 +176,27 @@ export default function ContractDetailPage() {
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Ошибка удаления')
+    },
+  })
+
+  // Template status — проверяем, сохранён ли как образец
+  const templateStatusQuery = useQuery({
+    queryKey: ['template-status', contractId],
+    queryFn: () => api.getTemplateStatus(contractId),
+    enabled: contractStatus === 'completed',
+  })
+
+  const saveTemplateMutation = useMutation({
+    mutationFn: () => api.saveAsTemplate(contractId, { name: templateName, contract_type: templateType }),
+    onSuccess: (data) => {
+      toast.success(data.message)
+      setShowTemplateModal(false)
+      setTemplateName('')
+      setTemplateType('')
+      queryClient.invalidateQueries({ queryKey: ['template-status', contractId] })
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Ошибка сохранения шаблона')
     },
   })
 
@@ -947,6 +971,133 @@ export default function ContractDetailPage() {
               )}
             </motion.div>
           </>
+        )}
+
+        {/* Save as Template — предложение добавить как образец для генерации */}
+        {contract?.status === 'completed' && templateStatusQuery.data && !templateStatusQuery.data.has_template && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="mb-8"
+          >
+            <Card>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center text-xl">
+                    📋
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">Добавить как образец для генерации</h3>
+                    <p className="text-sm text-gray-500">
+                      Этот договор можно использовать как шаблон для создания аналогичных документов
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    setTemplateName(contract.file_name?.replace(/\.[^.]+$/, '') || '')
+                    setTemplateType(contract.contract_type || 'other')
+                    setShowTemplateModal(true)
+                  }}
+                >
+                  Сохранить как образец
+                </Button>
+              </div>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Уже сохранён как образец */}
+        {contract?.status === 'completed' && templateStatusQuery.data?.has_template && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="mb-8"
+          >
+            <Card>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center text-xl">
+                  ✅
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Образец для генерации</h3>
+                  <p className="text-sm text-gray-500">
+                    Сохранён как «{templateStatusQuery.data.template_name}» (тип: {templateStatusQuery.data.contract_type})
+                  </p>
+                </div>
+              </div>
+            </Card>
+          </motion.div>
+        )}
+
+        {/* Template Save Modal */}
+        {showTemplateModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-xl"
+            >
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Сохранить как образец</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Этот договор будет доступен как шаблон при генерации новых документов.
+              </p>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Название шаблона</label>
+                  <input
+                    type="text"
+                    value={templateName}
+                    onChange={(e) => setTemplateName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="Например: Договор поставки оборудования"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Тип договора</label>
+                  <select
+                    value={templateType}
+                    onChange={(e) => setTemplateType(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    <option value="supply">Договор поставки</option>
+                    <option value="service">Договор услуг</option>
+                    <option value="lease">Договор аренды</option>
+                    <option value="purchase">Договор купли-продажи</option>
+                    <option value="confidentiality">Соглашение о конфиденциальности (NDA)</option>
+                    <option value="employment">Трудовой договор</option>
+                    <option value="loan">Договор займа</option>
+                    <option value="license">Лицензионный договор</option>
+                    <option value="construction">Договор подряда</option>
+                    <option value="settlement">Мировое соглашение</option>
+                    <option value="other">Другой</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowTemplateModal(false)}
+                >
+                  Отмена
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  loading={saveTemplateMutation.isPending}
+                  onClick={() => saveTemplateMutation.mutate()}
+                  disabled={!templateName.trim()}
+                >
+                  Сохранить
+                </Button>
+              </div>
+            </motion.div>
+          </div>
         )}
 
         <MLRiskSection contractId={contractId} contract={contract} onAnalyze={() => handleAnalyze()} />

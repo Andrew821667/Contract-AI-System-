@@ -40,11 +40,12 @@ const defaultContractTypes: ContractTypeCard[] = Object.entries(contractTypeMeta
   hasTemplate: ['supply', 'service', 'lease'].includes(value),
 }))
 
-const templates = [
-  { id: 'tpl_supply_001', name: 'Базовый шаблон поставки', type: 'supply' },
-  { id: 'tpl_service_001', name: 'Базовый шаблон услуг', type: 'service' },
-  { id: 'tpl_lease_001', name: 'Базовый шаблон аренды', type: 'lease' },
-]
+interface TemplateItem {
+  id: string;
+  name: string;
+  type: string;
+  source_file_name?: string;
+}
 
 export default function GenerateContractPage() {
   const { isReady } = useAuthGuard()
@@ -52,6 +53,26 @@ export default function GenerateContractPage() {
   const [step, setStep] = useState(1)
   const [generating, setGenerating] = useState(false)
   const [contractTypes, setContractTypes] = useState<ContractTypeCard[]>(defaultContractTypes)
+  const [templates, setTemplates] = useState<TemplateItem[]>([])
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
+
+  // Load templates from API when contract type changes
+  const loadTemplates = async (contractType: string) => {
+    setLoadingTemplates(true)
+    try {
+      const data = await api.listTemplates(contractType)
+      setTemplates(data.map(t => ({
+        id: t.id,
+        name: t.name,
+        type: t.contract_type,
+        source_file_name: t.source_file_name,
+      })))
+    } catch {
+      setTemplates([])
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }
   const [formData, setFormData] = useState({
     contractType: '',
     templateId: '',
@@ -65,6 +86,10 @@ export default function GenerateContractPage() {
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
+    if (field === 'contractType') {
+      setFormData(prev => ({ ...prev, contractType: value, templateId: '' }))
+      loadTemplates(value)
+    }
   }
 
   useEffect(() => {
@@ -219,7 +244,9 @@ export default function GenerateContractPage() {
             {formData.contractType && (
               <Card>
                 <h2 className="text-2xl font-bold mb-4">Шаблон</h2>
-                {availableTemplates.length > 0 ? (
+                {loadingTemplates ? (
+                  <p className="text-stone-500 py-4 text-center">Загрузка шаблонов...</p>
+                ) : availableTemplates.length > 0 ? (
                   <div className="space-y-3">
                     {availableTemplates.map((template) => (
                       <motion.div
@@ -237,7 +264,11 @@ export default function GenerateContractPage() {
                             <h4 className="font-semibold text-stone-800">
                               {template.name}
                             </h4>
-                            <p className="text-sm text-stone-500">{template.id}</p>
+                            {template.source_file_name && (
+                              <p className="text-sm text-stone-500">
+                                Создан из: {template.source_file_name}
+                              </p>
+                            )}
                           </div>
                           {formData.templateId === template.id && (
                             <span className="text-primary-500 text-xl">✓</span>

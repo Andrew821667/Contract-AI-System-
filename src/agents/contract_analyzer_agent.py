@@ -1412,6 +1412,9 @@ JSON формат:
             clause_risks = self.risk_analyzer.identify_risks(all_clause_analyses)
             all_risks.extend(clause_risks)
 
+            # Дедупликация: убираем дубли между Pass 1 и Pass 2
+            all_risks = self._deduplicate_risks(all_risks)
+
             if all_clause_analyses:
                 self._merge_required_fields_from_analyses(all_clause_analyses)
                 self._store_clause_analyses(all_clause_analyses)
@@ -1439,6 +1442,51 @@ JSON формат:
                     xml_content, structure, rag_context, counterparty_data, analysis_context
                 )
             return all_risks
+
+    def _deduplicate_risks(self, risks: List) -> List:
+        """Remove duplicate risks based on title similarity"""
+        if len(risks) <= 1:
+            return risks
+
+        unique = []
+        seen_titles = []
+
+        # Priority order for severity
+        severity_priority = {'critical': 0, 'high': 1, 'significant': 2, 'medium': 3, 'minor': 4, 'low': 5}
+
+        for risk in risks:
+            title_lower = (risk.title or '').lower().strip()
+            is_duplicate = False
+
+            for i, seen in enumerate(seen_titles):
+                # Check for exact or near-exact title match
+                if title_lower == seen:
+                    is_duplicate = True
+                    # Keep the one with higher severity
+                    existing = unique[i]
+                    if severity_priority.get(risk.severity, 3) < severity_priority.get(existing.severity, 3):
+                        unique[i] = risk
+                        seen_titles[i] = title_lower
+                    break
+
+                # Check for high overlap (one title contains the other)
+                if len(title_lower) > 10 and len(seen) > 10:
+                    if title_lower in seen or seen in title_lower:
+                        is_duplicate = True
+                        existing = unique[i]
+                        if severity_priority.get(risk.severity, 3) < severity_priority.get(existing.severity, 3):
+                            unique[i] = risk
+                            seen_titles[i] = title_lower
+                        break
+
+            if not is_duplicate:
+                unique.append(risk)
+                seen_titles.append(title_lower)
+
+        removed = len(risks) - len(unique)
+        if removed:
+            logger.info(f"Deduplication: removed {removed} duplicate risks ({len(risks)} → {len(unique)})")
+        return unique
 
     def _store_clause_analyses(self, analyses: List[Dict[str, Any]]):
         """Store detailed clause analyses for UI display"""

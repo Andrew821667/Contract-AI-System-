@@ -233,10 +233,18 @@ class AnalyticsService:
                 ContractRisk.created_at <= end_date
             ).count() or 0
 
-            # Average severity
-            from sqlalchemy import func as sqlfunc
+            # Average severity (map string severity to numeric score)
+            from sqlalchemy import func as sqlfunc, case
+            severity_score_expr = case(
+                (ContractRisk.severity == 'critical', 1.0),
+                (ContractRisk.severity == 'high', 0.75),
+                (ContractRisk.severity == 'medium', 0.5),
+                (ContractRisk.severity == 'low', 0.25),
+                (ContractRisk.severity == 'info', 0.1),
+                else_=0.0
+            )
             avg_severity = self.db_session.query(
-                sqlfunc.avg(ContractRisk.severity_score)
+                sqlfunc.avg(severity_score_expr)
             ).filter(
                 ContractRisk.created_at >= start_date,
                 ContractRisk.created_at <= end_date
@@ -499,14 +507,22 @@ class AnalyticsService:
 
         try:
             from ..models import ContractRisk
-            from sqlalchemy import func as sqlfunc
+            from sqlalchemy import func as sqlfunc, case
 
+            severity_score_expr = case(
+                (ContractRisk.severity == 'critical', 1.0),
+                (ContractRisk.severity == 'high', 0.75),
+                (ContractRisk.severity == 'medium', 0.5),
+                (ContractRisk.severity == 'low', 0.25),
+                (ContractRisk.severity == 'info', 0.1),
+                else_=0.0
+            )
             results = (
                 self.db_session.query(
                     ContractRisk.title,
                     ContractRisk.severity,
                     sqlfunc.count(ContractRisk.id).label('count'),
-                    sqlfunc.avg(ContractRisk.severity_score).label('avg_score')
+                    sqlfunc.avg(severity_score_expr).label('avg_score')
                 )
                 .filter(
                     ContractRisk.created_at >= start_date,
@@ -545,13 +561,21 @@ class AnalyticsService:
 
         try:
             from ..models import ContractRisk
-            from sqlalchemy import func as sqlfunc
+            from sqlalchemy import func as sqlfunc, case
 
+            severity_score_expr = case(
+                (ContractRisk.severity == 'critical', 1.0),
+                (ContractRisk.severity == 'high', 0.75),
+                (ContractRisk.severity == 'medium', 0.5),
+                (ContractRisk.severity == 'low', 0.25),
+                (ContractRisk.severity == 'info', 0.1),
+                else_=0.0
+            )
             results = (
                 self.db_session.query(
                     ContractRisk.risk_type,
                     sqlfunc.count(ContractRisk.id).label('count'),
-                    sqlfunc.avg(ContractRisk.severity_score).label('avg_severity')
+                    sqlfunc.avg(severity_score_expr).label('avg_severity')
                 )
                 .filter(
                     ContractRisk.created_at >= start_date,

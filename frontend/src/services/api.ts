@@ -1107,6 +1107,41 @@ class APIClient {
     return response.data;
   }
 
+  async listTemplates(contractType?: string): Promise<Array<{
+    id: string;
+    name: string;
+    contract_type: string;
+    version?: string;
+    source_file_name?: string;
+  }>> {
+    const params = contractType ? { contract_type: contractType } : {};
+    const response = await this.client.get('/api/v1/contracts/templates', { params });
+    return response.data;
+  }
+
+  async getTemplateStatus(contractId: string): Promise<{
+    has_template: boolean;
+    template_id?: string;
+    template_name?: string;
+    contract_type?: string;
+  }> {
+    const response = await this.client.get(`/api/v1/contracts/${contractId}/template-status`);
+    return response.data;
+  }
+
+  async saveAsTemplate(contractId: string, data: {
+    name: string;
+    contract_type: string;
+  }): Promise<{
+    template_id: string;
+    name: string;
+    contract_type: string;
+    message: string;
+  }> {
+    const response = await this.client.post(`/api/v1/contracts/${contractId}/save-as-template`, data);
+    return response.data;
+  }
+
   async exportContract(
     contractId: string,
     format: string,

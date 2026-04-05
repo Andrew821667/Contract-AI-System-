@@ -211,6 +211,21 @@ def _analyze_contract_sync(
             logger.error(f"Contract {contract_id} not found for background analysis")
             return
 
+        # Check that the file exists on disk
+        if not contract.file_path or not os.path.exists(contract.file_path):
+            logger.error(f"Contract file not found: {contract.file_path}")
+            contract.status = 'error'
+            meta = contract.meta_info or {}
+            if not isinstance(meta, dict):
+                import json as _json
+                meta = _json.loads(meta) if meta else {}
+            meta["_progress"] = 0
+            meta["_progress_msg"] = f"Файл не найден: {contract.file_name}. Загрузите документ повторно."
+            contract.meta_info = meta
+            db.commit()
+            return
+
+        # Load user's active company conditions for analysis
         company_conditions = []
         try:
             conditions = db.query(CompanyCondition).filter(
@@ -407,6 +422,13 @@ async def analyze_contract(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to analyze this contract"
+            )
+
+        # Check file exists before starting analysis
+        if not contract.file_path or not os.path.exists(contract.file_path):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Файл документа не найден: {contract.file_name}. Загрузите документ повторно."
             )
 
         if contract.status in ['analyzing', 'parsing']:

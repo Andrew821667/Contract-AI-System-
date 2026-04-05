@@ -212,6 +212,7 @@ async def get_contract_details(
                 detail="You don't have permission to view this contract",
             )
 
+        # Get latest analysis result if available
         analysis_stmt = (
             select(AnalysisResult)
             .where(AnalysisResult.contract_id == contract_id)
