@@ -9,7 +9,7 @@ import hashlib
 import time
 from typing import Optional, Tuple
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from loguru import logger
 from sqlalchemy.orm import Session
@@ -204,6 +204,16 @@ async def require_senior_or_admin(current_user: User = Depends(get_current_user)
             detail="Senior lawyer or admin access required"
         )
     return current_user
+
+
+async def get_optional_org_id(
+    x_organization_id: Optional[str] = Header(None),
+) -> Optional[str]:
+    """
+    Extract optional org context from X-Organization-Id header.
+    Returns None if header is absent (personal mode).
+    """
+    return x_organization_id
 
 
 def require_permission(permission: str):

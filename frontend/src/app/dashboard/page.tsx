@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import api, { User, DashboardData, ModelStatus } from '@/services/api'
+import api, { User, DashboardData, ModelStatus, PersonalStats } from '@/services/api'
 import toast from 'react-hot-toast'
 import { useAuthStore } from '@/stores/authStore'
 import { getUserRole, getRolePermissions, getRoleColor, getRoleLabel } from '@/utils/roles'
@@ -116,6 +116,14 @@ export default function DashboardPage() {
   const { data: dashboardData, isLoading: dashboardLoading } = useQuery<DashboardData>({
     queryKey: ['dashboard', 'analytics'],
     queryFn: () => api.getDashboard(30),
+    retry: 1,
+    staleTime: 60000,
+  })
+
+  // Fetch personal stats
+  const { data: personalStats } = useQuery<PersonalStats>({
+    queryKey: ['analytics', 'personal'],
+    queryFn: () => api.getPersonalStats(),
     retry: 1,
     staleTime: 60000,
   })
@@ -371,6 +379,41 @@ export default function DashboardPage() {
             </div>
           </motion.div>
         </motion.div>
+
+        {/* Personal Stats Summary */}
+        {personalStats && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="mb-8"
+          >
+            <h2 className="text-2xl font-bold text-stone-800 dark:text-gray-100 mb-4">Сводная статистика</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="card-modern p-5 text-center">
+                <p className="text-3xl font-bold text-primary-700">{personalStats.total_contracts}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Всего договоров</p>
+              </div>
+              <div className="card-modern p-5 text-center">
+                <p className="text-3xl font-bold text-blue-600">{personalStats.month_contracts}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">В этом месяце</p>
+              </div>
+              <div className="card-modern p-5 text-center">
+                <p className="text-3xl font-bold text-amber-600">{personalStats.total_risks}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Рисков найдено</p>
+              </div>
+              <div className="card-modern p-5 text-center">
+                <div className="flex justify-center gap-2 text-sm">
+                  <span className="px-2 py-1 bg-red-100 text-red-700 rounded-lg font-semibold">{personalStats.risks_by_severity.critical}</span>
+                  <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded-lg font-semibold">{personalStats.risks_by_severity.high}</span>
+                  <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-lg font-semibold">{personalStats.risks_by_severity.medium}</span>
+                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded-lg font-semibold">{personalStats.risks_by_severity.low}</span>
+                </div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">По severity</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         {/* Quick Actions */}
         <motion.div

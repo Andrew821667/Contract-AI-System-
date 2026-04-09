@@ -113,8 +113,8 @@ class User(Base):
 
     # Tier limits lookup
     TIER_LIMITS = {
-        'demo': {'max_contracts_per_day': 3, 'max_llm_requests_per_day': 10},
-        'basic': {'max_contracts_per_day': 10, 'max_llm_requests_per_day': 50},
+        'demo': {'max_contracts_per_day': 5, 'max_llm_requests_per_day': 15},
+        'basic': {'max_contracts_per_day': 25, 'max_llm_requests_per_day': 100},
         'pro': {'max_contracts_per_day': 50, 'max_llm_requests_per_day': 200},
         'enterprise': {'max_contracts_per_day': 999999, 'max_llm_requests_per_day': 999999},
     }

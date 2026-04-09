@@ -19,12 +19,7 @@ export default function ContractUploadPage() {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
 
-  const [formData, setFormData] = useState({
-    contractType: '',
-    partyA: '',
-    partyB: '',
-    description: ''
-  })
+  const [contractType, setContractType] = useState('Автоопределение')
 
   const contractTypes = [
     'Автоопределение',
@@ -56,10 +51,7 @@ export default function ContractUploadPage() {
       setUploadProgress(30)
 
       const result = await api.uploadContract(selectedFile, {
-        document_type: formData.contractType,
-        party_a: formData.partyA,
-        party_b: formData.partyB,
-        description: formData.description,
+        document_type: contractType,
       })
 
       setUploadProgress(100)
@@ -144,84 +136,24 @@ export default function ContractUploadPage() {
                     </button>
                   </motion.div>
                 )}
-              </Card>
-            </motion.div>
-
-            {/* Contract Details Form */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="mt-8"
-            >
-              <Card>
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">
-                  Информация о договоре
-                </h2>
-
-                <div className="space-y-6">
-                  {/* Contract Type */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Тип договора <span className="text-danger-500">*</span>
-                    </label>
-                    <select
-                      value={formData.contractType}
-                      onChange={(e) => setFormData({ ...formData, contractType: e.target.value })}
-                      disabled={uploading}
-                      className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-primary-400 focus:outline-none transition-colors"
-                    >
-                      <option value="">Выберите тип договора</option>
-                      {contractTypes.map(type => (
-                        <option key={type} value={type}>{type}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Party A */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Сторона А (Заказчик/Покупатель)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.partyA}
-                      onChange={(e) => setFormData({ ...formData, partyA: e.target.value })}
-                      disabled={uploading}
-                      placeholder="ООО Компания А"
-                      className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-primary-400 focus:outline-none transition-colors"
-                    />
-                  </div>
-
-                  {/* Party B */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Сторона Б (Исполнитель/Продавец)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.partyB}
-                      onChange={(e) => setFormData({ ...formData, partyB: e.target.value })}
-                      disabled={uploading}
-                      placeholder="ИП Иванов И.И."
-                      className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-primary-400 focus:outline-none transition-colors"
-                    />
-                  </div>
-
-                  {/* Description */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Описание (необязательно)
-                    </label>
-                    <textarea
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      disabled={uploading}
-                      placeholder="Краткое описание договора..."
-                      rows={3}
-                      className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-primary-400 focus:outline-none transition-colors resize-none"
-                    />
-                  </div>
+                {/* Contract Type */}
+                <div className="mt-6">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Тип договора
+                  </label>
+                  <select
+                    value={contractType}
+                    onChange={(e) => setContractType(e.target.value)}
+                    disabled={uploading}
+                    className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-primary-400 focus:outline-none transition-colors"
+                  >
+                    {contractTypes.map(type => (
+                      <option key={type} value={type}>{type}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Система автоматически определит тип, стороны и другие параметры при анализе
+                  </p>
                 </div>
 
                 {/* Upload Progress */}
@@ -247,7 +179,7 @@ export default function ContractUploadPage() {
                 )}
 
                 {/* Upload Button */}
-                <div className="mt-8">
+                <div className="mt-6">
                   <Button
                     variant="primary"
                     className="w-full"

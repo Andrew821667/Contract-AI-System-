@@ -65,6 +65,42 @@ export interface AuthResponse {
   expires_in: number;
 }
 
+export interface QuotaResponse {
+  contracts_used: number;
+  contracts_limit: number;
+  llm_used: number;
+  llm_limit: number;
+  subscription_tier: string;
+}
+
+export interface PersonalStats {
+  total_contracts: number;
+  month_contracts: number;
+  contracts_today: number;
+  llm_requests_today: number;
+  total_risks: number;
+  risks_by_severity: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+  subscription_tier: string;
+}
+
+export interface GroupStats {
+  org_id: string;
+  total_members: number;
+  total_contracts: number;
+  month_contracts: number;
+  total_risks: number;
+  per_member: Array<{
+    user_id: string;
+    name: string;
+    contracts_count: number;
+  }>;
+}
+
 export interface DemoLinkResponse {
   token: string;
   url: string;
@@ -753,13 +789,23 @@ class APIClient {
       },
     });
 
-    // Request interceptor: Add auth token
+    // Request interceptor: Add auth token + org context
     this.client.interceptors.request.use(
       (config) => {
         const token = this.getAccessToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
+        // Inject organization context from orgStore
+        try {
+          const orgStorage = typeof window !== 'undefined'
+            ? JSON.parse(localStorage.getItem('org-storage') || '{}')
+            : {};
+          const orgId = orgStorage?.state?.selectedOrgId;
+          if (orgId) {
+            config.headers['X-Organization-Id'] = orgId;
+          }
+        } catch {}
         return config;
       },
       (error) => Promise.reject(error)
@@ -854,7 +900,12 @@ class APIClient {
 
   async register(data: RegisterRequest): Promise<any> {
     const response = await this.client.post('/api/v1/auth/register', data);
-    // Backend returns {message: "..."} without tokens — user must verify email first
+    // Backend returns {user, access_token, ...} for auto-login, or {message} for email verification flow
+    return response.data;
+  }
+
+  async getQuota(): Promise<QuotaResponse> {
+    const response = await this.client.get<QuotaResponse>('/api/v1/auth/quota');
     return response.data;
   }
 
@@ -1205,6 +1256,54 @@ class APIClient {
       { params: { period_days: period } }
     );
     return response.data;
+  }
+
+  async getPersonalStats(): Promise<PersonalStats> {
+    const response = await this.client.get<PersonalStats>('/api/v1/analytics/personal');
+    return response.data;
+  }
+
+  async getGroupStats(orgId: string): Promise<GroupStats> {
+    const response = await this.client.get<GroupStats>('/api/v1/analytics/group', {
+      params: { org_id: orgId }
+    });
+    return response.data;
+  }
+
+  // ==================== Organizations ====================
+
+  async getMyOrganizations(): Promise<any[]> {
+    const response = await this.client.get('/api/v2/organizations');
+    return response.data;
+  }
+
+  async createOrganization(data: { name: string; slug: string; description?: string }): Promise<any> {
+    const response = await this.client.post('/api/v2/organizations', data);
+    return response.data;
+  }
+
+  async updateOrganization(orgId: string, data: { name?: string; description?: string }): Promise<any> {
+    const response = await this.client.patch(`/api/v2/organizations/${orgId}`, data);
+    return response.data;
+  }
+
+  async getOrgMembers(orgId: string): Promise<any[]> {
+    const response = await this.client.get(`/api/v2/organizations/${orgId}/members`);
+    return response.data;
+  }
+
+  async inviteMember(orgId: string, data: { email: string; functional_role: string; company_role?: string }): Promise<any> {
+    const response = await this.client.post(`/api/v2/organizations/${orgId}/invite`, data);
+    return response.data;
+  }
+
+  async updateMemberRole(orgId: string, userId: string, data: { functional_role: string }): Promise<any> {
+    const response = await this.client.patch(`/api/v2/organizations/${orgId}/members/${userId}`, data);
+    return response.data;
+  }
+
+  async removeMember(orgId: string, userId: string): Promise<void> {
+    await this.client.delete(`/api/v2/organizations/${orgId}/members/${userId}`);
   }
 
   // ==================== Clause Library ====================

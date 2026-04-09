@@ -254,50 +254,91 @@ async def register(
         name=request_data.name,
         password=request_data.password,
         role="junior_lawyer",          # SECURITY: hardcoded, never from client
-        subscription_tier="demo"       # SECURITY: hardcoded, never from client
+        subscription_tier="demo",      # SECURITY: hardcoded, never from client
+        send_verification=False        # MVP: skip email verification, auto-login
     )
 
     if error:
         # SECURITY: uniform response to prevent account enumeration.
-        # If the email already exists, return the same success-like message
-        # so attackers cannot determine whether an email is registered.
         if "already" in (error or "").lower() or "exist" in (error or "").lower():
-            return {
-                "message": "Если указанный email свободен, на него будет отправлено письмо для подтверждения."
-            }
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={"message": "Если указанный email свободен, на него будет отправлено письмо для подтверждения."}
+            )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
 
     # Log registration from IP
     ip_address = get_client_ip(request)
+    user_agent = request.headers.get("User-Agent")
+
     auth_service.log_action(
         user_id=user.id,
         action="registration_completed",
         status="success",
         ip_address=ip_address
     )
+
+    # Create tokens and session (same pattern as login)
+    access_token = auth_service.create_access_token(user.id)
+    refresh_token = auth_service.create_refresh_token(user.id)
+
+    from src.models.auth_models import UserSession
+    from datetime import timedelta, timezone
+
+    session = UserSession(
+        user_id=user.id,
+        access_token=access_token,
+        refresh_token=refresh_token,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=auth_service.REFRESH_TOKEN_EXPIRE_DAYS)
+    )
+    db.add(session)
     db.commit()
 
-    # Попробовать отправить verification email (не блокируем при ошибке)
-    try:
-        from src.services.email_service import email_service
-        from src.models.auth_models import EmailVerification as EVModel
-        ev = db.query(EVModel).filter(
-            EVModel.user_id == user.id,
-            EVModel.verified == False
-        ).order_by(EVModel.created_at.desc()).first()
-        if ev:
-            await email_service.send_verification_email(
-                to_email=user.email,
-                verification_token=ev.token,
-                user_name=user.name
-            )
-    except Exception as e:
-        logger.warning(f"Не удалось отправить verification email: {e}")
+    login_data = {
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "subscription_tier": user.subscription_tier
+        },
+        "access_token": access_token,
+        "token_type": "Bearer",
+        "expires_in": auth_service.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    }
 
-    # Do NOT return tokens — user must verify email first
-    # SECURITY: uniform response to prevent account enumeration
+    response = JSONResponse(status_code=status.HTTP_201_CREATED, content=login_data)
+    _set_refresh_cookie(response, refresh_token)
+    return response
+
+
+@router.get("/quota")
+async def get_quota(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Получить оставшуюся квоту текущего пользователя.
+
+    Возвращает использованные и максимальные лимиты по договорам и AI-запросам.
+    """
+    # Reset daily limits if needed
+    current_user.reset_daily_limits()
+    db.commit()
+
+    tier_limits = User.TIER_LIMITS.get(
+        current_user.subscription_tier,
+        User.TIER_LIMITS['demo']
+    )
+
     return {
-        "message": "Если указанный email свободен, на него будет отправлено письмо для подтверждения."
+        "contracts_used": current_user.contracts_today or 0,
+        "contracts_limit": tier_limits['max_contracts_per_day'],
+        "llm_used": current_user.llm_requests_today or 0,
+        "llm_limit": tier_limits['max_llm_requests_per_day'],
+        "subscription_tier": current_user.subscription_tier,
     }
 
 

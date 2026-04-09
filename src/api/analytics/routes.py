@@ -326,3 +326,140 @@ from datetime import timedelta
 from dataclasses import asdict
 import os
 from loguru import logger
+from sqlalchemy import func
+
+
+@router.get("/personal")
+async def get_personal_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Личная статистика пользователя.
+
+    Агрегированные метрики за всё время + за последний месяц.
+    """
+    from src.models.database import Contract
+    from src.models.analyzer_models import ContractRisk
+
+    # Contracts total
+    total_contracts = db.query(func.count(Contract.id)).filter(
+        Contract.user_id == current_user.id
+    ).scalar() or 0
+
+    # Contracts this month
+    month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    month_contracts = db.query(func.count(Contract.id)).filter(
+        Contract.user_id == current_user.id,
+        Contract.created_at >= month_start
+    ).scalar() or 0
+
+    # Risks found
+    total_risks = db.query(func.count(ContractRisk.id)).join(
+        Contract, Contract.id == ContractRisk.contract_id
+    ).filter(
+        Contract.user_id == current_user.id
+    ).scalar() or 0
+
+    # Risks by severity
+    risk_by_severity = dict(
+        db.query(ContractRisk.severity, func.count(ContractRisk.id)).join(
+            Contract, Contract.id == ContractRisk.contract_id
+        ).filter(
+            Contract.user_id == current_user.id
+        ).group_by(ContractRisk.severity).all()
+    )
+
+    return {
+        "total_contracts": total_contracts,
+        "month_contracts": month_contracts,
+        "contracts_today": current_user.contracts_today or 0,
+        "llm_requests_today": current_user.llm_requests_today or 0,
+        "total_risks": total_risks,
+        "risks_by_severity": {
+            "critical": risk_by_severity.get("critical", 0),
+            "high": risk_by_severity.get("high", 0),
+            "medium": risk_by_severity.get("medium", 0),
+            "low": risk_by_severity.get("low", 0),
+        },
+        "subscription_tier": current_user.subscription_tier,
+    }
+
+
+@router.get("/group")
+async def get_group_stats(
+    org_id: str = Query(..., description="ID организации"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Групповая статистика организации.
+
+    Доступна только участникам организации.
+    """
+    from src.core.identity_org.models import OrganizationMembership
+    from src.models.database import Contract
+    from src.models.analyzer_models import ContractRisk
+
+    # Verify membership
+    membership = db.query(OrganizationMembership).filter(
+        OrganizationMembership.user_id == current_user.id,
+        OrganizationMembership.org_id == org_id,
+        OrganizationMembership.active == True
+    ).first()
+
+    if not membership:
+        raise HTTPException(status_code=403, detail="Вы не являетесь участником этой организации")
+
+    # Get all org member IDs
+    member_ids = [
+        m.user_id for m in db.query(OrganizationMembership.user_id).filter(
+            OrganizationMembership.org_id == org_id,
+            OrganizationMembership.active == True
+        ).all()
+    ]
+
+    # Contracts total for org
+    total_contracts = db.query(func.count(Contract.id)).filter(
+        Contract.user_id.in_(member_ids)
+    ).scalar() or 0
+
+    # This month
+    month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    month_contracts = db.query(func.count(Contract.id)).filter(
+        Contract.user_id.in_(member_ids),
+        Contract.created_at >= month_start
+    ).scalar() or 0
+
+    # Risks total
+    total_risks = db.query(func.count(ContractRisk.id)).join(
+        Contract, Contract.id == ContractRisk.contract_id
+    ).filter(
+        Contract.user_id.in_(member_ids)
+    ).scalar() or 0
+
+    # Per-member stats
+    per_member = []
+    for mid in member_ids:
+        member_user = db.query(User).filter(User.id == mid).first()
+        if not member_user:
+            continue
+        count = db.query(func.count(Contract.id)).filter(
+            Contract.user_id == mid
+        ).scalar() or 0
+        per_member.append({
+            "user_id": mid,
+            "name": member_user.name,
+            "contracts_count": count,
+        })
+
+    per_member.sort(key=lambda x: x["contracts_count"], reverse=True)
+
+    return {
+        "org_id": org_id,
+        "total_members": len(member_ids),
+        "total_contracts": total_contracts,
+        "month_contracts": month_contracts,
+        "total_risks": total_risks,
+        "per_member": per_member,
+    }

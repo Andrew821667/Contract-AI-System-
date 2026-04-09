@@ -19,9 +19,12 @@ from src.core.identity_org.models import (
 )
 from src.core.identity_org.schemas import (
     OrganizationCreate,
+    OrganizationUpdate,
     OrganizationRead,
     OrganizationMembershipCreate,
+    OrganizationMembershipUpdate,
     OrganizationMembershipRead,
+    OrganizationInvite,
 )
 
 router = APIRouter(tags=["Organizations"])
@@ -250,3 +253,197 @@ async def add_member(
     db.commit()
     db.refresh(membership)
     return membership
+
+
+# ──────────────────────────────────────────────
+# PATCH /organizations/{org_id}
+# ──────────────────────────────────────────────
+@router.patch(
+    "/organizations/{org_id}",
+    response_model=OrganizationRead,
+    summary="Обновить организацию",
+)
+async def update_organization(
+    org_id: str,
+    body: OrganizationUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Обновить данные организации. Только org_admin."""
+    _require_org_admin(org_id, current_user, db)
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Организация не найдена")
+
+    if body.name is not None:
+        org.name = body.name
+    if body.description is not None:
+        org.description = body.description
+    if body.settings is not None:
+        org.settings = body.settings
+
+    db.commit()
+    db.refresh(org)
+    return org
+
+
+# ──────────────────────────────────────────────
+# PATCH /organizations/{org_id}/members/{user_id}
+# ──────────────────────────────────────────────
+@router.patch(
+    "/organizations/{org_id}/members/{user_id}",
+    response_model=OrganizationMembershipRead,
+    summary="Изменить роль участника",
+)
+async def update_member_role(
+    org_id: str,
+    user_id: str,
+    body: OrganizationMembershipUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Изменить роль участника. Только org_admin."""
+    _require_org_admin(org_id, current_user, db)
+
+    membership = (
+        db.query(OrganizationMembership)
+        .filter(
+            OrganizationMembership.org_id == org_id,
+            OrganizationMembership.user_id == user_id,
+            OrganizationMembership.active == True,
+        )
+        .first()
+    )
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Участник не найден")
+
+    membership.functional_role = body.functional_role
+    if body.company_role is not None:
+        membership.company_role = body.company_role
+
+    db.commit()
+    db.refresh(membership)
+    return membership
+
+
+# ──────────────────────────────────────────────
+# DELETE /organizations/{org_id}/members/{user_id}
+# ──────────────────────────────────────────────
+@router.delete(
+    "/organizations/{org_id}/members/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Удалить участника",
+)
+async def remove_member(
+    org_id: str,
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Удалить участника из организации. Только org_admin."""
+    _require_org_admin(org_id, current_user, db)
+
+    if str(user_id) == str(current_user.id):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Нельзя удалить самого себя")
+
+    membership = (
+        db.query(OrganizationMembership)
+        .filter(
+            OrganizationMembership.org_id == org_id,
+            OrganizationMembership.user_id == user_id,
+            OrganizationMembership.active == True,
+        )
+        .first()
+    )
+    if not membership:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Участник не найден")
+
+    membership.active = False
+    db.commit()
+
+
+# ──────────────────────────────────────────────
+# POST /organizations/{org_id}/invite
+# ──────────────────────────────────────────────
+@router.post(
+    "/organizations/{org_id}/invite",
+    response_model=OrganizationMembershipRead,
+    status_code=status.HTTP_201_CREATED,
+    summary="Пригласить по email",
+)
+async def invite_member_by_email(
+    org_id: str,
+    body: OrganizationInvite,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Пригласить пользователя по email. org_admin или manager."""
+    caller = _get_membership(org_id, current_user, db)
+    if not caller or caller.functional_role not in ("org_admin", "manager"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав")
+
+    target_user = db.query(User).filter(User.email == body.email).first()
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Пользователь с таким email не зарегистрирован в системе",
+        )
+
+    existing = (
+        db.query(OrganizationMembership)
+        .filter(
+            OrganizationMembership.user_id == target_user.id,
+            OrganizationMembership.org_id == org_id,
+        )
+        .first()
+    )
+    if existing and existing.active:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Пользователь уже в организации")
+
+    if existing:
+        existing.active = True
+        existing.functional_role = body.functional_role
+        existing.company_role = body.company_role
+        db.commit()
+        db.refresh(existing)
+        return existing
+
+    membership = OrganizationMembership(
+        id=generate_uuid(),
+        user_id=target_user.id,
+        org_id=org_id,
+        functional_role=body.functional_role,
+        company_role=body.company_role,
+    )
+    db.add(membership)
+    db.commit()
+    db.refresh(membership)
+    return membership
+
+
+# ── Helpers ──
+
+def _get_membership(org_id: str, user: User, db: Session):
+    """Get active membership for user in org."""
+    return (
+        db.query(OrganizationMembership)
+        .filter(
+            OrganizationMembership.org_id == org_id,
+            OrganizationMembership.user_id == user.id,
+            OrganizationMembership.active == True,
+        )
+        .first()
+    )
+
+
+def _require_org_admin(org_id: str, user: User, db: Session):
+    """Require that user is org_admin (or platform admin)."""
+    if user.role == "admin":
+        return
+    m = _get_membership(org_id, user, db)
+    if not m or m.functional_role != "org_admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Только администратор организации может выполнить это действие",
+        )

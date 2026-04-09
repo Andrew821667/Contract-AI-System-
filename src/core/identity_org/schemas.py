@@ -31,12 +31,29 @@ class OrganizationRead(BaseModel):
 
 # ── Membership ──
 
+class OrganizationUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: str | None = Field(None, max_length=2000)
+    settings: dict[str, Any] | None = None
+
+
 class OrganizationMembershipCreate(BaseModel):
     user_id: str = Field(..., max_length=50)
     org_id: str = Field(..., max_length=50)
     unit_id: str | None = Field(None, max_length=50)
     company_role: str | None = Field(None, max_length=100)
     functional_role: str = Field("member", max_length=50)
+
+
+class OrganizationMembershipUpdate(BaseModel):
+    functional_role: str = Field(..., pattern=r"^(org_admin|manager|member|viewer)$")
+    company_role: str | None = Field(None, max_length=100)
+
+
+class OrganizationInvite(BaseModel):
+    email: str = Field(..., max_length=255)
+    functional_role: str = Field("member", pattern=r"^(org_admin|manager|member|viewer)$")
+    company_role: str | None = Field(None, max_length=100)
 
 
 class OrganizationMembershipRead(BaseModel):

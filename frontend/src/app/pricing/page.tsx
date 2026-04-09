@@ -21,10 +21,10 @@ export default function PricingPage() {
       gradient: 'from-gray-400 to-gray-600',
       popular: false,
       features: [
-        { text: '5 договоров в месяц', included: true },
-        { text: '15 AI-запросов', included: true },
+        { text: '10 договоров в месяц', included: true },
+        { text: '30 AI-запросов', included: true },
         { text: 'Базовый анализ рисков (Уровень 1)', included: true },
-        { text: '2 шаблона генерации', included: true },
+        { text: '5 шаблонов генерации', included: true },
         { text: 'Экспорт DOCX', included: true },
         { text: 'Глубокий анализ (Уровень 2)', included: false },
         { text: 'Сравнение версий', included: false },
@@ -36,7 +36,7 @@ export default function PricingPage() {
     {
       name: 'Персональный',
       tier: 'personal',
-      price: { monthly: 1990, annual: 17900 },
+      price: { monthly: 1790, annual: 16100 },
       description: 'Для юристов и частной практики',
       gradient: 'from-blue-500 to-cyan-600',
       popular: false,
@@ -56,7 +56,7 @@ export default function PricingPage() {
     {
       name: 'Команда',
       tier: 'team',
-      price: { monthly: 4990, annual: 44900 },
+      price: { monthly: 4490, annual: 40400 },
       description: 'Для юридических отделов и фирм',
       gradient: 'from-purple-500 to-pink-600',
       popular: true,
@@ -76,7 +76,7 @@ export default function PricingPage() {
     {
       name: 'Бизнес',
       tier: 'business',
-      price: { monthly: 19990, annual: 179900 },
+      price: { monthly: 14990, annual: 134900 },
       description: 'Для компаний и корпоративных юристов',
       gradient: 'from-orange-500 to-red-600',
       popular: false,
@@ -96,7 +96,7 @@ export default function PricingPage() {
     {
       name: 'Enterprise',
       tier: 'enterprise',
-      price: { monthly: 49990, annual: 0 },
+      price: { monthly: 0, annual: 0 },
       description: 'On-premise, безлимит, свои модели',
       gradient: 'from-stone-700 to-stone-900',
       popular: false,
@@ -117,23 +117,23 @@ export default function PricingPage() {
   ]
 
   const documentPacks = [
-    { name: 'Пробный', count: 5, price: 390, perDoc: 78, saving: 0 },
-    { name: 'Малый', count: 25, price: 1490, perDoc: 60, saving: 23 },
-    { name: 'Стандарт', count: 100, price: 4490, perDoc: 45, saving: 42 },
-    { name: 'Объёмный', count: 500, price: 14990, perDoc: 30, saving: 62 },
-    { name: 'Корпоративный', count: 2000, price: 39990, perDoc: 20, saving: 74 },
+    { name: 'Пробный', count: 5, price: 350, perDoc: 70, saving: 0 },
+    { name: 'Малый', count: 25, price: 1350, perDoc: 54, saving: 23 },
+    { name: 'Стандарт', count: 100, price: 3990, perDoc: 40, saving: 43 },
+    { name: 'Объёмный', count: 500, price: 12990, perDoc: 26, saving: 63 },
+    { name: 'Корпоративный', count: 2000, price: 34990, perDoc: 17, saving: 76 },
   ]
 
   const competitors = [
-    { name: 'Doczilla Pro', price: 'от 2 800 ₽/мес', our: 'от 1 990 ₽/мес', diff: 'Дешевле + глубокий AI-анализ рисков' },
-    { name: 'Яндекс Нейроюрист', price: '2 000–8 500 ₽/мес', our: 'от 1 990 ₽/мес', diff: 'Больше функций за те же деньги' },
-    { name: 'PravoTech', price: 'от 500 000 ₽/год', our: 'от 19 990 ₽/мес', diff: 'В 2× дешевле, прозрачные цены' },
-    { name: 'Noroots', price: 'По запросу', our: 'от 20 ₽/договор', diff: 'Понятно с первой минуты' },
-    { name: 'Ручной анализ', price: '5 000–30 000 ₽/договор', our: 'от 20 ₽/договор', diff: 'В 250–1500× дешевле' },
+    { name: 'Doczilla Pro', price: 'от 2 800 ₽/мес', our: 'от 1 790 ₽/мес', diff: 'Дешевле + глубокий AI-анализ рисков' },
+    { name: 'Яндекс Нейроюрист', price: '2 000–8 500 ₽/мес', our: 'от 1 790 ₽/мес', diff: 'Больше функций за меньшие деньги' },
+    { name: 'PravoTech', price: 'от 500 000 ₽/год', our: 'от 14 990 ₽/мес', diff: 'В 3× дешевле, прозрачные цены' },
+    { name: 'Noroots', price: 'По запросу', our: 'от 17 ₽/договор', diff: 'Понятно с первой минуты' },
+    { name: 'Ручной анализ', price: '5 000–30 000 ₽/договор', our: 'от 17 ₽/договор', diff: 'В 300–1800× дешевле' },
   ]
 
   const getPrice = (plan: typeof plans[0]) => {
-    if (plan.isCustom) return 'от 49 990 ₽'
+    if (plan.isCustom) return 'По запросу'
     if (plan.price.monthly === 0) return 'Бесплатно'
     const price = billingCycle === 'monthly' ? plan.price.monthly : plan.price.annual
     return `${price.toLocaleString('ru-RU')} ₽`
@@ -437,7 +437,7 @@ export default function PricingPage() {
               { q: 'Что будет, если лимиты закончатся?', a: 'Вы можете перейти на старший тариф или докупить пакет документов.' },
               { q: 'Как работает Enterprise on-premise?', a: 'Мы разворачиваем систему на вашем сервере. Все данные остаются внутри вашего периметра. AI-модели работают локально через Ollama.' },
               { q: 'Какие AI-модели используются?', a: 'DeepSeek V3/R1, YandexGPT 5, Qwen3 и другие современные модели. Также поддерживаются локальные модели через Ollama для полной конфиденциальности.' },
-              { q: 'Есть ли бесплатный период?', a: 'Да, бесплатный тариф без ограничений по времени: 5 договоров и 15 AI-запросов в месяц.' },
+              { q: 'Есть ли бесплатный период?', a: 'Да, бесплатный тариф без ограничений по времени: 10 договоров и 30 AI-запросов в месяц.' },
             ].map((faq, idx) => (
               <motion.div
                 key={idx}

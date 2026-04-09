@@ -7,6 +7,7 @@ import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import Button from '@/components/ui/Button'
 import api from '@/services/api'
+import { useAuthStore } from '@/stores/authStore'
 
 interface RegisterFormData {
   name: string
@@ -35,12 +36,16 @@ export default function RegisterPage() {
         password: data.password,
       })
 
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('user', JSON.stringify(response.user))
+      if (response.access_token && response.user) {
+        // MVP: auto-login after registration
+        useAuthStore.getState().setAuth(response.user, response.access_token)
+        toast.success('Регистрация успешна!')
+        router.push('/dashboard')
+      } else {
+        // Fallback: email verification required
+        toast.success('Проверьте вашу почту для подтверждения регистрации')
+        router.push('/login')
       }
-
-      toast.success('Регистрация успешна!')
-      router.push('/dashboard')
     } catch (err: any) {
       const message = err?.response?.data?.detail || 'Ошибка регистрации. Попробуйте снова.'
       setError(message)
