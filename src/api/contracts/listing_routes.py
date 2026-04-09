@@ -50,28 +50,8 @@ def _list_cache_set(key: str, data: Any) -> None:
     _list_cache[key] = (data, time.time() + _LIST_CACHE_TTL)
 
 
-def _load_meta(meta: Any) -> Dict[str, Any]:
-    if isinstance(meta, dict):
-        return meta
-    if isinstance(meta, str) and meta:
-        try:
-            loaded = json.loads(meta)
-            return loaded if isinstance(loaded, dict) else {}
-        except Exception:
-            return {}
-    return {}
-
-
-def _json_field(value: Any) -> Dict[str, Any]:
-    if isinstance(value, dict):
-        return value
-    if isinstance(value, str) and value:
-        try:
-            loaded = json.loads(value)
-            return loaded if isinstance(loaded, dict) else {}
-        except Exception:
-            return {}
-    return {}
+from src.api.contracts.utils import load_json_dict as _load_meta
+_json_field = _load_meta  # alias for backward compat
 
 
 router = APIRouter()

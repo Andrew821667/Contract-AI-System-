@@ -264,7 +264,7 @@ class SecurityHeadersMiddleware:
         (b"strict-transport-security", b"max-age=31536000; includeSubDomains; preload"),
         (b"content-security-policy", (
             b"default-src 'self'; "
-            b"script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+            b"script-src 'self' https://cdn.jsdelivr.net; "
             b"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             b"font-src 'self' https://fonts.gstatic.com; "
             b"img-src 'self' https: data:; "

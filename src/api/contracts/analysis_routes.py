@@ -43,16 +43,7 @@ from .schemas import (
 router = APIRouter()
 
 
-def _load_meta(meta: Any) -> Dict[str, Any]:
-    if isinstance(meta, dict):
-        return meta
-    if isinstance(meta, str) and meta:
-        try:
-            loaded = json.loads(meta)
-            return loaded if isinstance(loaded, dict) else {}
-        except Exception:
-            return {}
-    return {}
+from src.api.contracts.utils import load_json_dict as _load_meta
 
 
 def _resolve_analysis_perspective(contract: Contract, request_data: AnalysisResultRequest, current_user: User) -> str:
