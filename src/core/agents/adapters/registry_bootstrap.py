@@ -139,6 +139,8 @@ def bootstrap_agent_registry(
     registry: Any,
     db: Session,
     llm_gateway: Any,
+    audit_logger: Any = None,
+    policy_resolver: Any = None,
 ) -> list[str]:
     """
     Create all legacy agents, wrap in BaseAgentAdapter, register in registry.
@@ -147,6 +149,8 @@ def bootstrap_agent_registry(
         registry: AgentRegistryService (IAgentRegistry protocol).
         db: SQLAlchemy Session for legacy agents.
         llm_gateway: LLMGateway instance for legacy agents.
+        audit_logger: AIAuditService for logging agent actions.
+        policy_resolver: MultiLevelPolicyResolver for policy checks.
 
     Returns:
         List of successfully registered agent_id strings.
@@ -162,7 +166,7 @@ def bootstrap_agent_registry(
             logger.warning(f"Skipping agent '{agent_id}' — could not create instance")
             continue
 
-        # Wrap in adapter
+        # Wrap in adapter with audit + policy
         adapter = BaseAgentAdapter(
             agent=agent_instance,
             agent_id=config["agent_id"],
@@ -171,6 +175,8 @@ def bootstrap_agent_registry(
             allowed_tools=config["allowed_tools"],
             autonomy_level=config["autonomy_level"],
             confidence_threshold=config["confidence_threshold"],
+            audit_logger=audit_logger,
+            policy_resolver=policy_resolver,
         )
 
         # Register

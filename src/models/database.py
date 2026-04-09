@@ -362,7 +362,7 @@ class LLMCache(Base):
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, scoped_session
 
 # Load environment variables
 load_dotenv()
@@ -395,6 +395,11 @@ else:
 
 # Create session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Thread-local scoped session for core services.
+# Each thread gets its own Session instance automatically,
+# preventing concurrent access to a shared session under FastAPI's threadpool.
+ScopedSession = scoped_session(SessionLocal)
 
 
 def get_db():

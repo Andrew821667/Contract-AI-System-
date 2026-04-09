@@ -249,7 +249,7 @@ def bootstrap(db: Session) -> CoreServices:
 
     # ── 14. Bootstrap tools & agents ─────────────────────────────────
     _register_tools(svc.tool_registry)
-    _bootstrap_agents(svc.agent_registry, db)
+    _bootstrap_agents(svc.agent_registry, db, svc.audit_service, svc.policy_resolver)
 
     logger.info(
         f"Core services bootstrapped: "
@@ -307,13 +307,22 @@ def _register_tools(registry: ToolRegistryService) -> None:
         registry.register(tool)
 
 
-def _bootstrap_agents(registry: AgentRegistryService, db: Session) -> None:
+def _bootstrap_agents(
+    registry: AgentRegistryService,
+    db: Session,
+    audit_logger=None,
+    policy_resolver=None,
+) -> None:
     """Зарегистрировать агентов (graceful — не ломается при ошибке импорта)."""
     try:
         from src.core.agents.adapters.registry_bootstrap import bootstrap_agent_registry
         from src.services.llm_gateway import LLMGateway
 
         llm = LLMGateway()
-        bootstrap_agent_registry(registry, db, llm)
+        bootstrap_agent_registry(
+            registry, db, llm,
+            audit_logger=audit_logger,
+            policy_resolver=policy_resolver,
+        )
     except Exception as exc:
         logger.warning(f"Agent bootstrap skipped: {exc}")

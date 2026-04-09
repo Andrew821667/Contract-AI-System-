@@ -15,7 +15,9 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+import hmac
 import os
+import secrets
 from sqlalchemy.orm import Session
 from loguru import logger
 
@@ -1141,7 +1143,7 @@ async def sso_token_exchange(
             detail="SSO not configured (BRIDGE_SECRET not set)"
         )
 
-    if request.platform_token != BRIDGE_SECRET:
+    if not hmac.compare_digest(request.platform_token, BRIDGE_SECRET):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid platform token"
@@ -1153,22 +1155,23 @@ async def sso_token_exchange(
     if not user:
         import uuid
         # Маппинг ролей platform → contract-ai
-        role_map = {
-            "admin": "admin",
+        # SSO не может создавать admin — только через внутреннюю панель
+        allowed_roles = {
             "lawyer": "lawyer",
             "senior_lawyer": "senior_lawyer",
             "user": "demo",
             "demo": "demo",
         }
-        mapped_role = role_map.get(request.role, "demo")
+        mapped_role = allowed_roles.get(request.role, "demo")
 
         user = User(
             id=str(uuid.uuid4()),
             email=request.user_email,
             name=request.user_name or request.user_email.split("@")[0],
             role=mapped_role,
-            hashed_password="sso_bridge_user",  # Не может войти по паролю
-            is_active=True,
+            password_hash=f"!sso_bridge_{secrets.token_hex(16)}",  # Non-loginable marker
+            active=True,
+            email_verified=True,
         )
         db.add(user)
         db.commit()
@@ -1188,6 +1191,8 @@ async def sso_token_exchange(
     )
 
     # URL для редиректа (фронтенд Contract-AI-System)
+    # TODO: передавать токен через POST/fragment (#token=...) вместо query-param,
+    # чтобы он не утекал через Referer/логи/историю браузера
     ngrok_url = os.getenv("NGROK_URL", "")
     base_url = ngrok_url if ngrok_url else "http://localhost:8090"
     redirect_url = f"{base_url}/auth/sso?token={access_token}"

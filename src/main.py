@@ -39,7 +39,7 @@ logger.add(
 from config.settings import settings
 
 # Import database
-from src.models.database import engine, Base, SessionLocal
+from src.models.database import engine, Base, SessionLocal, ScopedSession
 
 # Import middleware
 from src.middleware.security import setup_security_middleware
@@ -75,40 +75,32 @@ async def lifespan(app: FastAPI):
 
     # Initialize core services (Phase 0-12)
     logger.info("🔧 Initializing core services...")
-    core_db = None
     try:
         from src.core.bootstrap import bootstrap
 
-        # Keep this session alive for the entire app lifetime —
-        # core services store self.db and use it across requests.
-        core_db = SessionLocal()
+        # ScopedSession is a thread-local proxy: each thread gets its own
+        # Session instance.  Core services store self.db = ScopedSession,
+        # and every attribute access is delegated to the current thread's
+        # session — safe under FastAPI's sync threadpool.
         try:
-            core_services = bootstrap(core_db)
+            core_services = bootstrap(ScopedSession)
             app.state.core_services = core_services
-            app.state._core_db = core_db  # prevent GC, close on shutdown
-            # Expire all cached ORM objects after bootstrap (seed) to prevent stale reads.
-            # Next access will re-query from DB with fresh data.
-            core_db.expire_all()
+            # Expire cached ORM objects after bootstrap seed.
+            ScopedSession.expire_all()
+            ScopedSession.remove()  # release startup session back to pool
             logger.info("✅ Core services bootstrapped successfully")
         except Exception as e:
             logger.warning(f"⚠️ Core services bootstrap skipped: {e}")
             app.state.core_services = None
-            if core_db:
-                core_db.close()
-                core_db = None
+            ScopedSession.remove()
     except Exception as e:
         logger.warning(f"⚠️ Core services import failed: {e}")
         app.state.core_services = None
-        if core_db:
-            core_db.close()
-            core_db = None
 
     yield
 
-    # Shutdown — close the long-lived core DB session
-    if hasattr(app.state, '_core_db') and app.state._core_db:
-        app.state._core_db.close()
-        logger.info("🔒 Core DB session closed")
+    # Shutdown — remove scoped session registry
+    ScopedSession.remove()
     logger.info("👋 Shutting down Contract AI System Backend...")
 
 
@@ -126,6 +118,15 @@ app = FastAPI(
 
 # Security middleware setup (includes CORS, rate limiting, security headers)
 setup_security_middleware(app)
+
+
+# Release the thread-local core DB session after every request,
+# so each new request starts with a fresh session (no stale ORM cache).
+@app.middleware("http")
+async def cleanup_scoped_session(request: Request, call_next):
+    response = await call_next(request)
+    ScopedSession.remove()
+    return response
 
 
 # Exception handlers — unified {error, message, details} format

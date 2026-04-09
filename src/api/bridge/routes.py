@@ -172,7 +172,7 @@ async def bridge_analyze(
             name=user_name or user_email.split("@")[0],
             role="demo",
             password_hash=f"!bridge_sso_{secrets.token_hex(16)}",  # Non-loginable marker
-            is_active=True,
+            active=True,
             email_verified=True,
         )
         db.add(user)

@@ -3,16 +3,22 @@ BaseAgentAdapter — обёртка существующих BaseAgent в IAgent
 
 Паттерн Adapter: позволяет старым агентам (src/agents/) работать
 через новый IAgent интерфейс без изменения их кода.
+
+Добавляет audit logging и policy checking вокруг legacy execute().
 """
 
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from loguru import logger
 
 from src.core.base import AgentContext, AgentResult, AgentTask
+
+if TYPE_CHECKING:
+    from src.core.ai_collaboration.audit_service import AIAuditService
+    from src.core.policies.resolver import MultiLevelPolicyResolver
 
 
 class BaseAgentAdapter:
@@ -23,6 +29,7 @@ class BaseAgentAdapter:
     - AgentTask → state dict (для BaseAgent.execute)
     - old AgentResult → new AgentResult (core.base)
     - Properties → IAgent protocol properties
+    - Adds audit logging + policy check around legacy execute()
     """
 
     def __init__(
@@ -34,6 +41,8 @@ class BaseAgentAdapter:
         allowed_tools: list[str] | None = None,
         autonomy_level: str = "copilot",
         confidence_threshold: float = 0.8,
+        audit_logger: AIAuditService | None = None,
+        policy_resolver: MultiLevelPolicyResolver | None = None,
     ) -> None:
         self._agent = agent
         self._agent_id = agent_id
@@ -42,6 +51,8 @@ class BaseAgentAdapter:
         self._allowed_tools = list(allowed_tools or [])
         self._autonomy_level = autonomy_level
         self._confidence_threshold = confidence_threshold
+        self._audit_logger = audit_logger
+        self._policy_resolver = policy_resolver
 
     # ── IAgent protocol properties ──────────────
 
@@ -82,11 +93,42 @@ class BaseAgentAdapter:
         """
         Execute task by converting to legacy state dict and calling BaseAgent.execute().
 
-        Conversion:
-            AgentTask.input_data + context fields → state dict
-            old AgentResult → new AgentResult (core.base.AgentResult)
+        Adds policy check (if resolver available) and audit logging around execution.
         """
-        # Build state dict from task + context
+        action_name = f"agent:{self._agent_id}:{task.task_type}"
+
+        # ── Policy check ────────────────────────────
+        if self._policy_resolver:
+            try:
+                decision = await self._policy_resolver.resolve(
+                    action=action_name,
+                    user_id=context.user_id or "system",
+                    organization_id=context.organization_id,
+                    document_id=context.document_id,
+                )
+                if not decision.allowed:
+                    logger.warning(
+                        f"BaseAgentAdapter[{self._agent_id}] blocked by policy: {decision.reason}"
+                    )
+                    if self._audit_logger:
+                        await self._audit_logger.log(
+                            actor=f"agent:{self._agent_id}",
+                            action=action_name,
+                            target=context.document_id or task.task_id,
+                            result="blocked",
+                            policy_decision=decision,
+                            session_id=context.session_id,
+                        )
+                    return AgentResult(
+                        success=False,
+                        data={},
+                        error=f"Policy blocked: {decision.reason}",
+                        duration_ms=0,
+                    )
+            except Exception as exc:
+                logger.warning(f"Policy check failed (allowing): {exc}")
+
+        # ── Build state dict from task + context ────
         state: dict[str, Any] = {
             "task_id": task.task_id,
             "task_type": task.task_type,
@@ -94,7 +136,6 @@ class BaseAgentAdapter:
             **task.input_data,
         }
 
-        # Inject context fields that legacy agents may expect
         if context.document_id:
             state.setdefault("document_id", context.document_id)
         if context.user_id:
@@ -104,7 +145,6 @@ class BaseAgentAdapter:
         if context.session_id:
             state.setdefault("session_id", context.session_id)
 
-        # Merge constraints
         if task.constraints:
             state.setdefault("constraints", task.constraints)
 
@@ -119,7 +159,7 @@ class BaseAgentAdapter:
             old_result = self._agent.execute(state)
             elapsed_ms = int(time.monotonic_ns() // 1_000_000 - start_ms)
 
-            return AgentResult(
+            result = AgentResult(
                 success=old_result.success,
                 data=old_result.data if isinstance(old_result.data, dict) else {"raw": old_result.data},
                 error=old_result.error,
@@ -131,11 +171,42 @@ class BaseAgentAdapter:
                 metadata=old_result.metadata if old_result.metadata else {},
             )
 
+            # ── Audit log success ───────────────────
+            if self._audit_logger:
+                try:
+                    await self._audit_logger.log(
+                        actor=f"agent:{self._agent_id}",
+                        action=action_name,
+                        target=context.document_id or task.task_id,
+                        payload={"duration_ms": elapsed_ms, "success": result.success},
+                        result="success" if result.success else "failed",
+                        session_id=context.session_id,
+                    )
+                except Exception:
+                    pass  # audit failure must not break agent execution
+
+            return result
+
         except Exception as exc:
             elapsed_ms = int(time.monotonic_ns() // 1_000_000 - start_ms)
             logger.error(
                 f"BaseAgentAdapter[{self._agent_id}] failed: {exc}"
             )
+
+            # ── Audit log failure ───────────────────
+            if self._audit_logger:
+                try:
+                    await self._audit_logger.log(
+                        actor=f"agent:{self._agent_id}",
+                        action=action_name,
+                        target=context.document_id or task.task_id,
+                        payload={"error": str(exc), "duration_ms": elapsed_ms},
+                        result="failed",
+                        session_id=context.session_id,
+                    )
+                except Exception:
+                    pass
+
             return AgentResult(
                 success=False,
                 data={},

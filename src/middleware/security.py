@@ -83,13 +83,30 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             '/api/v1/auth/demo-activate': 10 * multiplier,
         }
 
+        # Prefix-based limits for expensive AI/LLM endpoints (per minute per IP)
+        self.prefix_limits = {
+            '/api/v1/contracts/analyze': 10 * multiplier,    # LLM analysis
+            '/api/v1/contracts/generate': 5 * multiplier,    # LLM generation
+            '/api/v1/contracts/disagreements': 5 * multiplier,  # LLM generation
+            '/api/v1/bridge/analyze': 10 * multiplier,       # External bridge
+            '/api/v1/ml/compose': 15 * multiplier,           # Smart composer
+            '/api/v1/ml/predict': 20 * multiplier,           # Risk prediction
+        }
+
     async def dispatch(self, request: Request, call_next):
         # Get client IP
         client_ip = self._get_client_ip(request)
 
-        # Check rate limit
+        # Check rate limit — exact match first, then prefix match for AI endpoints
         path = request.url.path
-        limit = self.endpoint_limits.get(path, self.requests_per_minute)
+        limit = self.endpoint_limits.get(path)
+        if limit is None:
+            for prefix, prefix_limit in self.prefix_limits.items():
+                if path.startswith(prefix):
+                    limit = prefix_limit
+                    break
+            else:
+                limit = self.requests_per_minute
 
         if not self._allow_request(client_ip, limit):
             return JSONResponse(
