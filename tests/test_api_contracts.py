@@ -81,3 +81,89 @@ class TestGetContract:
     def test_get_contract_no_auth(self, client):
         resp = client.get("/api/v1/contracts/some-id")
         assert resp.status_code in (401, 422)
+
+
+class TestDeleteContract:
+    """DELETE /api/v1/contracts/{contract_id}"""
+
+    def test_delete_contract(self, client, auth_headers):
+        # Upload first
+        content = "Договор для удаления."
+        file = io.BytesIO(content.encode("utf-8"))
+        upload_resp = client.post(
+            "/api/v1/contracts/upload",
+            headers=auth_headers,
+            files={"file": ("delete_me.txt", file, "text/plain")},
+            data={"document_type": "contract"},
+        )
+        assert upload_resp.status_code == 200
+        contract_id = upload_resp.json()["contract_id"]
+
+        # Delete
+        resp = client.delete(f"/api/v1/contracts/{contract_id}", headers=auth_headers)
+        assert resp.status_code == 200
+
+        # Verify gone or marked deleted
+        get_resp = client.get(f"/api/v1/contracts/{contract_id}", headers=auth_headers)
+        # Either 404 (hard delete) or status == 'deleted' (soft delete)
+        if get_resp.status_code == 200:
+            assert get_resp.json()["contract"]["status"] == "deleted"
+        else:
+            assert get_resp.status_code == 404
+
+    def test_delete_nonexistent(self, client, auth_headers):
+        resp = client.delete("/api/v1/contracts/nonexistent-id", headers=auth_headers)
+        assert resp.status_code == 404
+
+    def test_delete_no_auth(self, client):
+        resp = client.delete("/api/v1/contracts/some-id")
+        assert resp.status_code in (401, 422)
+
+
+class TestDownloadContract:
+    """GET /api/v1/contracts/{contract_id}/download"""
+
+    def test_download_after_upload(self, client, auth_headers):
+        content = "Договор для скачивания."
+        file = io.BytesIO(content.encode("utf-8"))
+        upload_resp = client.post(
+            "/api/v1/contracts/upload",
+            headers=auth_headers,
+            files={"file": ("download_me.txt", file, "text/plain")},
+            data={"document_type": "contract"},
+        )
+        assert upload_resp.status_code == 200
+        contract_id = upload_resp.json()["contract_id"]
+
+        resp = client.get(f"/api/v1/contracts/{contract_id}/download", headers=auth_headers)
+        assert resp.status_code == 200
+        assert b"\xd0\x94\xd0\xbe\xd0\xb3\xd0\xbe\xd0\xb2\xd0\xbe\xd1\x80" in resp.content  # "Договор" in UTF-8
+
+    def test_download_nonexistent(self, client, auth_headers):
+        resp = client.get("/api/v1/contracts/nonexistent-id/download", headers=auth_headers)
+        assert resp.status_code == 404
+
+    def test_download_no_auth(self, client):
+        resp = client.get("/api/v1/contracts/some-id/download")
+        assert resp.status_code in (401, 422)
+
+
+class TestContractPagination:
+    """Pagination and filtering for contract list"""
+
+    def test_pagination_params(self, client, auth_headers):
+        resp = client.get("/api/v1/contracts?page=1&page_size=5", headers=auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["page"] == 1
+        assert data["page_size"] == 5
+
+    def test_page_size_capped(self, client, auth_headers):
+        resp = client.get("/api/v1/contracts?page_size=999", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["page_size"] <= 100
+
+    def test_search_filter(self, client, auth_headers):
+        resp = client.get("/api/v1/contracts?search=несуществующий", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json()["total"] == 0

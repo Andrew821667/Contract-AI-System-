@@ -14,7 +14,7 @@ from fastapi.security import OAuth2PasswordBearer
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from src.models.database import get_db
+from src.models.database import get_db, get_async_db
 from src.models.auth_models import User, UserSession
 from src.services.auth_service import AuthService
 
@@ -216,19 +216,28 @@ async def get_optional_org_id(
     return x_organization_id
 
 
-def get_contract_with_access(contract_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def get_contract_with_access(
+    contract_id: str,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_async_db),
+):
     """
     Load contract by ID and verify the current user has access.
 
     Raises 404 if not found, 403 if user is not the assignee/admin.
-    Use as a FastAPI dependency to eliminate repeated load+check boilerplate.
-
-    Usage:
-        @router.get("/contracts/{contract_id}/...")
-        async def endpoint(contract = Depends(get_contract_with_access)):
+    Works with both async (asyncpg) and sync (SQLite) sessions.
     """
-    from src.models.database import Contract
-    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    from sqlalchemy import select
+    from src.models.database import AsyncSessionLocal
+    from src.models import Contract
+
+    stmt = select(Contract).where(Contract.id == contract_id)
+    if AsyncSessionLocal is not None:
+        result = await db.execute(stmt)
+        contract = result.scalar_one_or_none()
+    else:
+        contract = db.execute(stmt).scalar_one_or_none()
+
     if not contract:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
     if contract.assigned_to != current_user.id and current_user.role != "admin":

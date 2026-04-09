@@ -19,7 +19,7 @@ from src.models.database import get_async_db, AsyncSessionLocal
 from src.models import Contract, AnalysisResult
 from src.models.auth_models import User
 from src.models.analyzer_models import ContractRisk, ContractRecommendation
-from src.api.dependencies import get_current_user
+from src.api.dependencies import get_current_user, get_contract_with_access
 
 from .schemas import ContractListResponse
 
@@ -166,32 +166,12 @@ async def list_contracts(
 
 @router.get('/{contract_id}')
 async def get_contract_details(
-    contract_id: str,
-    current_user: User = Depends(get_current_user),
+    contract: Contract = Depends(get_contract_with_access),
     db=Depends(get_async_db),
 ):
     """Get contract details including the latest analysis results."""
     try:
-        stmt = select(Contract).where(Contract.id == contract_id)
-
-        if _ASYNC_MODE:
-            result = await db.execute(stmt)
-            contract = result.scalar_one_or_none()
-        else:
-            contract = db.execute(stmt).scalar_one_or_none()
-
-        if not contract:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail='Contract not found',
-            )
-
-        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to view this contract",
-            )
-
+        contract_id = contract.id
         # Get latest analysis result if available
         analysis_stmt = (
             select(AnalysisResult)
@@ -332,32 +312,10 @@ async def get_contract_details(
 
 @router.get('/{contract_id}/download')
 async def download_contract(
-    contract_id: str,
-    current_user: User = Depends(get_current_user),
-    db=Depends(get_async_db),
+    contract: Contract = Depends(get_contract_with_access),
 ):
     """Download original contract file."""
     try:
-        stmt = select(Contract).where(Contract.id == contract_id)
-
-        if _ASYNC_MODE:
-            result = await db.execute(stmt)
-            contract = result.scalar_one_or_none()
-        else:
-            contract = db.execute(stmt).scalar_one_or_none()
-
-        if not contract:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail='Contract not found',
-            )
-
-        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to download this contract",
-            )
-
         if not os.path.exists(contract.file_path):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
