@@ -27,13 +27,23 @@ jobs:
         run: |
           flake8 src/ --max-line-length=120 --ignore=E501,W503,E402 --count --show-source --statistics
 
-      - name: Run tests
+      - name: Run tests with coverage
         env:
           SECRET_KEY: test-secret-key-for-ci
           APP_ENV: testing
           DATABASE_URL: sqlite:///./test_ci.db
         run: |
-          pytest tests/ -v --tb=short -q -k "not llm and not openai and not deepseek and not anthropic"
+          pip install pytest-cov
+          pytest tests/ -v --tb=short -q \
+            -k "not llm and not openai and not deepseek and not anthropic" \
+            --cov=src --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
 
   # Frontend: lint + build
   frontend:

@@ -216,6 +216,26 @@ async def get_optional_org_id(
     return x_organization_id
 
 
+def get_contract_with_access(contract_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Load contract by ID and verify the current user has access.
+
+    Raises 404 if not found, 403 if user is not the assignee/admin.
+    Use as a FastAPI dependency to eliminate repeated load+check boilerplate.
+
+    Usage:
+        @router.get("/contracts/{contract_id}/...")
+        async def endpoint(contract = Depends(get_contract_with_access)):
+    """
+    from src.models.database import Contract
+    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not contract:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
+    if contract.assigned_to != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    return contract
+
+
 def require_permission(permission: str):
     """
     Factory for RBAC permission checks (L5).
