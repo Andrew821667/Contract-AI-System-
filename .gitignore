@@ -137,6 +137,7 @@ data/contracts/*.docx
 data/contracts/*.doc
 data/contracts/*.txt
 data/chromadb/
+data/chroma_enhanced/
 
 # Temporary MD files
 СРОЧНО_*.md
@@ -153,4 +154,6 @@ frontend/node_modules/
 frontend/next-env.d.ts
 frontend/.next
 frontend/build
+frontend/playwright-report/
+frontend/test-results/
 create_test_users.py
