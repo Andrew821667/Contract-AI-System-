@@ -159,9 +159,8 @@ class RAGService:
         query_embedding = await self._generate_embedding(query_text)
 
         # Search in contracts_core using pgvector
-        similarity_expr = text(
-            "1 - (embedding <=> CAST(:query_embedding AS vector))"
-        )
+        # SECURITY: similarity_expr is always a static text() literal, never user input
+        similarity_expr = "1 - (embedding <=> CAST(:query_embedding AS vector))"
 
         query_sql = select(
             text(f"id, doc_number, signed_date, total_amount, status, "

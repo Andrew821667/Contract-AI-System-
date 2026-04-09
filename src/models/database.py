@@ -387,8 +387,8 @@ else:
     engine = create_engine(
         DATABASE_URL,
         echo=False,
-        pool_size=20,
-        max_overflow=40,
+        pool_size=10,
+        max_overflow=20,
         pool_pre_ping=True,  # Detect stale connections
         pool_recycle=300,     # Recycle connections after 5 minutes
     )
@@ -436,8 +436,8 @@ if not DATABASE_URL.startswith("sqlite"):
         async_engine = create_async_engine(
             ASYNC_DATABASE_URL,
             echo=False,
-            pool_size=20,
-            max_overflow=40,
+            pool_size=10,
+            max_overflow=20,
             pool_pre_ping=True,
             pool_recycle=300,
         )

@@ -135,3 +135,46 @@ def test_batch_prompt_includes_contract_context_and_user_input_rules():
     assert 'не выдумывай значения' in prompt
     assert 'нужно запросить у пользователя' in prompt
     assert 'предметом договора' in prompt.lower()
+
+
+def test_prompts_require_checking_independent_character_of_linked_agreement():
+    analyzer = RiskAnalyzer(_DummyLLM())
+    batch_prompt = analyzer._build_batch_analysis_prompt(
+        clauses=[
+            {
+                'id': '1',
+                'type': 'general',
+                'title': 'Соглашение об урегулировании',
+                'text': 'Настоящее соглашение заключено в связи с договором оказания услуг, но устанавливает самостоятельный порядок компенсации и сроки исполнения.',
+            }
+        ],
+        rag_context={},
+        analysis_context={
+            'analysis_date': '2026-04-02',
+            'analysis_perspective': 'Заказчик',
+        },
+    )
+    detailed_prompt = analyzer._build_detailed_analysis_prompt(
+        {
+            'id': '1',
+            'type': 'general',
+            'title': 'Соглашение об урегулировании',
+            'text': 'Настоящее соглашение заключено в связи с основным договором и содержит отдельные обязательства сторон.',
+        },
+        rag_context={},
+        analysis_context={
+            'analysis_date': '2026-04-02',
+            'analysis_perspective': 'Заказчик',
+        },
+    )
+    generator = RecommendationGenerator(_DummyLLM())
+    recommendations_prompt = generator._build_recommendations_prompt(
+        [],
+        rag_context={},
+        required_fields=[],
+    )
+
+    expected_phrase = 'самостоятельный предмет'
+    assert expected_phrase in batch_prompt.lower()
+    assert expected_phrase in detailed_prompt.lower()
+    assert expected_phrase in recommendations_prompt.lower()

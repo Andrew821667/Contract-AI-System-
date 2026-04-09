@@ -47,7 +47,8 @@ def verify_bridge_secret(x_bridge_secret: str = Header(..., alias="X-Bridge-Secr
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Bridge not configured (BRIDGE_SECRET not set)"
         )
-    if x_bridge_secret != BRIDGE_SECRET:
+    import hmac
+    if not hmac.compare_digest(x_bridge_secret, BRIDGE_SECRET):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid bridge secret"
@@ -164,13 +165,15 @@ async def bridge_analyze(
     if not user:
         # Создаём bridge-пользователя с ролью demo
         import uuid
+        import secrets
         user = User(
             id=str(uuid.uuid4()),
             email=user_email,
             name=user_name or user_email.split("@")[0],
             role="demo",
-            hashed_password="bridge_sso_user",  # Не может войти по паролю
+            password_hash=f"!bridge_sso_{secrets.token_hex(16)}",  # Non-loginable marker
             is_active=True,
+            email_verified=True,
         )
         db.add(user)
         db.commit()

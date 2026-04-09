@@ -107,15 +107,19 @@ async def export_contract(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
         _ensure_contract_access(contract, current_user)
 
+        import asyncio
+
         if request_data.export_format == 'all':
-            agent = _build_export_agent(db)
-            result = agent.execute({
-                'contract_id': request_data.contract_id,
-                'export_format': request_data.export_format,
-                'include_analysis': request_data.include_analysis,
-                'allow_lossy_conversion': request_data.allow_lossy_conversion,
-                'user_id': current_user.id,
-            })
+            def _run_all():
+                agent = _build_export_agent(db)
+                return agent.execute({
+                    'contract_id': request_data.contract_id,
+                    'export_format': request_data.export_format,
+                    'include_analysis': request_data.include_analysis,
+                    'allow_lossy_conversion': request_data.allow_lossy_conversion,
+                    'user_id': current_user.id,
+                })
+            result = await asyncio.to_thread(_run_all)
             if result.success:
                 logger.info(f"Contract exported: {request_data.contract_id} to {request_data.export_format}")
                 return result.data
@@ -124,7 +128,8 @@ async def export_contract(
                 detail=f"Export failed: {result.error}",
             )
 
-        file_path = _run_single_export(
+        file_path = await asyncio.to_thread(
+            _run_single_export,
             contract_id=request_data.contract_id,
             export_format=request_data.export_format,
             include_analysis=request_data.include_analysis,
@@ -164,7 +169,9 @@ async def download_exported_contract(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
         _ensure_contract_access(contract, current_user)
 
-        file_path = _run_single_export(
+        import asyncio
+        file_path = await asyncio.to_thread(
+            _run_single_export,
             contract_id=contract_id,
             export_format=format,
             include_analysis=include_analysis,
@@ -219,8 +226,9 @@ async def export_annotated_docx(
         )
 
     try:
+        import asyncio
         service = AnnotatedDocxService()
-        docx_bytes = service.create_annotated_docx(contract, analysis, db)
+        docx_bytes = await asyncio.to_thread(service.create_annotated_docx, contract, analysis, db)
 
         return StreamingResponse(
             BytesIO(docx_bytes),

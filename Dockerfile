@@ -77,4 +77,4 @@ ENTRYPOINT ["/app/docker-entrypoint.sh"]
 # Default command (FastAPI backend)
 # Gunicorn with 4 Uvicorn workers for multi-core utilization.
 # Requires Redis for rate limiting (in-memory rate limiter is per-process).
-CMD ["gunicorn", "src.main:app", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "600", "--graceful-timeout", "60"]
+CMD ["gunicorn", "src.main:app", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "180", "--graceful-timeout", "30"]

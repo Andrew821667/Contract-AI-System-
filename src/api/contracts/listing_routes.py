@@ -24,9 +24,9 @@ from src.api.dependencies import get_current_user
 from .schemas import ContractListResponse
 
 
-_LIST_CACHE_TTL = 30
+_LIST_CACHE_TTL = 10  # Short TTL to reduce staleness across workers
 _list_cache: dict[str, tuple[Any, float]] = {}
-_LIST_CACHE_MAX = 128
+_LIST_CACHE_MAX = 64
 
 
 def _list_cache_key(user_id, page, page_size, status_f, type_f, search, cursor) -> str:

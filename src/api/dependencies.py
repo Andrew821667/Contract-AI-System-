@@ -27,7 +27,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 # 3 DB queries per request (verify_token + session check + user fetch).
 # Uses Redis if available, falls back to in-memory LRU.
 
-_AUTH_CACHE_TTL = 30  # seconds
+_AUTH_CACHE_TTL = 10  # seconds (short to limit revoked-session window)
 _AUTH_CACHE_MAX = 512  # max entries for in-memory fallback
 
 _redis_client = None

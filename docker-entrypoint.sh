@@ -47,8 +47,11 @@ with engine.begin() as conn:
 print('pgvector extension ensured')
 " || echo "WARNING: Failed to ensure PostgreSQL extensions"
 
-echo "==> Recording Alembic schema version..."
-/opt/venv/bin/alembic stamp head >/dev/null 2>&1 && echo "Alembic schema version stamped to head" || echo "WARNING: Alembic schema stamp failed (see container logs for details)"
+echo "==> Running Alembic migrations..."
+/opt/venv/bin/alembic upgrade head 2>&1 && echo "Alembic migrations applied successfully" || {
+    echo "WARNING: Alembic upgrade failed, stamping head as fallback..."
+    /opt/venv/bin/alembic stamp head >/dev/null 2>&1 || true
+}
 
 echo "==> Seeding initial users..."
 python database/seed_users.py || echo "WARNING: User seeding failed (may already exist)"

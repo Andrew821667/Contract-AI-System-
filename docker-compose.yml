@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: contract_ai
       POSTGRES_USER: contract_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_in_production}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     command: ["postgres", "-c", "max_connections=300"]
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -33,13 +33,13 @@ services:
   redis:
     image: redis:7-alpine
     container_name: contract-ai-redis
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-changeme_in_production}
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme_in_production}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "changeme_in_production", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env} ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -59,8 +59,8 @@ services:
       dockerfile: Dockerfile
     container_name: contract-ai-backend
     environment:
-      - DATABASE_URL=postgresql://contract_user:${POSTGRES_PASSWORD:-changeme_in_production}@postgres:5432/contract_ai
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme_in_production}@redis:6379/0
+      - DATABASE_URL=postgresql://contract_user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/contract_ai
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}@redis:6379/0
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_USER=contract_user
@@ -99,6 +99,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
     networks:
       - contract-ai-network
     restart: always
@@ -109,10 +114,10 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: contract-ai-streamlit
-    command: ["streamlit", "run", "admin/streamlit_dashboard.py", "--server.port=8502", "--server.address=0.0.0.0", "--server.baseUrlPath=streamlit-admin", "--server.enableXsrfProtection=false", "--server.enableCORS=false"]
+    command: ["streamlit", "run", "admin/streamlit_dashboard.py", "--server.port=8502", "--server.address=0.0.0.0", "--server.baseUrlPath=streamlit-admin", "--server.enableXsrfProtection=true", "--server.enableCORS=false"]
     environment:
-      - DATABASE_URL=postgresql://contract_user:${POSTGRES_PASSWORD:-changeme_in_production}@postgres:5432/contract_ai
-      - REDIS_URL=redis://:${REDIS_PASSWORD:-changeme_in_production}@redis:6379/0
+      - DATABASE_URL=postgresql://contract_user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/contract_ai
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}@redis:6379/0
       - APP_ENV=${APP_ENV:-development}
       - SECRET_KEY=${SECRET_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}

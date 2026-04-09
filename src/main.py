@@ -16,18 +16,23 @@ from loguru import logger
 
 # Configure logging
 logger.remove()
-logger.add(
-    sys.stdout,
-    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-    level="INFO",
-    colorize=True
-)
+_is_production = os.getenv("APP_ENV") == "production"
+if _is_production:
+    # JSON format for machine parsing in production (ELK, CloudWatch, etc.)
+    logger.add(sys.stdout, serialize=True, level="INFO")
+else:
+    logger.add(
+        sys.stdout,
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+        level="INFO",
+        colorize=True,
+    )
 logger.add(
     "logs/api.log",
     rotation="10 MB",
     retention="30 days",
     level="DEBUG",
-    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
 )
 
 # Import settings
@@ -177,11 +182,34 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Health check
 @app.get("/health", tags=["Health"])
 async def health_check() -> Dict[str, Any]:
-    """Health check endpoint"""
+    """Health check endpoint — verifies DB and Redis connectivity."""
+    checks = {}
+
+    # Check PostgreSQL
+    try:
+        db = SessionLocal()
+        from sqlalchemy import text as sa_text
+        db.execute(sa_text("SELECT 1"))
+        db.close()
+        checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"error: {type(e).__name__}"
+
+    # Check Redis
+    try:
+        import redis
+        r = redis.Redis.from_url(settings.redis_url, socket_connect_timeout=2)
+        r.ping()
+        checks["redis"] = "ok"
+    except Exception:
+        checks["redis"] = "unavailable"
+
+    all_ok = all(v == "ok" for v in checks.values())
     return {
-        "status": "healthy",
+        "status": "healthy" if all_ok else "degraded",
         "version": "1.0.0",
-        "service": "Contract AI System API"
+        "service": "Contract AI System API",
+        "checks": checks,
     }
 
 

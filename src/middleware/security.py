@@ -329,7 +329,8 @@ def setup_cors(app):
             "User-Agent",
             "DNT",
             "Cache-Control",
-            "X-Requested-With"
+            "X-Requested-With",
+            "X-Organization-Id",
         ],
         expose_headers=["Content-Length", "X-Total-Count"],
         max_age=600,  # Cache preflight requests for 10 minutes
