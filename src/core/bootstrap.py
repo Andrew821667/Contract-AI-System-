@@ -248,8 +248,21 @@ def bootstrap(db: Session) -> CoreServices:
     svc.integrity = IntegrityService(db)
 
     # ── 14. Bootstrap tools & agents ─────────────────────────────────
-    _register_tools(svc.tool_registry)
-    _bootstrap_agents(svc.agent_registry, db, svc.audit_service, svc.policy_resolver)
+    # LLM gateway for tool services that need it
+    try:
+        from src.services.llm_gateway import LLMGateway
+        _llm = LLMGateway()
+    except Exception:
+        _llm = None
+
+    _register_tools(svc.tool_registry, db, _llm)
+
+    # Wire WorkflowTool to already-initialized WorkflowEngineService
+    wf_tool = svc.tool_registry.get("workflow_manager")
+    if wf_tool and svc.workflow_engine:
+        wf_tool._engine = svc.workflow_engine
+
+    _bootstrap_agents(svc.agent_registry, db, _llm, svc.audit_service, svc.policy_resolver)
 
     logger.info(
         f"Core services bootstrapped: "
@@ -260,8 +273,8 @@ def bootstrap(db: Session) -> CoreServices:
     return svc
 
 
-def _register_tools(registry: ToolRegistryService) -> None:
-    """Зарегистрировать все tool-адаптеры (без инициализации сервисов — lazy)."""
+def _register_tools(registry: ToolRegistryService, db: Session, llm_gateway=None) -> None:
+    """Зарегистрировать tool-адаптеры с реальными сервисами (graceful — None если сервис недоступен)."""
     from src.core.tools.adapters import (
         AnalyticsTool,
         ClauseExtractorTool,
@@ -282,26 +295,116 @@ def _register_tools(registry: ToolRegistryService) -> None:
         WorkflowTool,
     )
 
-    # Регистрируем без реального сервиса (lazy init при первом вызове)
+    def _try_create(name: str, factory):
+        """Create service instance, return None on failure."""
+        try:
+            return factory()
+        except Exception as exc:
+            logger.warning(f"Tool service '{name}' init failed (will be unavailable): {exc}")
+            return None
+
+    # ── No-dependency services ───────────────────
+    from src.services.document_parser import DocumentParser
+    from src.services.clause_extractor import ClauseExtractor
+    from src.services.complexity_scorer import ComplexityScorer
+    from src.services.document_diff_service import DocumentDiffService
+    from src.services.validation_service import ValidationService
+
+    parser = _try_create("DocumentParser", DocumentParser)
+    clause_extractor = _try_create("ClauseExtractor", ClauseExtractor)
+    complexity = _try_create("ComplexityScorer", ComplexityScorer)
+    diff_svc = _try_create("DocumentDiffService", DocumentDiffService)
+    validation = _try_create("ValidationService", ValidationService)
+
+    # RiskScorer — module-level class, no __init__
+    risk_scorer = None
+    try:
+        from src.services.risk_scorer import RiskScorer
+        risk_scorer = RiskScorer()
+    except Exception as exc:
+        logger.warning(f"RiskScorer init failed: {exc}")
+
+    # ── LLM-dependent services ───────────────────
+    smart_composer = None
+    recommendation = None
+    if llm_gateway:
+        try:
+            from src.services.smart_composer import SmartComposer
+            smart_composer = SmartComposer(llm_gateway=llm_gateway)
+        except Exception as exc:
+            logger.warning(f"SmartComposer init failed: {exc}")
+        try:
+            from src.services.recommendation_generator import RecommendationGenerator
+            recommendation = RecommendationGenerator(llm_gateway=llm_gateway)
+        except Exception as exc:
+            logger.warning(f"RecommendationGenerator init failed: {exc}")
+
+    # ── DB-dependent services ────────────────────
+    analytics = _try_create("AnalyticsService", lambda: __import__(
+        "src.services.analytics_service", fromlist=["AnalyticsService"]
+    ).AnalyticsService(db_session=db))
+
+    clause_library = _try_create("ClauseLibraryService", lambda: __import__(
+        "src.services.clause_library_service", fromlist=["ClauseLibraryService"]
+    ).ClauseLibraryService(db_session=db))
+
+    knowledge_base = _try_create("KnowledgeBaseService", lambda: __import__(
+        "src.services.knowledge_base_service", fromlist=["KnowledgeBaseService"]
+    ).KnowledgeBaseService(db=db))
+
+    template_manager = _try_create("TemplateManager", lambda: __import__(
+        "src.services.template_manager", fromlist=["TemplateManager"]
+    ).TemplateManager(db_session=db))
+
+    # ── Optional external services ───────────────
+    counterparty = _try_create("CounterpartyService", lambda: __import__(
+        "src.services.counterparty_service", fromlist=["CounterpartyService"]
+    ).CounterpartyService())
+
+    ocr = _try_create("OCRService", lambda: __import__(
+        "src.services.ocr_service", fromlist=["OCRService"]
+    ).OCRService())
+
+    contract_gen = _try_create("ContractGenerationService", lambda: __import__(
+        "src.services.contract_generation_service", fromlist=["ContractGenerationService"]
+    ).ContractGenerationService())
+
+    # RAG — singleton from enhanced_rag
+    rag = None
+    try:
+        from src.services.enhanced_rag import get_enhanced_rag
+        rag = get_enhanced_rag()
+    except Exception as exc:
+        logger.warning(f"EnhancedRAG init failed: {exc}")
+
     tools = [
-        DocumentParserTool(None),
-        RiskScorerTool(None),
-        ClauseExtractorTool(None),
-        ContractGeneratorTool(None),
-        RAGSearchTool(None),
-        ComplexityScorerTool(None),
-        CounterpartyTool(None),
-        DocumentDiffTool(None),
-        SmartComposerTool(None),
-        RecommendationTool(None),
-        ClauseLibraryTool(None),
-        KnowledgeBaseTool(None),
-        AnalyticsTool(None),
-        TemplateManagerTool(None),
-        ValidationTool(None),
-        OCRTool(None),
-        WorkflowTool(None),
+        DocumentParserTool(parser),
+        RiskScorerTool(risk_scorer),
+        ClauseExtractorTool(clause_extractor),
+        ContractGeneratorTool(contract_gen),
+        RAGSearchTool(rag),
+        ComplexityScorerTool(complexity),
+        CounterpartyTool(counterparty),
+        DocumentDiffTool(diff_svc),
+        SmartComposerTool(smart_composer),
+        RecommendationTool(recommendation),
+        ClauseLibraryTool(clause_library),
+        KnowledgeBaseTool(knowledge_base),
+        AnalyticsTool(analytics),
+        TemplateManagerTool(template_manager),
+        ValidationTool(validation),
+        OCRTool(ocr),
+        WorkflowTool(None),  # Uses core WorkflowEngineService, wired separately
     ]
+
+    services = [
+        parser, risk_scorer, clause_extractor, contract_gen, rag,
+        complexity, counterparty, diff_svc, smart_composer, recommendation,
+        clause_library, knowledge_base, analytics, template_manager,
+        validation, ocr, None,  # WorkflowTool wired separately
+    ]
+    initialized = sum(1 for s in services if s is not None)
+    logger.info(f"Tool services initialized: {initialized}/{len(tools)}")
 
     for tool in tools:
         registry.register(tool)
@@ -310,17 +413,20 @@ def _register_tools(registry: ToolRegistryService) -> None:
 def _bootstrap_agents(
     registry: AgentRegistryService,
     db: Session,
+    llm_gateway=None,
     audit_logger=None,
     policy_resolver=None,
 ) -> None:
     """Зарегистрировать агентов (graceful — не ломается при ошибке импорта)."""
     try:
         from src.core.agents.adapters.registry_bootstrap import bootstrap_agent_registry
-        from src.services.llm_gateway import LLMGateway
 
-        llm = LLMGateway()
+        if llm_gateway is None:
+            from src.services.llm_gateway import LLMGateway
+            llm_gateway = LLMGateway()
+
         bootstrap_agent_registry(
-            registry, db, llm,
+            registry, db, llm_gateway,
             audit_logger=audit_logger,
             policy_resolver=policy_resolver,
         )

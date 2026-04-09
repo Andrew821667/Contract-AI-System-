@@ -82,8 +82,25 @@ class BaseToolAdapter:
         except jsonschema.ValidationError as e:
             return ValidationResult(valid=False, errors=[e.message])
 
+    def _get_service(self) -> Any:
+        """Return the wrapped service. Override in subclasses if attribute name differs."""
+        # Convention: first non-None private attr that isn't _tool_id etc.
+        for attr in vars(self):
+            if attr.startswith("_") and attr not in (
+                "_tool_id", "_name", "_description", "_input_schema",
+                "_output_schema", "_permissions", "_policy_tags",
+                "_risk_level", "_sync_mode",
+            ):
+                return getattr(self, attr, None)
+        return None
+
     async def execute(self, input_data: dict[str, Any], context: ToolContext) -> ToolResult:
         """Точка входа — делегирует в _do_execute с логированием ошибок."""
+        if self._get_service() is None:
+            return ToolResult(
+                success=False,
+                error=f"Tool '{self._tool_id}' недоступен: сервис не инициализирован",
+            )
         try:
             return await self._do_execute(input_data, context)
         except Exception as e:
