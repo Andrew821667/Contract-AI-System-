@@ -1190,12 +1190,11 @@ async def sso_token_exchange(
         additional_claims={"source": "sso_bridge", "org_id": request.org_id}
     )
 
-    # URL для редиректа (фронтенд Contract-AI-System)
-    # TODO: передавать токен через POST/fragment (#token=...) вместо query-param,
-    # чтобы он не утекал через Referer/логи/историю браузера
+    # URL для редиректа — токен в fragment (#), не в query-param (?).
+    # Fragment не отправляется серверу, не попадает в Referer/логи/историю.
     ngrok_url = os.getenv("NGROK_URL", "")
     base_url = ngrok_url if ngrok_url else "http://localhost:8090"
-    redirect_url = f"{base_url}/auth/sso?token={access_token}"
+    redirect_url = f"{base_url}/auth/sso#token={access_token}"
 
     return SSOTokenResponse(
         access_token=access_token,
