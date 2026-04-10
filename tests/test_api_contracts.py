@@ -84,40 +84,25 @@ class TestGetContract:
 
 
 class TestDeleteContract:
-    """DELETE /api/v1/contracts/{contract_id}"""
+    """DELETE /api/v1/contracts/{contract_id} (admin only)"""
 
-    def test_delete_contract(self, client, auth_headers):
-        # Upload first
-        content = "Договор для удаления."
-        file = io.BytesIO(content.encode("utf-8"))
-        upload_resp = client.post(
-            "/api/v1/contracts/upload",
+    def test_delete_requires_admin(self, client, auth_headers):
+        """Regular users cannot delete contracts"""
+        resp = client.request(
+            "DELETE",
+            "/api/v1/contracts/some-id",
             headers=auth_headers,
-            files={"file": ("delete_me.txt", file, "text/plain")},
-            data={"document_type": "contract"},
+            json={"reason": "test"},
         )
-        assert upload_resp.status_code == 200
-        contract_id = upload_resp.json()["contract_id"]
-
-        # Delete
-        resp = client.delete(f"/api/v1/contracts/{contract_id}", headers=auth_headers)
-        assert resp.status_code == 200
-
-        # Verify gone or marked deleted
-        get_resp = client.get(f"/api/v1/contracts/{contract_id}", headers=auth_headers)
-        # Either 404 (hard delete) or status == 'deleted' (soft delete)
-        if get_resp.status_code == 200:
-            assert get_resp.json()["contract"]["status"] == "deleted"
-        else:
-            assert get_resp.status_code == 404
-
-    def test_delete_nonexistent(self, client, auth_headers):
-        resp = client.delete("/api/v1/contracts/nonexistent-id", headers=auth_headers)
-        assert resp.status_code == 404
+        assert resp.status_code == 403
 
     def test_delete_no_auth(self, client):
-        resp = client.delete("/api/v1/contracts/some-id")
-        assert resp.status_code in (401, 422)
+        resp = client.request(
+            "DELETE",
+            "/api/v1/contracts/some-id",
+            json={"reason": "test"},
+        )
+        assert resp.status_code in (401, 403, 422)
 
 
 class TestDownloadContract:

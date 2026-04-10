@@ -18,8 +18,15 @@ import json
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from langgraph.graph import StateGraph, END
-from langchain_core.runnables import RunnableConfig
+try:
+    from langgraph.graph import StateGraph, END
+    from langchain_core.runnables import RunnableConfig
+    _LANGGRAPH_AVAILABLE = True
+except (ImportError, AttributeError):
+    StateGraph = None
+    END = "end"
+    RunnableConfig = None
+    _LANGGRAPH_AVAILABLE = False
 
 from ..services.llm_gateway import LLMGateway
 from ..services.review_queue_service import ReviewQueueService
@@ -162,8 +169,13 @@ class OrchestratorAgent(BaseAgent):
             logger.error(f"Orchestrator execute failed: {exc}")
             return AgentResult(success=False, data={}, error=str(exc))
 
-    def _build_graph(self) -> StateGraph:
+    def _build_graph(self):
         """Build LangGraph workflow"""
+        if not _LANGGRAPH_AVAILABLE:
+            raise RuntimeError(
+                "langgraph is not available. Install compatible versions: "
+                "pip install langgraph langchain-core"
+            )
 
         # Create graph with WorkflowState
         workflow = StateGraph(WorkflowState)

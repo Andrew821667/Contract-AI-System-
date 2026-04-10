@@ -12,7 +12,6 @@ addopts = [
     "-v",
     "--strict-markers",
     "--tb=short",
-    "-x",
 ]
 markers = [
     "slow: marks tests that take > 10s (deselect with -m 'not slow')",
