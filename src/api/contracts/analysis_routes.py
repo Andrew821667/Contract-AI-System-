@@ -28,7 +28,7 @@ from src.services.clause_library_service import ClauseLibraryService
 from src.services.clause_extractor import ClauseExtractor
 from src.utils.xml_security import parse_xml_safely
 from config.settings import settings
-from src.api.dependencies import get_current_user
+from src.api.dependencies import get_current_user, get_contract_with_access_sync
 
 from .schemas import (
     AnalysisResultRequest,
@@ -490,21 +490,12 @@ async def update_recommendation_decision(
     contract_id: str,
     recommendation_id: int,
     request_data: RecommendationDecisionRequest,
+    contract: Contract = Depends(get_contract_with_access_sync),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Persist user decision for a recommendation to build a final result set."""
     try:
-        contract = db.query(Contract).filter(Contract.id == contract_id).first()
-        if not contract:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Contract not found')
-
-        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You don't have permission to update this contract",
-            )
-
         analysis = (
             db.query(AnalysisResult)
             .filter(AnalysisResult.contract_id == contract_id)
@@ -567,16 +558,10 @@ async def update_recommendation_decision(
 @router.post("/{contract_id}/analyze/cancel")
 async def cancel_analysis(
     contract_id: str,
+    contract: Contract = Depends(get_contract_with_access_sync),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Cancel a running analysis by resetting contract status to uploaded."""
-    contract = db.query(Contract).filter(Contract.id == contract_id).first()
-    if not contract:
-        raise HTTPException(status_code=404, detail="Contract not found")
-
-    if contract.assigned_to != current_user.id and current_user.role != 'admin':
-        raise HTTPException(status_code=403, detail="Forbidden")
 
     if contract.status not in ('analyzing', 'parsing'):
         raise HTTPException(status_code=409, detail="Анализ не запущен")
@@ -595,6 +580,7 @@ async def cancel_analysis(
 @router.post("/{contract_id}/analyze/stream")
 async def analyze_contract_stream(
     contract_id: str,
+    contract: Contract = Depends(get_contract_with_access_sync),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -604,13 +590,6 @@ async def analyze_contract_stream(
     """
     import asyncio
     import json as json_mod
-
-    contract = db.query(Contract).filter(Contract.id == contract_id).first()
-    if not contract:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
-
-    if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission")
 
     parsed_xml = (contract.meta_info or {}).get('xml')
     if not parsed_xml:

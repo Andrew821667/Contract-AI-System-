@@ -245,6 +245,22 @@ async def get_contract_with_access(
     return contract
 
 
+def get_contract_with_access_sync(
+    contract_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Sync version of get_contract_with_access for routes using sync DB sessions."""
+    from src.models import Contract
+
+    contract = db.query(Contract).filter(Contract.id == contract_id).first()
+    if not contract:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
+    if contract.assigned_to != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    return contract
+
+
 def require_permission(permission: str):
     """
     Factory for RBAC permission checks (L5).

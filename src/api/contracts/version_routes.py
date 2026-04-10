@@ -18,7 +18,7 @@ from src.models.changes_models import ContractVersion, ContractChange, ChangeAna
 from src.services.document_parser_extended import ExtendedDocumentParser
 from src.services.document_diff_service import DocumentDiffService
 from src.utils.file_validator import save_uploaded_file_securely, FileValidationError
-from src.api.dependencies import get_current_user
+from src.api.dependencies import get_current_user, get_contract_with_access_sync
 
 from .schemas import (
     ContractVersionResponse,
@@ -37,19 +37,12 @@ async def upload_version(
     file: UploadFile = File(...),
     source: str = Form("unknown"),
     description: str = Form(""),
+    contract: Contract = Depends(get_contract_with_access_sync),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Upload a new version of a contract file"""
     try:
-        # Check contract exists
-        contract = db.query(Contract).filter(Contract.id == contract_id).first()
-        if not contract:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
-
-        # Check ownership
-        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission")
 
         # Read and save file
         file_data = await file.read()
@@ -116,18 +109,11 @@ async def upload_version(
 @router.get("/{contract_id}/versions")
 async def list_versions(
     contract_id: str,
-    current_user: User = Depends(get_current_user),
+    contract: Contract = Depends(get_contract_with_access_sync),
     db: Session = Depends(get_db)
 ):
     """List all versions of a contract"""
     try:
-        # Check contract exists
-        contract = db.query(Contract).filter(Contract.id == contract_id).first()
-        if not contract:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
-
-        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission")
 
         versions = db.query(ContractVersion).filter(
             ContractVersion.contract_id == contract_id
@@ -162,18 +148,11 @@ async def list_versions(
 async def compare_versions(
     contract_id: str,
     request_data: CompareRequest,
-    current_user: User = Depends(get_current_user),
+    contract: Contract = Depends(get_contract_with_access_sync),
     db: Session = Depends(get_db)
 ):
     """Compare two versions of a contract"""
     try:
-        # Check contract exists
-        contract = db.query(Contract).filter(Contract.id == contract_id).first()
-        if not contract:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
-
-        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission")
 
         # Load both versions
         from_version = db.query(ContractVersion).filter(

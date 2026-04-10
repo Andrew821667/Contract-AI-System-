@@ -17,7 +17,7 @@ from src.models.auth_models import User
 from src.agents.quick_export_agent import QuickExportAgent
 from src.services.llm_gateway import LLMGateway
 from config.settings import settings
-from src.api.dependencies import get_current_user
+from src.api.dependencies import get_current_user, get_contract_with_access_sync
 
 from .schemas import ExportRequest
 
@@ -159,15 +159,12 @@ async def download_exported_contract(
     format: str = Query(..., pattern='^(docx|pdf|txt|json|xml)$'),
     include_analysis: bool = Query(False),
     allow_lossy_conversion: bool = Query(False),
+    contract: Contract = Depends(get_contract_with_access_sync),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Stream exported file for the frontend download flow."""
     try:
-        contract = db.query(Contract).filter(Contract.id == contract_id).first()
-        if not contract:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
-        _ensure_contract_access(contract, current_user)
 
         import asyncio
         file_path = await asyncio.to_thread(
@@ -199,8 +196,8 @@ async def download_exported_contract(
 @router.get("/{contract_id}/export/annotated-docx")
 async def export_annotated_docx(
     contract_id: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    contract: Contract = Depends(get_contract_with_access_sync),
+    db: Session = Depends(get_db),
 ):
     """
     Export contract as annotated DOCX with highlighted risks.
@@ -209,13 +206,6 @@ async def export_annotated_docx(
     - Comments with risk descriptions
     """
     from src.services.annotated_docx_service import AnnotatedDocxService
-
-    contract = db.query(Contract).filter(Contract.id == contract_id).first()
-    if not contract:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
-
-    if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission")
 
     # Get analysis results
     analysis = db.query(AnalysisResult).filter(AnalysisResult.contract_id == contract_id).first()
