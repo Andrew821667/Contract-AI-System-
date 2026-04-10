@@ -4,16 +4,13 @@ Digital Contract Verification API Routes
 Hash-chain, DAG, and integrity verification endpoints
 """
 import os
-from typing import List, Dict, Any
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from loguru import logger
 
 from src.models.database import get_db, Contract
-from src.models.auth_models import User
 from src.services.digital_service import DigitalContractService
-from src.api.dependencies import get_current_user, get_contract_with_access_sync
+from src.api.dependencies import get_contract_with_access_sync
 
 
 router = APIRouter()

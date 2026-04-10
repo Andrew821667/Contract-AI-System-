@@ -4,8 +4,6 @@ Contract Export Routes
 """
 from io import BytesIO
 from pathlib import Path
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session

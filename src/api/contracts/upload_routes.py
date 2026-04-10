@@ -6,7 +6,6 @@ Performance: Uses streaming upload (shutil.copyfileobj) to avoid loading
 entire file into memory. Validates extension/magic bytes after streaming to disk.
 """
 import os
-import shutil
 import tempfile
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form

@@ -4,7 +4,6 @@ Contract Analysis Routes
 """
 import os
 import re
-import json
 import uuid
 from datetime import datetime
 from typing import Optional, Dict, List, Any
@@ -588,7 +587,6 @@ async def analyze_contract_stream(
     Streaming contract analysis via Server-Sent Events (SSE).
     Sends incremental analysis results as they are generated.
     """
-    import asyncio
     import json as json_mod
 
     parsed_xml = (contract.meta_info or {}).get('xml')
@@ -641,8 +639,6 @@ async def batch_analyze_contracts(
     Start batch analysis of multiple contracts.
     Progress is reported via WebSocket at /ws/batch/{task_id}.
     """
-    import asyncio
-
     # Validate all contracts exist and belong to user
     contract_ids = request_data.contract_ids
     contracts = db.query(Contract).filter(Contract.id.in_(contract_ids)).all()

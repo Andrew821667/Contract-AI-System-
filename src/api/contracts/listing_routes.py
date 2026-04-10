@@ -5,7 +5,6 @@ Contract Listing Routes
 Uses async DB sessions (asyncpg) when available for non-blocking queries.
 Falls back to sync sessions on SQLite (dev mode).
 """
-import json
 import os
 import time
 from typing import Optional, Any, Dict

@@ -2,7 +2,7 @@
 """
 Template Routes — создание шаблонов генерации из проанализированных договоров
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from typing import Optional, List
