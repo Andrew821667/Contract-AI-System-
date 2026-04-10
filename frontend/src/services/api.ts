@@ -31,6 +31,10 @@ import type {
   ClausePolicy, ClauseCheckResult,
   LLMSettingsResponse, LLMStageSettingUpdate,
   WebhookConfig, WebhookDelivery, DomainEvent, EventTypeInfo,
+  GraphAskRequest, GraphAskResponse, GraphSearchRequest, GraphSearchResponse,
+  GraphIngestRequest, GraphIngestResponse, GraphDocumentSummary, GraphDocumentTree,
+  GraphNodeDetail, GraphStats, GraphEntitySummary, GraphCandidateEdge,
+  ProposeEdgeRequest,
 } from './api.types';
 
 
@@ -1206,6 +1210,88 @@ class APIClient {
   async listEventTypes(): Promise<EventTypeInfo[]> {
     const response = await this.client.get<EventTypeInfo[]>(
       '/api/v2/integrations/events/types'
+    );
+    return response.data;
+  }
+
+  // ==================== Graph-RAG ====================
+
+  async graphAsk(body: GraphAskRequest): Promise<GraphAskResponse> {
+    const response = await this.client.post<GraphAskResponse>('/api/v2/graph/ask', body);
+    return response.data;
+  }
+
+  async graphSearch(body: GraphSearchRequest): Promise<GraphSearchResponse> {
+    const response = await this.client.post<GraphSearchResponse>('/api/v2/graph/search', body);
+    return response.data;
+  }
+
+  async graphIngest(body: GraphIngestRequest): Promise<GraphIngestResponse> {
+    const response = await this.client.post<GraphIngestResponse>('/api/v2/graph/ingest', body);
+    return response.data;
+  }
+
+  async graphListDocuments(layer?: string, limit?: number): Promise<{ documents: GraphDocumentSummary[]; count: number }> {
+    const response = await this.client.get<{ documents: GraphDocumentSummary[]; count: number }>(
+      '/api/v2/graph/documents',
+      { params: { layer, limit } }
+    );
+    return response.data;
+  }
+
+  async graphGetDocument(documentId: string, maxDepth?: number): Promise<GraphDocumentTree> {
+    const response = await this.client.get<GraphDocumentTree>(
+      `/api/v2/graph/documents/${documentId}`,
+      { params: { max_depth: maxDepth } }
+    );
+    return response.data;
+  }
+
+  async graphGetNode(nodeId: string, includeContext?: boolean): Promise<GraphNodeDetail> {
+    const response = await this.client.get<GraphNodeDetail>(
+      `/api/v2/graph/nodes/${nodeId}`,
+      { params: { include_context: includeContext } }
+    );
+    return response.data;
+  }
+
+  async graphStats(documentId?: string): Promise<GraphStats> {
+    const response = await this.client.get<GraphStats>(
+      '/api/v2/graph/stats',
+      { params: { document_id: documentId } }
+    );
+    return response.data;
+  }
+
+  async graphEntitySummary(documentId: string): Promise<GraphEntitySummary> {
+    const response = await this.client.get<GraphEntitySummary>(
+      `/api/v2/graph/entities/${documentId}`
+    );
+    return response.data;
+  }
+
+  async graphNormReferences(documentId: string, normCode?: string): Promise<{ references: unknown[]; count: number; by_npa: Record<string, number> }> {
+    const response = await this.client.get(
+      `/api/v2/graph/references/${documentId}`,
+      { params: { norm_code: normCode } }
+    );
+    return response.data;
+  }
+
+  async graphProposeEdge(body: ProposeEdgeRequest): Promise<{ candidate_id: string; status: string; message: string }> {
+    const response = await this.client.post('/api/v2/graph/candidates', body);
+    return response.data;
+  }
+
+  async graphReviewCandidate(candidateId: string, result: 'accepted' | 'rejected' | 'modified', comment?: string): Promise<Record<string, unknown>> {
+    const response = await this.client.post(`/api/v2/graph/candidates/${candidateId}/review`, { result, comment });
+    return response.data;
+  }
+
+  async graphPendingCandidates(limit?: number): Promise<{ candidates: GraphCandidateEdge[]; count: number }> {
+    const response = await this.client.get<{ candidates: GraphCandidateEdge[]; count: number }>(
+      '/api/v2/graph/candidates/pending',
+      { params: { limit } }
     );
     return response.data;
   }

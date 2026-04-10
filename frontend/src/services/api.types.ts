@@ -825,3 +825,156 @@ export interface DocumentComment {
   author_role?: string;
   replies?: DocumentComment[];
 }
+
+// ==================== Graph-RAG ====================
+
+export interface GraphAskRequest {
+  query: string;
+  document_ids?: string[];
+  layers?: string[];
+  top_k?: number;
+  max_context_chars?: number;
+}
+
+export interface GraphAskResponse {
+  context_text: string;
+  system_prompt: string;
+  sources: Array<{ node_id: string; document_id: string; text: string }>;
+  confidence: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface GraphSearchRequest {
+  query: string;
+  document_ids?: string[];
+  layers?: string[];
+  top_k?: number;
+}
+
+export interface GraphSearchResult {
+  node_id: string;
+  document_id: string;
+  number: string;
+  node_type: string;
+  title: string;
+  text: string;
+  score: number;
+  match_type: string;
+}
+
+export interface GraphSearchResponse {
+  results: GraphSearchResult[];
+  count: number;
+  query: string;
+}
+
+export interface GraphIngestRequest {
+  text: string;
+  title: string;
+  layer: 'contract' | 'npa';
+  contract_id?: string;
+  legal_document_id?: string;
+}
+
+export interface GraphIngestResponse {
+  document_id: string;
+  title: string;
+  nodes_count: number;
+  edges_count: number;
+  entities_count: number;
+  fact_edges_count: number;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface GraphDocumentSummary {
+  id: string;
+  title: string;
+  layer: string;
+  document_type: string;
+  nodes_count: number;
+  edges_count: number;
+  created_at?: string;
+}
+
+export interface GraphDocumentTree {
+  document: {
+    id: string;
+    title: string;
+    layer: string;
+    document_type: string;
+    status: string;
+    nodes_count: number;
+    edges_count: number;
+  };
+  tree: GraphTreeNode[];
+}
+
+export interface GraphTreeNode {
+  node_id: string;
+  type: string;
+  number: string;
+  title: string;
+  text_preview: string;
+  children?: GraphTreeNode[];
+}
+
+export interface GraphNodeDetail {
+  node_id: string;
+  document_id: string;
+  node_type: string;
+  number: string;
+  title: string;
+  text: string;
+  level: number;
+  path?: Array<{ node_id: string; type: string; number: string; title: string }>;
+  children?: Array<{ node_id: string; type: string; number: string; text: string }>;
+  entities?: Array<{ type: string; value: string }>;
+  references?: Array<{ target_id: string; edge_type: string; evidence: string }>;
+}
+
+export interface GraphStats {
+  documents_total?: number;
+  nodes_total?: number;
+  edges_total?: number;
+  entities_total?: number;
+  by_layer?: Record<string, number>;
+  document_id?: string;
+  title?: string;
+  layer?: string;
+  status?: string;
+  nodes_count?: number;
+  edges_count?: number;
+  entities_count?: number;
+  pending_candidates?: number;
+  by_node_type?: Record<string, number>;
+}
+
+export interface GraphEntitySummary {
+  monetary: Array<{ value: string; amount?: number; currency?: string; node_id: string }>;
+  dates: Array<{ value: string; date?: string; date_type?: string; node_id: string }>;
+  norm_refs: Array<{ value: string; norm_code?: string; article?: string; node_id: string }>;
+  clause_types: Array<{ value: string; node_id: string }>;
+  contract_types: Array<{ value: string; node_id: string }>;
+}
+
+export interface GraphCandidateEdge {
+  id: string;
+  source_id: string;
+  target_id: string;
+  proposed_type: string;
+  proposed_class: string;
+  rationale: string;
+  confidence: number;
+  created_at?: string;
+}
+
+export interface ProposeEdgeRequest {
+  source_id: string;
+  target_id: string;
+  proposed_type: string;
+  proposed_class: 'analytical' | 'risk_signal';
+  rationale: string;
+  evidence?: string;
+  confidence?: number;
+}
