@@ -329,8 +329,8 @@ def _register_tools(registry: ToolRegistryService, db: Session, llm_gateway=None
     recommendation = None
     if llm_gateway:
         try:
-            from src.services.smart_composer import SmartComposer
-            smart_composer = SmartComposer(llm_gateway=llm_gateway)
+            from src.services.smart_composer import SmartContractComposer
+            smart_composer = SmartContractComposer(llm_gateway=llm_gateway)
         except Exception as exc:
             logger.warning(f"SmartComposer init failed: {exc}")
         try:

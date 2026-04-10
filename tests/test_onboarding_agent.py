@@ -5,7 +5,7 @@ import sys
 import os
 sys.path.insert(0, os.getcwd())
 
-from src.agents.onboarding_agent_full import OnboardingAgentFull
+from src.agents.onboarding_agent import OnboardingAgent as OnboardingAgentFull
 from src.services.llm_gateway import LLMGateway
 from src.models import init_db, SessionLocal
 from pathlib import Path
