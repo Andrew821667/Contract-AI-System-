@@ -22,8 +22,9 @@ import {
 import type { Organization, OrgMembership, Policy, ToolDefinition, AgentDefinition, ClausePolicy, TemplateVersion } from '@/services/api'
 import LLMSettings from '@/components/admin/LLMSettings'
 import IntegrationSettings from '@/components/admin/IntegrationSettings'
+import GraphRAGPanel from '@/components/admin/GraphRAGPanel'
 
-type Tab = 'orgs' | 'policies' | 'tools' | 'agents' | 'templates' | 'integrations' | 'llm'
+type Tab = 'orgs' | 'policies' | 'tools' | 'agents' | 'templates' | 'integrations' | 'llm' | 'graph'
 
 export default function AdminPage() {
   const { isReady } = useAuthGuard()
@@ -92,6 +93,7 @@ export default function AdminPage() {
     { key: 'tools', label: 'Инструменты', count: tools.length },
     { key: 'agents', label: 'Агенты', count: agents.length },
     { key: 'integrations', label: 'Интеграции' },
+    { key: 'graph', label: 'Graph-RAG' },
     { key: 'templates', label: 'Шаблоны' },
   ]
 
@@ -530,6 +532,9 @@ export default function AdminPage() {
 
         {/* Integrations tab */}
         {activeTab === 'integrations' && <IntegrationSettings />}
+
+        {/* Graph-RAG tab */}
+        {activeTab === 'graph' && <GraphRAGPanel />}
 
         {/* Agents tab */}
         {activeTab === 'agents' && (
