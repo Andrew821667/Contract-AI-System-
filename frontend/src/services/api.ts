@@ -13,9 +13,25 @@ import type {
   User, LoginRequest, RegisterRequest, AuthResponse,
   Contract, ContractUploadResponse, AnalysisResultResponse,
   AnalysisResultRequest, StreamAnalysisRequest,
+  QuotaResponse, DemoActivateRequest, DemoLinkResponse,
+  DigitalContract, VerificationResult, HashChainResponse, DAGResponse,
+  ContractRecommendationDecisionResponse, GenerationContractTypeOption,
+  DashboardData, PersonalStats, GroupStats,
+  ClauseLibraryResponse, ClauseStats, ExtractedClause,
+  ConditionListResponse, ConditionCategory, CompanyCondition,
+  CompanyConditionCreate, CompanyConditionUpdate,
+  RiskPredictionRequest, RiskPredictionResponse, RiskFeedbackRequest, ModelStatus,
+  ContractVersionInfo, CompareResult, VersionCompareResult, MaterialChange, VersionHistoryItem,
+  AISession, AIMessage, AIContext, AIAction,
+  OrchestratorRun, OrchestratorStep,
+  NegotiationStartResponse, Negotiation, Objection, NegotiationPosition,
+  WorkflowDefinition, WorkflowExecution, WorkflowTask,
+  Organization, OrgMembership,
+  Policy, ToolDefinition, AgentDefinition, TemplateVersion,
+  ClausePolicy, ClauseCheckResult,
+  LLMSettingsResponse, LLMStageSettingUpdate,
+  WebhookConfig, WebhookDelivery, DomainEvent, EventTypeInfo,
 } from './api.types';
-
-// NOTE: remaining type imports resolved via export * above
 
 
 // API Client
@@ -113,7 +129,7 @@ class APIClient {
    * Refresh token is now an httpOnly cookie set by the backend — we never touch it.
    * Security: access token is ONLY in memory (Zustand), never in localStorage.
    */
-  private setAccessToken(accessToken: string) {
+  setAccessToken(accessToken: string) {
     if (typeof window === 'undefined') return;
     // Security: do NOT store token in localStorage (XSS risk).
     // Token lives only in Zustand in-memory store.
@@ -522,16 +538,6 @@ class APIClient {
 
   async getMyOrganizations(): Promise<any[]> {
     const response = await this.client.get('/api/v2/organizations');
-    return response.data;
-  }
-
-  async createOrganization(data: { name: string; slug: string; description?: string }): Promise<any> {
-    const response = await this.client.post('/api/v2/organizations', data);
-    return response.data;
-  }
-
-  async updateOrganization(orgId: string, data: { name?: string; description?: string }): Promise<any> {
-    const response = await this.client.patch(`/api/v2/organizations/${orgId}`, data);
     return response.data;
   }
 

@@ -760,3 +760,68 @@ export interface LLMStageSettingUpdate {
   max_tokens: number;
   enabled: boolean;
 }
+
+// ==================== Core Contract Types ====================
+
+export interface Contract {
+  id: string;
+  file_name: string;
+  status: string;
+  contract_type?: string;
+  progress?: number;
+  progress_message?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ContractUploadResponse {
+  contract_id: string;
+  file_name: string;
+  status: string;
+}
+
+export interface AnalysisResultRequest {
+  contract_id: string;
+  analysis_type?: string;
+  use_rag?: boolean;
+}
+
+export interface StreamAnalysisRequest {
+  contract_id: string;
+}
+
+export interface AnalysisResultResponse {
+  contract: Contract;
+  analysis: {
+    id?: string;
+    version?: number;
+    risks: any[];
+    recommendations: any[];
+    recommendation_summary: {
+      accepted: number;
+      rejected: number;
+      pending: number;
+      total: number;
+    };
+    required_fields: any[];
+    analysis_context: Record<string, any>;
+  } | null;
+}
+
+// ==================== Document Comment (renamed to avoid DOM Comment collision) ====================
+
+export interface DocumentComment {
+  id: string;
+  document_id: string;
+  author_id: string;
+  content: string;
+  parent_id?: string;
+  parent_comment_id?: string;
+  section?: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  author_name?: string;
+  author_role?: string;
+  replies?: DocumentComment[];
+}

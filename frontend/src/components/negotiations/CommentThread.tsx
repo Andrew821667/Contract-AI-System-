@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import type { Comment } from '@/services/api'
+import type { DocumentComment } from '@/services/api'
 import { useComments, useCreateComment, useReplyToComment, useResolveComment } from '@/hooks/useComments'
 
 interface CommentThreadProps {
@@ -11,7 +11,8 @@ interface CommentThreadProps {
 }
 
 export default function CommentThread({ documentId, anchorType }: CommentThreadProps) {
-  const { data: comments = [], isLoading } = useComments(documentId, anchorType)
+  const { data, isLoading } = useComments(documentId, anchorType)
+  const comments = (data ?? []) as unknown as DocumentComment[]
   const createComment = useCreateComment()
   const replyTo = useReplyToComment()
   const resolve = useResolveComment()
@@ -37,9 +38,9 @@ export default function CommentThread({ documentId, anchorType }: CommentThreadP
   }
 
   // Group into threads (top-level comments + their replies)
-  const topLevel = comments.filter((c: Comment) => !c.parent_comment_id)
+  const topLevel = comments.filter((c: DocumentComment) => !c.parent_comment_id)
   const childrenOf = (parentId: string) =>
-    comments.filter((c: Comment) => c.parent_comment_id === parentId)
+    comments.filter((c: DocumentComment) => c.parent_comment_id === parentId)
 
   return (
     <div className="space-y-4">
@@ -75,7 +76,7 @@ export default function CommentThread({ documentId, anchorType }: CommentThreadP
 
       {/* Comment threads */}
       <div className="space-y-3">
-        {topLevel.map((comment: Comment) => (
+        {topLevel.map((comment: DocumentComment) => (
           <motion.div
             key={comment.id}
             initial={{ opacity: 0, y: 5 }}
@@ -151,7 +152,7 @@ export default function CommentThread({ documentId, anchorType }: CommentThreadP
             {/* Replies */}
             {childrenOf(comment.id).length > 0 && (
               <div className="mt-2 ml-4 border-l-2 border-gray-100 dark:border-dark-700 pl-3 space-y-2">
-                {childrenOf(comment.id).map((reply: Comment) => (
+                {childrenOf(comment.id).map((reply: DocumentComment) => (
                   <div key={reply.id}>
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-[10px] font-medium text-gray-600 dark:text-gray-400">
