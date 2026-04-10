@@ -276,7 +276,7 @@ class TestDailyLimits:
         return user
 
     def test_demo_tier_limits(self, user):
-        assert user.max_contracts_per_day == 3
+        assert user.max_contracts_per_day == 5
         assert user.max_llm_requests_per_day == 10
 
     def test_pro_tier_limits(self, user, db):
