@@ -1318,7 +1318,8 @@ class APIClient {
       '/api/v2/graph/candidates/pending',
       { params: { limit } }
     );
-=======
+  }
+
   // ── RAG Admin ──────────────────────────────────────────────────────────────
 
   async getRagStats(): Promise<{ collections: RAGCollectionStat[] }> {
