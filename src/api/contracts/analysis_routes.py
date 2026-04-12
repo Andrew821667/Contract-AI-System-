@@ -335,61 +335,84 @@ def _analyze_contract_sync(
             except Exception as clause_err:
                 logger.warning(f"Auto clause extraction failed for {contract_id}: {clause_err}")
 
-            _set_progress(82, 'Индексация в RAG...')
-            try:
-                contract_text = parsed_xml if isinstance(parsed_xml, str) else str(parsed_xml)
-                if len(contract_text) > 100:
-                    from src.services.enhanced_rag import EnhancedRAGSystem, CHROMA_AVAILABLE
-                    if CHROMA_AVAILABLE:
-                        rag = EnhancedRAGSystem()
-                        num_chunks = rag.add_contract_with_chunking(
-                            contract_id=contract_id,
-                            contract_text=contract_text,
-                            metadata={
-                                'user_id': user_id,
-                                'status': 'analyzed',
-                            }
+            # Post-analysis enrichment: RAG index + Graph-RAG + Digitalize run in parallel.
+            # Each DB-dependent task opens its own session (SQLAlchemy sessions are not thread-safe).
+            _set_progress(82, 'Пост-обработка: индексация, граф, цифровизация...')
+
+            contract_text = parsed_xml if isinstance(parsed_xml, str) else str(parsed_xml)
+            contract_title = contract.file_name or f"Договор {contract_id[:8]}"
+            contract_file_path = contract.file_path
+
+            def _task_rag():
+                try:
+                    if len(contract_text) > 100:
+                        from src.services.enhanced_rag import EnhancedRAGSystem, CHROMA_AVAILABLE
+                        if CHROMA_AVAILABLE:
+                            rag = EnhancedRAGSystem()
+                            num_chunks = rag.add_contract_with_chunking(
+                                contract_id=contract_id,
+                                contract_text=contract_text,
+                                metadata={'user_id': user_id, 'status': 'analyzed'},
+                            )
+                            logger.info(f"Contract {contract_id} auto-indexed in RAG: {num_chunks} chunks")
+                except Exception as rag_err:
+                    logger.warning(f"Auto RAG indexing failed for {contract_id}: {rag_err}")
+
+            def _task_graph():
+                from src.models.database import SessionLocal as _SL
+                _db = _SL()
+                try:
+                    from src.core.graph_rag.pipeline import GraphRAGPipeline
+                    graph_pipeline = GraphRAGPipeline(db=_db)
+                    ingest_result = graph_pipeline.ingest_xml(
+                        xml_content=contract_text,
+                        title=contract_title,
+                        contract_id=contract_id,
+                    )
+                    if ingest_result.document:
+                        logger.info(
+                            f"Contract {contract_id} ingested into Graph-RAG: "
+                            f"doc_id={ingest_result.document.id}, "
+                            f"nodes={len(ingest_result.nodes)}, "
+                            f"edges={len(ingest_result.edges)}"
                         )
-                        logger.info(f"Contract {contract_id} auto-indexed in RAG: {num_chunks} chunks")
-            except Exception as rag_err:
-                logger.warning(f"Auto RAG indexing failed for {contract_id}: {rag_err}")
+                    else:
+                        logger.warning(
+                            f"Graph-RAG ingest for {contract_id} returned no document. "
+                            f"Warnings: {ingest_result.extraction_warnings}"
+                        )
+                except Exception as graph_err:
+                    logger.warning(f"Graph-RAG ingest failed for {contract_id} (non-fatal): {graph_err}")
+                finally:
+                    _db.close()
 
-            _set_progress(86, 'Построение графа документа...')
-            try:
-                xml_content = parsed_xml if isinstance(parsed_xml, str) else str(parsed_xml)
-                contract_title = contract.file_name or f"Договор {contract_id[:8]}"
-                from src.core.graph_rag.pipeline import GraphRAGPipeline
-                graph_pipeline = GraphRAGPipeline(db=db)
-                ingest_result = graph_pipeline.ingest_xml(
-                    xml_content=xml_content,
-                    title=contract_title,
-                    contract_id=contract_id,
-                )
-                if ingest_result.document:
-                    logger.info(
-                        f"Contract {contract_id} ingested into Graph-RAG: "
-                        f"doc_id={ingest_result.document.id}, "
-                        f"nodes={len(ingest_result.nodes)}, "
-                        f"edges={len(ingest_result.edges)}"
-                    )
-                else:
-                    logger.warning(
-                        f"Graph-RAG ingest for {contract_id} returned no document. "
-                        f"Warnings: {ingest_result.extraction_warnings}"
-                    )
-            except Exception as graph_err:
-                logger.warning(f"Graph-RAG ingest failed for {contract_id} (non-fatal): {graph_err}")
-
-            _set_progress(88, 'Цифровизация документа...')
-            try:
-                if contract.file_path and os.path.exists(contract.file_path):
-                    with open(contract.file_path, 'rb') as f:
+            def _task_digitalize():
+                if not (contract_file_path and os.path.exists(contract_file_path)):
+                    return
+                from src.models.database import SessionLocal as _SL
+                _db = _SL()
+                try:
+                    with open(contract_file_path, 'rb') as f:
                         file_content = f.read()
-                    digital_service = DigitalContractService(db)
+                    digital_service = DigitalContractService(_db)
                     digital_service.digitalize(contract_id, file_content, user_id)
                     logger.info(f"Contract {contract_id} auto-digitalized")
-            except Exception as dig_err:
-                logger.warning(f"Auto-digitalization failed for {contract_id}: {dig_err}")
+                except Exception as dig_err:
+                    logger.warning(f"Auto-digitalization failed for {contract_id}: {dig_err}")
+                finally:
+                    _db.close()
+
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                futures = [
+                    executor.submit(_task_rag),
+                    executor.submit(_task_graph),
+                    executor.submit(_task_digitalize),
+                ]
+                for fut in as_completed(futures):
+                    exc = fut.exception()
+                    if exc:
+                        logger.warning(f"Post-analysis task error for {contract_id}: {exc}")
 
             contract.status = 'completed'
             _set_progress(100, 'Анализ завершён!')

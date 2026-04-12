@@ -10,9 +10,11 @@ Endpoints:
 
 Синглтоны ChromaDB/эмбеддинги — из src.services.admin_rag_retriever (общие с агентом).
 """
+import collections
 import hashlib
 import io
 import re
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,8 +35,29 @@ from src.services.admin_rag_retriever import (
 router = APIRouter(prefix="/rag", tags=["RAG Admin"])
 
 # Stats cache (60s TTL) — stats query scans all collections, cache per request
-_stats_cache: tuple[Any, float] | None = None
+_stats_cache: Optional[tuple] = None  # (StatsResponse, expires_at: float)
 _STATS_TTL = 60.0
+
+# Upload rate limiter: 10 uploads per user per minute (token bucket per user_id)
+_upload_rl_lock = threading.Lock()
+_upload_rl_buckets: dict[str, collections.deque] = {}
+_UPLOAD_RL_MAX = 10     # max uploads
+_UPLOAD_RL_WINDOW = 60  # seconds
+
+
+def _check_upload_rate_limit(user_id: str) -> None:
+    now = time.time()
+    with _upload_rl_lock:
+        bucket = _upload_rl_buckets.setdefault(user_id, collections.deque())
+        # Drop timestamps outside the window
+        while bucket and bucket[0] <= now - _UPLOAD_RL_WINDOW:
+            bucket.popleft()
+        if len(bucket) >= _UPLOAD_RL_MAX:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Слишком много загрузок. Лимит: {_UPLOAD_RL_MAX} файлов в минуту.",
+            )
+        bucket.append(now)
 
 
 # ── Route-level helper (raises HTTPException вместо None) ────────────────────
@@ -209,6 +232,8 @@ async def upload_document(
     Загрузить документ в ChromaDB.
     Поддерживаемые форматы: .txt, .pdf, .docx
     """
+    _check_upload_rate_limit(str(current_user.id))
+
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Файл пустой")
