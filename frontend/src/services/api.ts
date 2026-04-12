@@ -1239,9 +1239,7 @@ class APIClient {
     return response.data;
   }
 
-  //
-
-============ Graph-RAG ====================
+  // ==================== Graph-RAG ====================
 
   async graphAsk(body: GraphAskRequest): Promise<GraphAskResponse> {
     const response = await this.client.post<GraphAskResponse>('/api/v2/graph/ask', body);
