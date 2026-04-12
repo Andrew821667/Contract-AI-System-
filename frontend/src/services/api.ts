@@ -38,6 +38,31 @@ import type {
 } from './api.types';
 
 
+export interface RAGCollectionStat {
+  name: string;
+  label: string;
+  chunk_count: number;
+  doc_count: number;
+}
+
+export interface RAGDocument {
+  doc_id: string;
+  title: string;
+  collection: string;
+  doc_type: string | null;
+  chunks: number;
+  uploaded_by: string | null;
+  created_at: string | null;
+}
+
+export interface RAGUploadResult {
+  ok: boolean;
+  doc_id: string;
+  title: string;
+  collection: string;
+  chunks: number;
+}
+
 // API Client
 class APIClient {
   private client: AxiosInstance;
@@ -1214,7 +1239,9 @@ class APIClient {
     return response.data;
   }
 
-  // ==================== Graph-RAG ====================
+  //
+
+============ Graph-RAG ====================
 
   async graphAsk(body: GraphAskRequest): Promise<GraphAskResponse> {
     const response = await this.client.post<GraphAskResponse>('/api/v2/graph/ask', body);
@@ -1293,6 +1320,33 @@ class APIClient {
       '/api/v2/graph/candidates/pending',
       { params: { limit } }
     );
+=======
+  // ── RAG Admin ──────────────────────────────────────────────────────────────
+
+  async getRagStats(): Promise<{ collections: RAGCollectionStat[] }> {
+    const response = await this.client.get('/api/v1/rag/stats');
+    return response.data;
+  }
+
+  async listRagDocuments(collection: string): Promise<{ documents: RAGDocument[]; total: number }> {
+    const response = await this.client.get('/api/v1/rag/documents', { params: { collection } });
+    return response.data;
+  }
+
+  async uploadRagDocument(file: File, collection: string, docType?: string): Promise<RAGUploadResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const params: Record<string, string> = { collection };
+    if (docType) params.doc_type = docType;
+    const response = await this.client.post('/api/v1/rag/documents', formData, {
+      params,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  }
+
+  async deleteRagDocument(docId: string, collection: string): Promise<{ ok: boolean; deleted_chunks: number }> {
+    const response = await this.client.delete(`/api/v1/rag/documents/${docId}`, { params: { collection } });
     return response.data;
   }
 }

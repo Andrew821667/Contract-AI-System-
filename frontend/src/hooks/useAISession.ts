@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'react-hot-toast'
 import api from '@/services/api'
 
 export function useAISessions(documentId: string | null) {
@@ -55,6 +56,9 @@ export function useCreateAISession() {
         queryClient.invalidateQueries({ queryKey: ['ai-sessions', variables.documentId] })
       }
     },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || 'Ошибка создания AI сессии')
+    },
   })
 }
 
@@ -67,6 +71,9 @@ export function useSendAIMessage() {
       queryClient.invalidateQueries({ queryKey: ['ai-messages', variables.sessionId] })
       queryClient.invalidateQueries({ queryKey: ['ai-actions', variables.sessionId] })
     },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || 'Ошибка отправки сообщения')
+    },
   })
 }
 
@@ -78,6 +85,9 @@ export function useApproveAction() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ai-actions'] })
     },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || 'Ошибка подтверждения действия')
+    },
   })
 }
 
@@ -88,6 +98,9 @@ export function useRejectAction() {
       api.rejectAIAction(actionId, comment),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ai-actions'] })
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || 'Ошибка отклонения действия')
     },
   })
 }

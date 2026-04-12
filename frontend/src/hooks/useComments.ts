@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'react-hot-toast'
 import api from '@/services/api'
 
 export function useComments(documentId: string | null, anchorType?: string) {
@@ -19,6 +20,9 @@ export function useCreateComment() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['comments'] })
     },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || 'Ошибка добавления комментария')
+    },
   })
 }
 
@@ -30,6 +34,9 @@ export function useReplyToComment() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['comments'] })
     },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || 'Ошибка ответа на комментарий')
+    },
   })
 }
 
@@ -39,6 +46,9 @@ export function useResolveComment() {
     mutationFn: (commentId: string) => api.resolveComment(commentId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['comments'] })
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || 'Ошибка разрешения комментария')
     },
   })
 }

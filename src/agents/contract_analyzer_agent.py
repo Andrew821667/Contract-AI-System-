@@ -793,6 +793,23 @@ class ContractAnalyzerAgent(BaseAgent):
                     for r in rag_results
                 ])
 
+            # Дополняем контекст из admin-базы знаний (laws + case_law)
+            try:
+                from src.services.admin_rag_retriever import get_legal_context, has_legal_docs
+                if has_legal_docs():
+                    query = f"Договор {contract_type}: {subject}"
+                    admin_context = get_legal_context(
+                        query=query,
+                        collections=["laws", "case_law"],
+                        n_results=3,
+                        max_chars=2000,
+                    )
+                    if admin_context:
+                        rag_context = (rag_context + "\n\n" + admin_context).strip() if rag_context else admin_context
+                        logger.info("Admin KB: добавлен правовой контекст из базы знаний")
+            except Exception as admin_kb_err:
+                logger.debug(f"Admin KB lookup skipped: {admin_kb_err}")
+
             return {
                 'sources': rag_results,
                 'context': rag_context,

@@ -38,12 +38,7 @@ _ALLOWED_ORIGINS = {
     "http://localhost:3000",
     "http://localhost:8090",
 }
-# Trusted origin suffixes (e.g. ngrok tunnels)
-_ALLOWED_ORIGIN_SUFFIXES = [
-    ".ngrok-free.dev",
-    ".ngrok.io",
-]
-# Extend from settings if available
+# Extend from settings and env if available
 try:
     from config.settings import settings as _settings
     if hasattr(_settings, 'allowed_origins'):
@@ -51,15 +46,15 @@ try:
 except Exception:
     pass
 
+# Add specific ngrok URL from env (if configured) — do NOT allow wildcard ngrok suffixes
+_ngrok_url = os.getenv("NGROK_URL", "").rstrip("/")
+if _ngrok_url:
+    _ALLOWED_ORIGINS.add(_ngrok_url)
+
 
 def _is_origin_allowed(origin: str) -> bool:
-    """Check if origin is in allowed list or matches trusted suffix."""
-    if origin in _ALLOWED_ORIGINS:
-        return True
-    from urllib.parse import urlparse
-    parsed = urlparse(origin)
-    hostname = parsed.hostname or ""
-    return any(hostname.endswith(suffix) for suffix in _ALLOWED_ORIGIN_SUFFIXES)
+    """Check if origin is in allowed list."""
+    return origin in _ALLOWED_ORIGINS
 
 
 def _check_csrf(request: Request) -> None:

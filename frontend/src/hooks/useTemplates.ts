@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'react-hot-toast'
 import api from '@/services/api'
 
 export function useTemplateVersions(templateId: string | null) {
@@ -19,6 +20,9 @@ export function useCreateTemplateVersion() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['template-versions', variables.templateId] })
     },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || 'Ошибка создания версии шаблона')
+    },
   })
 }
 
@@ -28,6 +32,9 @@ export function useActivateTemplateVersion() {
     mutationFn: (versionId: string) => api.activateTemplateVersion(versionId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['template-versions'] })
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || 'Ошибка активации версии шаблона')
     },
   })
 }
@@ -46,6 +53,9 @@ export function useCreateClausePolicy() {
       api.createClausePolicy(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clause-policies'] })
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || 'Ошибка создания политики клауз')
     },
   })
 }

@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from src.services.analytics_service import get_analytics_service, MetricType
 from src.models.database import get_db
 from src.models.auth_models import User
-from src.api.contracts.routes import get_current_user
+from src.api.dependencies import get_current_user
 from sqlalchemy.orm import Session
 
 

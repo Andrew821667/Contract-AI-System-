@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'react-hot-toast'
 import api from '@/services/api'
 
 export function useMyOrganizations() {
@@ -34,6 +35,9 @@ export function useCreateOrganization() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-organizations'] })
     },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || 'Ошибка создания организации')
+    },
   })
 }
 
@@ -44,6 +48,9 @@ export function useAddOrgMember() {
       api.addOrgMember(orgId, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['org-members', variables.orgId] })
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || 'Ошибка добавления участника')
     },
   })
 }

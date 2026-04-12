@@ -354,6 +354,32 @@ def _analyze_contract_sync(
             except Exception as rag_err:
                 logger.warning(f"Auto RAG indexing failed for {contract_id}: {rag_err}")
 
+            _set_progress(86, 'Построение графа документа...')
+            try:
+                xml_content = parsed_xml if isinstance(parsed_xml, str) else str(parsed_xml)
+                contract_title = contract.file_name or f"Договор {contract_id[:8]}"
+                from src.core.graph_rag.pipeline import GraphRAGPipeline
+                graph_pipeline = GraphRAGPipeline(db=db)
+                ingest_result = graph_pipeline.ingest_xml(
+                    xml_content=xml_content,
+                    title=contract_title,
+                    contract_id=contract_id,
+                )
+                if ingest_result.document:
+                    logger.info(
+                        f"Contract {contract_id} ingested into Graph-RAG: "
+                        f"doc_id={ingest_result.document.id}, "
+                        f"nodes={len(ingest_result.nodes)}, "
+                        f"edges={len(ingest_result.edges)}"
+                    )
+                else:
+                    logger.warning(
+                        f"Graph-RAG ingest for {contract_id} returned no document. "
+                        f"Warnings: {ingest_result.extraction_warnings}"
+                    )
+            except Exception as graph_err:
+                logger.warning(f"Graph-RAG ingest failed for {contract_id} (non-fatal): {graph_err}")
+
             _set_progress(88, 'Цифровизация документа...')
             try:
                 if contract.file_path and os.path.exists(contract.file_path):

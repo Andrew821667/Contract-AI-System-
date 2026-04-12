@@ -60,9 +60,7 @@ export default function ContractUploadPage() {
 
       // Redirect to contract details page
       const contractId = result.contract_id || result.contractId
-      setTimeout(() => {
-        router.push(`/contracts/${contractId}`)
-      }, 500)
+      router.push(`/contracts/${contractId}`)
 
     } catch (error: any) {
       const message = error?.response?.data?.detail || 'Ошибка загрузки файла.'
