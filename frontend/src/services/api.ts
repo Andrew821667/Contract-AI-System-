@@ -1318,6 +1318,7 @@ class APIClient {
       '/api/v2/graph/candidates/pending',
       { params: { limit } }
     );
+    return response.data;
   }
 
   // ── RAG Admin ──────────────────────────────────────────────────────────────
