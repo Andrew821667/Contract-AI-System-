@@ -7,8 +7,8 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --only=production && npm cache clean --force
 
-# Build stage
-FROM node:18-alpine AS build
+# Build stage — node:18-slim (Debian) required: Alpine (musl) breaks @next/swc-linux-arm64-gnu
+FROM node:18-slim AS build
 
 WORKDIR /app
 

@@ -285,10 +285,10 @@ export default function Home() {
                   <p className="text-xs font-semibold text-stone-300 mb-2 text-center">Быстрый вход (демо)</p>
                   <div className="grid grid-cols-4 gap-1.5">
                     {[
-                      { label: 'Админ', email: 'admin@contractai.ru', pwd: 'Admin123' },
-                      { label: 'Юрист', email: 'lawyer@contractai.ru', pwd: 'Lawyer123' },
-                      { label: 'VIP', email: 'vip@contractai.ru', pwd: 'Vip123' },
-                      { label: 'Демо', email: 'demo@contractai.ru', pwd: 'Demo123' },
+                      { label: 'Админ', email: 'admin@contractai.ru', pwd: 'Admin123!' },
+                      { label: 'Юрист', email: 'lawyer@contractai.ru', pwd: 'Lawyer123!' },
+                      { label: 'VIP', email: 'vip@contractai.ru', pwd: 'Vip12345!' },
+                      { label: 'Демо', email: 'demo@contractai.ru', pwd: 'Demo1234!' },
                     ].map((u) => (
                       <button
                         key={u.email}
