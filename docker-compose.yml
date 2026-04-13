@@ -84,6 +84,9 @@ services:
       - SEED_DEMO_PASSWORD=${SEED_DEMO_PASSWORD:-}
       - FORCE_RESEED=${FORCE_RESEED:-false}
       - BRIDGE_SECRET=${BRIDGE_SECRET:-}
+      # Prevent HuggingFace Hub downloads at startup — models must be pre-cached.
+      # Remove this flag only if you have a pre-warmed HF cache volume.
+      - HF_HUB_OFFLINE=1
     volumes:
       - ./data:/app/data
       - ./chroma_data:/app/chroma_data
@@ -166,6 +169,14 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    # Override Dockerfile HEALTHCHECK: Alpine wget resolves 'localhost' to [::1]
+    # but Next.js listens on IPv4 0.0.0.0 only — use 127.0.0.1 explicitly.
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     deploy:
       resources:
         limits:
