@@ -369,13 +369,10 @@ def _register_tools(registry: ToolRegistryService, db: Session, llm_gateway=None
         "src.services.contract_generation_service", fromlist=["ContractGenerationService"]
     ).ContractGenerationService())
 
-    # RAG — singleton from enhanced_rag
+    # RAG — skip eager init to avoid HuggingFace model download at startup.
+    # The RAGSearchTool will be unavailable until explicitly warmed up,
+    # but this keeps gunicorn workers healthy on first start.
     rag = None
-    try:
-        from src.services.enhanced_rag import get_enhanced_rag
-        rag = get_enhanced_rag()
-    except Exception as exc:
-        logger.warning(f"EnhancedRAG init failed: {exc}")
 
     tools = [
         DocumentParserTool(parser),
