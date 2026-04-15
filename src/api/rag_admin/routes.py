@@ -193,6 +193,8 @@ async def get_stats(current_user: User = Depends(get_current_user)):
 @router.get("/documents", response_model=DocumentsResponse)
 async def list_documents(
     collection: str = Query("knowledge", description="Коллекция ChromaDB"),
+    limit: int = Query(50, ge=1, le=200, description="Максимум документов"),
+    offset: int = Query(0, ge=0, description="Смещение (для пагинации)"),
     current_user: User = Depends(get_current_user),
 ):
     """Список документов в коллекции (сгруппированных по doc_id)."""
@@ -216,9 +218,10 @@ async def list_documents(
             }
         docs[doc_id]["chunks"] += 1
 
-    documents = [RAGDocument(**d) for d in docs.values()]
-    documents.sort(key=lambda d: d.created_at or "", reverse=True)
-    return DocumentsResponse(documents=documents, total=len(documents))
+    all_documents = [RAGDocument(**d) for d in docs.values()]
+    all_documents.sort(key=lambda d: d.created_at or "", reverse=True)
+    paginated = all_documents[offset : offset + limit]
+    return DocumentsResponse(documents=paginated, total=len(all_documents))
 
 
 @router.post("/documents", status_code=status.HTTP_201_CREATED, response_model=UploadResponse)
@@ -289,12 +292,19 @@ async def delete_document(
 ):
     """Удалить документ из ChromaDB по doc_id."""
     coll = _get_collection(collection)
-    existing = coll.get(where={"doc_id": doc_id})
+    existing = coll.get(where={"doc_id": doc_id}, include=["metadatas"])
 
     if not existing["ids"]:
         raise HTTPException(status_code=404, detail="Документ не найден в коллекции")
 
+    # Verify ownership — only the uploader or an admin can delete (IDOR prevention)
+    if current_user.role != "admin":
+        meta = existing["metadatas"][0] if existing["metadatas"] else {}
+        if meta.get("uploaded_by") != str(current_user.id):
+            raise HTTPException(status_code=403, detail="Нет доступа к этому документу")
+
     coll.delete(ids=existing["ids"])
-    logger.info(f"RAG: удалён документ {doc_id} из коллекции '{collection}'")
+    logger.info(f"RAG: удалён документ {doc_id} из коллекции '{collection}' пользователем {current_user.id}")
+    global _stats_cache
     _stats_cache = None  # invalidate stats cache after delete
     return DeleteResponse(ok=True, deleted_chunks=len(existing["ids"]))

@@ -9,6 +9,7 @@ import os
 import tempfile
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from sqlalchemy import update as sql_update
 from sqlalchemy.orm import Session
 from loguru import logger
 
@@ -147,9 +148,21 @@ async def upload_contract(
         db.commit()
         db.refresh(contract)
 
-        # Increment daily usage counter
-        current_user.contracts_today = (current_user.contracts_today or 0) + 1
+        # Atomic increment with limit re-check (prevents race condition)
+        result = db.execute(
+            sql_update(User)
+            .where(User.id == current_user.id)
+            .where(User.contracts_today < User.max_contracts_per_day)
+            .values(contracts_today=User.contracts_today + 1)
+        )
+        if result.rowcount == 0:
+            db.delete(contract)
         db.commit()
+        if result.rowcount == 0:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Дневной лимит загрузки ({current_user.max_contracts_per_day}) исчерпан. Попробуйте завтра."
+            )
 
         logger.info(f"Contract uploaded: {contract.id} by user {current_user.id} ({file_size} bytes, streamed)")
 

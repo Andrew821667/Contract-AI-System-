@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sse_starlette.sse import EventSourceResponse
+from sqlalchemy import update as sql_update
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 from loguru import logger
@@ -453,7 +454,8 @@ async def analyze_contract(
                 detail=f'Дневной лимит LLM-запросов ({current_user.max_llm_requests_per_day}) исчерпан.'
             )
 
-        contract = db.query(Contract).filter(Contract.id == request_data.contract_id).first()
+        # Lock contract row to prevent concurrent double-start (C3)
+        contract = db.query(Contract).filter(Contract.id == request_data.contract_id).with_for_update().first()
         if not contract:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Contract not found')
 
@@ -490,6 +492,23 @@ async def analyze_contract(
         analysis_perspective = _resolve_analysis_perspective(contract, request_data, current_user)
         analysis_date = _current_analysis_date()
 
+        # Mark contract as analyzing immediately (prevents concurrent double-start)
+        # and atomically increment LLM counter within the same transaction (C1)
+        contract.status = 'analyzing'
+        llm_result = db.execute(
+            sql_update(User)
+            .where(User.id == current_user.id)
+            .where(User.llm_requests_today < User.max_llm_requests_per_day)
+            .values(llm_requests_today=User.llm_requests_today + 1)
+        )
+        if llm_result.rowcount == 0:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f'Дневной лимит LLM-запросов ({current_user.max_llm_requests_per_day}) исчерпан.'
+            )
+        db.commit()  # Releases with_for_update lock; status='analyzing' visible to concurrent requests
+
         background_tasks.add_task(
             analyze_contract_background,
             contract_id=request_data.contract_id,
@@ -499,9 +518,6 @@ async def analyze_contract(
             analysis_perspective=analysis_perspective,
             analysis_date=analysis_date,
         )
-
-        current_user.llm_requests_today = (current_user.llm_requests_today or 0) + 1
-        db.commit()
 
         logger.info(
             f'Analysis started for contract {request_data.contract_id} by user {current_user.id}, '
