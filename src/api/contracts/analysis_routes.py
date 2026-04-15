@@ -493,19 +493,21 @@ async def analyze_contract(
         analysis_date = _current_analysis_date()
 
         # Mark contract as analyzing immediately (prevents concurrent double-start)
-        # and atomically increment LLM counter within the same transaction (C1)
+        # and atomically increment LLM counter within the same transaction (C1).
+        # max_llm_requests_per_day is a @property (not a DB column) — resolve to literal.
+        llm_limit = current_user.max_llm_requests_per_day
         contract.status = 'analyzing'
         llm_result = db.execute(
             sql_update(User)
             .where(User.id == current_user.id)
-            .where(User.llm_requests_today < User.max_llm_requests_per_day)
+            .where(User.llm_requests_today < llm_limit)
             .values(llm_requests_today=User.llm_requests_today + 1)
         )
         if llm_result.rowcount == 0:
             db.rollback()
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f'Дневной лимит LLM-запросов ({current_user.max_llm_requests_per_day}) исчерпан.'
+                detail=f'Дневной лимит LLM-запросов ({llm_limit}) исчерпан.'
             )
         db.commit()  # Releases with_for_update lock; status='analyzing' visible to concurrent requests
 

@@ -148,11 +148,14 @@ async def upload_contract(
         db.commit()
         db.refresh(contract)
 
-        # Atomic increment with limit re-check (prevents race condition)
+        # Atomic increment with limit re-check (prevents race condition).
+        # max_contracts_per_day is a @property (not a DB column), so we pass the
+        # resolved Python value as a literal into the WHERE clause.
+        limit_value = current_user.max_contracts_per_day
         result = db.execute(
             sql_update(User)
             .where(User.id == current_user.id)
-            .where(User.contracts_today < User.max_contracts_per_day)
+            .where(User.contracts_today < limit_value)
             .values(contracts_today=User.contracts_today + 1)
         )
         if result.rowcount == 0:
@@ -161,7 +164,7 @@ async def upload_contract(
         if result.rowcount == 0:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Дневной лимит загрузки ({current_user.max_contracts_per_day}) исчерпан. Попробуйте завтра."
+                detail=f"Дневной лимит загрузки ({limit_value}) исчерпан. Попробуйте завтра."
             )
 
         logger.info(f"Contract uploaded: {contract.id} by user {current_user.id} ({file_size} bytes, streamed)")
