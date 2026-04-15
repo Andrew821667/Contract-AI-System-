@@ -152,8 +152,9 @@ async def list_members(
     # IDOR fix: проверяем, что пользователь — участник организации
     verify_org_membership(org_id, current_user, db)
 
-    members = (
-        db.query(OrganizationMembership)
+    rows = (
+        db.query(OrganizationMembership, User)
+        .join(User, OrganizationMembership.user_id == User.id, isouter=True)
         .filter(
             OrganizationMembership.org_id == org_id,
             OrganizationMembership.active == True,  # noqa: E712
@@ -162,7 +163,21 @@ async def list_members(
         .limit(500)
         .all()
     )
-    return members
+    return [
+        OrganizationMembershipRead(
+            id=m.id,
+            user_id=m.user_id,
+            org_id=m.org_id,
+            unit_id=m.unit_id,
+            company_role=m.company_role,
+            functional_role=m.functional_role,
+            active=m.active,
+            joined_at=m.joined_at,
+            user_name=u.name if u else None,
+            user_email=u.email if u else None,
+        )
+        for m, u in rows
+    ]
 
 
 # ──────────────────────────────────────────────

@@ -15,10 +15,21 @@ import { useOrgStore } from '@/stores/orgStore'
 interface Member {
   id: string
   user_id: string
+  user_name: string | null
+  user_email: string | null
   functional_role: string
   company_role: string | null
   active: boolean
   joined_at: string
+}
+
+interface GroupStats {
+  org_id: string
+  total_members: number
+  total_contracts: number
+  month_contracts: number
+  total_risks: number
+  per_member: Array<{ user_id: string; name: string; contracts_count: number }>
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -42,6 +53,8 @@ export default function OrganizationPage() {
 
   const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState<GroupStats | null>(null)
+  const [statsLoading, setStatsLoading] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteRole, setInviteRole] = useState('member')
   const [inviting, setInviting] = useState(false)
@@ -59,8 +72,15 @@ export default function OrganizationPage() {
         .then(setMembers)
         .catch(() => toast.error('Не удалось загрузить участников'))
         .finally(() => setLoading(false))
+
+      setStatsLoading(true)
+      api.getGroupStats(selectedOrgId)
+        .then(setStats)
+        .catch(() => setStats(null))
+        .finally(() => setStatsLoading(false))
     } else {
       setMembers([])
+      setStats(null)
       setLoading(false)
     }
   }, [selectedOrgId])
@@ -241,6 +261,69 @@ export default function OrganizationPage() {
               </Card>
             </motion.div>
 
+            {/* Group stats */}
+            {(stats || statsLoading) && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+                className="mb-6"
+              >
+                <Card>
+                  <h3 className="text-lg font-bold text-gray-900 mb-4">Статистика организации</h3>
+                  {statsLoading ? (
+                    <p className="text-gray-500 text-sm">Загрузка...</p>
+                  ) : stats ? (
+                    <>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+                        <div className="bg-primary-50 rounded-xl p-4 text-center">
+                          <p className="text-2xl font-bold text-primary-700">{stats.total_members}</p>
+                          <p className="text-xs text-gray-600 mt-1">Участников</p>
+                        </div>
+                        <div className="bg-success-50 rounded-xl p-4 text-center">
+                          <p className="text-2xl font-bold text-success-700">{stats.total_contracts}</p>
+                          <p className="text-xs text-gray-600 mt-1">Договоров всего</p>
+                        </div>
+                        <div className="bg-blue-50 rounded-xl p-4 text-center">
+                          <p className="text-2xl font-bold text-blue-700">{stats.month_contracts}</p>
+                          <p className="text-xs text-gray-600 mt-1">За этот месяц</p>
+                        </div>
+                        <div className="bg-amber-50 rounded-xl p-4 text-center">
+                          <p className="text-2xl font-bold text-amber-700">{stats.total_risks}</p>
+                          <p className="text-xs text-gray-600 mt-1">Выявленных рисков</p>
+                        </div>
+                      </div>
+                      {stats.per_member.length > 0 && (
+                        <div>
+                          <p className="text-sm font-semibold text-gray-700 mb-3">Активность участников</p>
+                          <div className="space-y-2">
+                            {stats.per_member.map((pm) => {
+                              const maxCount = stats.per_member[0]?.contracts_count || 1
+                              const pct = Math.round((pm.contracts_count / maxCount) * 100)
+                              return (
+                                <div key={pm.user_id} className="flex items-center gap-3">
+                                  <span className="text-sm text-gray-700 w-32 truncate">{pm.name}</span>
+                                  <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-primary-500 rounded-full transition-all"
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-sm font-semibold text-gray-600 w-8 text-right">
+                                    {pm.contracts_count}
+                                  </span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : null}
+                </Card>
+              </motion.div>
+            )}
+
             {/* Members list */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -266,14 +349,17 @@ export default function OrganizationPage() {
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
                             <span className="text-primary-700 font-bold text-sm">
-                              {m.user_id.substring(0, 2).toUpperCase()}
+                              {(m.user_name || m.user_email || m.user_id).substring(0, 2).toUpperCase()}
                             </span>
                           </div>
                           <div>
-                            <p className="font-medium text-gray-900">{m.user_id}</p>
-                            {m.company_role && (
-                              <p className="text-xs text-gray-500">{m.company_role}</p>
-                            )}
+                            <p className="font-medium text-gray-900">
+                              {m.user_name || m.user_email || m.user_id}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {m.user_email && m.user_name ? m.user_email : null}
+                              {m.company_role ? (m.user_email && m.user_name ? ` · ${m.company_role}` : m.company_role) : null}
+                            </p>
                           </div>
                         </div>
 

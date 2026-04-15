@@ -65,6 +65,8 @@ class OrganizationMembershipRead(BaseModel):
     functional_role: str
     active: bool
     joined_at: datetime
+    user_name: str | None = None
+    user_email: str | None = None
 
     model_config = {"from_attributes": True}
 
