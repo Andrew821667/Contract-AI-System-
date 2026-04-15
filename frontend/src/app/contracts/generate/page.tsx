@@ -19,16 +19,50 @@ type ContractTypeCard = {
   hasTemplate?: boolean
 }
 
+// Все поимённованные договоры ГК РФ (части II и IV) + практические
 const contractTypeMeta: Record<string, { label: string; icon: string; description: string }> = {
-  supply: { label: 'Договор поставки', icon: '📦', description: 'Поставка товаров и продукции' },
-  service: { label: 'Договор оказания услуг', icon: '🛠️', description: 'Оказание различных услуг' },
-  lease: { label: 'Договор аренды', icon: '🏢', description: 'Аренда помещений и имущества' },
-  purchase: { label: 'Договор купли-продажи', icon: '💰', description: 'Купля-продажа имущества' },
+  // Передача имущества в собственность (гл. 30–33)
+  purchase:        { label: 'Договор купли-продажи', icon: '💰', description: 'Купля-продажа имущества (гл. 30 ГК РФ)' },
+  supply:          { label: 'Договор поставки', icon: '📦', description: 'Поставка товаров и продукции (§3 гл. 30)' },
+  supply_state:    { label: 'Госконтракт на поставку', icon: '🏛️', description: 'Поставка для государственных нужд (§4 гл. 30)' },
+  energy:          { label: 'Договор энергоснабжения', icon: '⚡', description: 'Снабжение энергией (§6 гл. 30)' },
+  real_estate_sale:{ label: 'Купля-продажа недвижимости', icon: '🏠', description: 'Продажа недвижимости (§7 гл. 30)' },
+  enterprise_sale: { label: 'Продажа предприятия', icon: '🏭', description: 'Продажа предприятия как имущ. комплекса (§8 гл. 30)' },
+  exchange:        { label: 'Договор мены', icon: '🔄', description: 'Обмен товарами (гл. 31 ГК РФ)' },
+  donation:        { label: 'Договор дарения', icon: '🎁', description: 'Безвозмездная передача имущества (гл. 32)' },
+  annuity:         { label: 'Договор ренты', icon: '📅', description: 'Рента и пожизненное содержание (гл. 33)' },
+  // Передача имущества в пользование (гл. 34–36)
+  lease:           { label: 'Договор аренды', icon: '🏢', description: 'Аренда помещений и имущества (гл. 34)' },
+  vehicle_lease:   { label: 'Аренда транспорта', icon: '🚗', description: 'Аренда ТС с/без экипажа (§2–3 гл. 34)' },
+  real_estate_lease:{ label: 'Аренда недвижимости', icon: '🏘️', description: 'Аренда зданий и сооружений (§4 гл. 34)' },
+  leasing:         { label: 'Договор лизинга (финаренда)', icon: '📋', description: 'Финансовая аренда (§6 гл. 34)' },
+  free_use:        { label: 'Договор безвозмездного пользования', icon: '🤝', description: 'Ссуда — безвозмездное пользование (гл. 36)' },
+  // Подряд и услуги (гл. 37–41)
+  contract_work:   { label: 'Договор подряда', icon: '🏗️', description: 'Подряд, строительство, ремонт (гл. 37)' },
+  construction:    { label: 'Договор строительного подряда', icon: '🏛️', description: 'Строительный подряд (§3 гл. 37)' },
+  design:          { label: 'Договор на проектные работы', icon: '📐', description: 'Проектные и изыскательские работы (§4 гл. 37)' },
+  service:         { label: 'Договор оказания услуг', icon: '🛠️', description: 'Возмездное оказание услуг (гл. 39)' },
+  transport:       { label: 'Договор перевозки', icon: '🚛', description: 'Перевозка грузов, пассажиров (гл. 40)' },
+  forwarding:      { label: 'Договор транспортной экспедиции', icon: '📬', description: 'Экспедиционные услуги (гл. 41)' },
+  // Финансы (гл. 42–46)
+  loan:            { label: 'Договор займа', icon: '🏦', description: 'Займ денежных средств (гл. 42)' },
+  credit:          { label: 'Кредитный договор', icon: '💳', description: 'Банковский кредит (§2 гл. 42)' },
+  factoring:       { label: 'Договор факторинга', icon: '📊', description: 'Финансирование под уступку требования (гл. 43)' },
+  bank_account:    { label: 'Договор банковского счёта', icon: '🏧', description: 'Банковский счёт (гл. 45)' },
+  // Хранение и страхование (гл. 47–48)
+  storage:         { label: 'Договор хранения', icon: '📦', description: 'Хранение имущества (гл. 47)' },
+  insurance:       { label: 'Договор страхования', icon: '🛡️', description: 'Имущественное/личное страхование (гл. 48)' },
+  // Поручения и комиссия (гл. 49–52)
+  mandate:         { label: 'Договор поручения', icon: '✍️', description: 'Юридические действия от имени доверителя (гл. 49)' },
+  commission:      { label: 'Договор комиссии', icon: '🤝', description: 'Комиссионная торговля (гл. 51)' },
+  agency:          { label: 'Агентский договор', icon: '👥', description: 'Агентские действия от своего/чужого имени (гл. 52)' },
+  // Управление и концессия (гл. 53–54)
+  trust_management:{ label: 'Договор доверительного управления', icon: '⚖️', description: 'Доверительное управление имуществом (гл. 53)' },
+  franchise:       { label: 'Договор коммерческой концессии', icon: '🏪', description: 'Франчайзинг (гл. 54)' },
+  // Трудовые и интеллект. собственность
+  employment:      { label: 'Трудовой договор', icon: '👔', description: 'Трудовые отношения (ТК РФ)' },
+  licensing:       { label: 'Лицензионный договор', icon: '📄', description: 'Передача прав на использование (ч. IV ГК РФ)' },
   confidentiality: { label: 'Соглашение о конфиденциальности (NDA)', icon: '🔒', description: 'Защита конфиденциальной информации' },
-  employment: { label: 'Трудовой договор', icon: '👔', description: 'Трудовые отношения' },
-  loan: { label: 'Договор займа', icon: '🏦', description: 'Займ денежных средств' },
-  licensing: { label: 'Лицензионный договор', icon: '📄', description: 'Передача прав на использование' },
-  contract_work: { label: 'Договор подряда', icon: '🏗️', description: 'Строительные и подрядные работы' },
 }
 
 const defaultContractTypes: ContractTypeCard[] = Object.entries(contractTypeMeta).map(([value, meta]) => ({
@@ -37,7 +71,7 @@ const defaultContractTypes: ContractTypeCard[] = Object.entries(contractTypeMeta
   icon: meta.icon,
   description: meta.description,
   source: 'builtin',
-  hasTemplate: ['supply', 'service', 'lease'].includes(value),
+  hasTemplate: ['supply', 'service', 'lease', 'purchase', 'loan', 'employment', 'contract_work', 'confidentiality'].includes(value),
 }))
 
 interface TemplateItem {

@@ -250,7 +250,7 @@ async def register(
         email=request_data.email,
         name=request_data.name,
         password=request_data.password,
-        role="junior_lawyer",          # SECURITY: hardcoded, never from client
+        role="demo",                   # SECURITY: hardcoded; new users start as demo
         subscription_tier="demo",      # SECURITY: hardcoded, never from client
         send_verification=False        # MVP: skip email verification, auto-login
     )
@@ -299,7 +299,12 @@ async def register(
             "email": user.email,
             "name": user.name,
             "role": user.role,
-            "subscription_tier": user.subscription_tier
+            "subscription_tier": user.subscription_tier,
+            "is_demo": True,
+            "contracts_today": 0,
+            "llm_requests_today": 0,
+            "max_contracts_per_day": user.max_contracts_per_day,
+            "max_llm_requests_per_day": user.max_llm_requests_per_day,
         },
         "access_token": access_token,
         "token_type": "Bearer",

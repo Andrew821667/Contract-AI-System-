@@ -89,7 +89,7 @@ class User(Base):
             name='check_user_role'
         ),
         CheckConstraint(
-            subscription_tier.in_(['demo', 'basic', 'pro', 'enterprise']),
+            subscription_tier.in_(['demo', 'personal', 'team', 'business', 'enterprise', 'basic', 'pro']),
             name='check_subscription_tier'
         ),
         Index('idx_user_email_active', 'email', 'active'),
@@ -111,12 +111,23 @@ class User(Base):
             return False
         return True
 
-    # Tier limits lookup
+    # Tier limits lookup (daily).
+    # Tiers match pricing page: demo → personal → team → business → enterprise.
+    # Legacy names (basic, pro) kept as aliases for backwards compatibility.
     TIER_LIMITS = {
-        'demo': {'max_contracts_per_day': 5, 'max_llm_requests_per_day': 15},
-        'basic': {'max_contracts_per_day': 25, 'max_llm_requests_per_day': 100},
-        'pro': {'max_contracts_per_day': 50, 'max_llm_requests_per_day': 200},
+        # Free / demo
+        'demo':       {'max_contracts_per_day': 3,      'max_llm_requests_per_day': 10},
+        # Персональный — 50 договоров/мес ≈ 5/день
+        'personal':   {'max_contracts_per_day': 5,      'max_llm_requests_per_day': 20},
+        # Команда — 300 договоров/мес ≈ 20/день
+        'team':       {'max_contracts_per_day': 20,     'max_llm_requests_per_day': 60},
+        # Бизнес — 1 500 договоров/мес ≈ 100/день
+        'business':   {'max_contracts_per_day': 100,    'max_llm_requests_per_day': 300},
+        # Enterprise — безлимит
         'enterprise': {'max_contracts_per_day': 999999, 'max_llm_requests_per_day': 999999},
+        # Legacy aliases (existing users in DB)
+        'basic': {'max_contracts_per_day': 5,  'max_llm_requests_per_day': 20},
+        'pro':   {'max_contracts_per_day': 20, 'max_llm_requests_per_day': 60},
     }
 
     @property

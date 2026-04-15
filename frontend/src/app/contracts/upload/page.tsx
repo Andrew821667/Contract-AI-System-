@@ -10,29 +10,16 @@ import FileUpload from '@/components/forms/FileUpload'
 import Badge from '@/components/ui/Badge'
 import api from '@/services/api'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
+import { useAuthStore } from '@/stores/authStore'
 import AppLayout from '@/components/AppLayout'
 
 export default function ContractUploadPage() {
   const { isReady } = useAuthGuard()
+  const user = useAuthStore(s => s.user)
   const router = useRouter()
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
-
-  const [contractType, setContractType] = useState('Автоопределение')
-
-  const contractTypes = [
-    'Автоопределение',
-    'Договор подряда',
-    'Договор поставки',
-    'Договор аренды',
-    'Трудовой договор',
-    'Договор оказания услуг',
-    'Договор купли-продажи',
-    'Агентский договор',
-    'Лицензионный договор',
-    'Другое'
-  ]
 
   const handleFileSelect = (file: File) => {
     setSelectedFile(file)
@@ -51,7 +38,7 @@ export default function ContractUploadPage() {
       setUploadProgress(30)
 
       const result = await api.uploadContract(selectedFile, {
-        document_type: contractType,
+        document_type: 'contract',
       })
 
       setUploadProgress(100)
@@ -134,26 +121,6 @@ export default function ContractUploadPage() {
                     </button>
                   </motion.div>
                 )}
-                {/* Contract Type */}
-                <div className="mt-6">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Тип договора
-                  </label>
-                  <select
-                    value={contractType}
-                    onChange={(e) => setContractType(e.target.value)}
-                    disabled={uploading}
-                    className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-primary-400 focus:outline-none transition-colors"
-                  >
-                    {contractTypes.map(type => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Система автоматически определит тип, стороны и другие параметры при анализе
-                  </p>
-                </div>
-
                 {/* Upload Progress */}
                 {uploading && (
                   <motion.div
@@ -261,8 +228,44 @@ export default function ContractUploadPage() {
                   <h4 className="text-sm font-bold text-gray-900 mb-3">
                     Макс. размер файла:
                   </h4>
-                  <Badge variant="default" size="sm">10 МБ</Badge>
+                  <Badge variant="default" size="sm">50 МБ</Badge>
                 </div>
+
+                {/* Usage counter */}
+                {user && (
+                  <div className="mt-6 pt-6 border-t border-gray-200">
+                    <h4 className="text-sm font-bold text-gray-900 mb-3">
+                      Лимит на сегодня:
+                    </h4>
+                    <div className="space-y-2">
+                      <div>
+                        <div className="flex justify-between text-xs text-gray-600 mb-1">
+                          <span>Загрузок</span>
+                          <span className={user.contracts_today >= (user.max_contracts_per_day ?? 3) ? 'text-red-600 font-bold' : 'font-semibold'}>
+                            {user.contracts_today} / {user.max_contracts_per_day ?? 3}
+                          </span>
+                        </div>
+                        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              (user.contracts_today / (user.max_contracts_per_day ?? 3)) >= 1
+                                ? 'bg-red-500'
+                                : (user.contracts_today / (user.max_contracts_per_day ?? 3)) >= 0.8
+                                ? 'bg-amber-500'
+                                : 'bg-primary-500'
+                            }`}
+                            style={{ width: `${Math.min(100, (user.contracts_today / (user.max_contracts_per_day ?? 3)) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    {user.subscription_tier === 'demo' && (
+                      <p className="text-xs text-gray-500 mt-2">
+                        Демо-режим. <button onClick={() => window.location.href='/pricing'} className="text-primary-600 hover:underline">Улучшить тариф</button>
+                      </p>
+                    )}
+                  </div>
+                )}
               </Card>
             </motion.div>
           </div>
