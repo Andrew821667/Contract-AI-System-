@@ -10,7 +10,7 @@ import { toast } from 'react-hot-toast';
 // Types — re-exported from api.types.ts for backward compatibility
 export * from './api.types';
 import type {
-  User, LoginRequest, RegisterRequest, AuthResponse,
+  User, LoginRequest, RegisterRequest, AuthResponse, AgentDefinitionUpdate,
   Contract, ContractUploadResponse, AnalysisResultResponse,
   AnalysisResultRequest, StreamAnalysisRequest,
   QuotaResponse, DemoActivateRequest, DemoLinkResponse,
@@ -1105,6 +1105,11 @@ class APIClient {
 
   async listAgents(): Promise<AgentDefinition[]> {
     const response = await this.client.get<AgentDefinition[]>('/api/v2/agents');
+    return response.data;
+  }
+
+  async updateAgent(agentId: string, data: AgentDefinitionUpdate): Promise<AgentDefinition> {
+    const response = await this.client.patch<AgentDefinition>(`/api/v2/agents/${agentId}`, data);
     return response.data;
   }
 

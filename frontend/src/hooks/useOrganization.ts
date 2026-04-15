@@ -75,3 +75,18 @@ export function useAgents() {
     queryFn: () => api.listAgents(),
   })
 }
+
+export function useUpdateAgent() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ agentId, data }: { agentId: string; data: import('@/services/api').AgentDefinitionUpdate }) =>
+      api.updateAgent(agentId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agents'] })
+      toast.success('Агент обновлён')
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || 'Ошибка обновления агента')
+    },
+  })
+}

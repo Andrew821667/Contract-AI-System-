@@ -565,14 +565,31 @@ export interface ToolDefinition {
 
 export interface AgentDefinition {
   id: string;
+  agent_id: string;
   name: string;
   display_name: string | null;
   description: string | null;
   agent_type: string | null;
+  specialization: string;
   capabilities: string[] | null;
   tools: string[] | null;
+  allowed_tools: string[] | null;
+  task_types: string[] | null;
+  autonomy_level: string;
+  confidence_threshold: number;
+  model_profile: Record<string, any> | null;
   active: boolean;
+  version: string;
   created_at: string;
+}
+
+export interface AgentDefinitionUpdate {
+  allowed_tools?: string[];
+  autonomy_level?: string;
+  confidence_threshold?: number;
+  model_profile?: Record<string, any>;
+  active?: boolean;
+  description?: string;
 }
 
 // Template Governance types

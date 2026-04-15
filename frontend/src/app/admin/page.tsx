@@ -12,6 +12,7 @@ import {
   usePolicies,
   useTools,
   useAgents,
+  useUpdateAgent,
 } from '@/hooks/useOrganization'
 import {
   useClausePolicies,
@@ -29,6 +30,7 @@ import type { Organization, OrgMembership, Policy, ToolDefinition, AgentDefiniti
 import LLMSettings from '@/components/admin/LLMSettings'
 import IntegrationSettings from '@/components/admin/IntegrationSettings'
 import GraphRAGPanel from '@/components/admin/GraphRAGPanel'
+import AgentEditModal from '@/components/admin/AgentEditModal'
 
 type Tab = 'orgs' | 'policies' | 'tools' | 'agents' | 'templates' | 'integrations' | 'llm' | 'graph' | 'rag'
 
@@ -80,6 +82,8 @@ export default function AdminPage() {
   const { data: policies = [] } = usePolicies(policyLevel)
   const { data: tools = [] } = useTools()
   const { data: agents = [] } = useAgents()
+  const updateAgent = useUpdateAgent()
+  const [editingAgent, setEditingAgent] = useState<AgentDefinition | null>(null)
   const { data: clausePolicies = [] } = useClausePolicies(undefined, clausePolicyStatus)
   const createClausePolicy = useCreateClausePolicy()
   const { data: templateVersions = [] } = useTemplateVersions(selectedTemplateId)
@@ -749,48 +753,65 @@ export default function AdminPage() {
 
         {/* Agents tab */}
         {activeTab === 'agents' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {agents.map((a: AgentDefinition) => (
-              <div key={a.id} className="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-4">
-                <div className="flex items-center justify-between mb-1">
-                  <h4 className="text-sm font-bold text-gray-800 dark:text-gray-200">{a.display_name || a.name}</h4>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                    a.active ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {a.active ? 'Активен' : 'Неактивен'}
-                  </span>
-                </div>
-                {a.description && <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{a.description}</p>}
-                <div className="flex items-center gap-2 text-[10px] text-gray-400 mb-2">
-                  <span className="font-mono">{a.name}</span>
-                  {a.agent_type && <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-dark-700">{a.agent_type}</span>}
-                </div>
-                {a.capabilities && a.capabilities.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {a.capabilities.map((c, i) => (
-                      <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300">
-                        {c}
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {agents.map((a: AgentDefinition) => (
+                <div key={a.id} className="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="text-sm font-bold text-gray-800 dark:text-gray-200">{a.display_name || a.name}</h4>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                        a.active ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {a.active ? 'Активен' : 'Неактивен'}
                       </span>
-                    ))}
+                      <button
+                        onClick={() => setEditingAgent(a)}
+                        className="text-[10px] px-2 py-0.5 rounded border border-primary-300 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition font-medium"
+                      >
+                        Редактировать
+                      </button>
+                    </div>
                   </div>
-                )}
-                {a.tools && a.tools.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {a.tools.map((t, i) => (
-                      <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-dark-700 text-gray-500 font-mono">
-                        {t}
+                  {a.description && <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{a.description}</p>}
+                  <div className="flex items-center gap-2 text-[10px] text-gray-400 mb-2">
+                    <span className="font-mono">{a.agent_id || a.name}</span>
+                    {a.autonomy_level && <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-dark-700">{a.autonomy_level}</span>}
+                    {a.model_profile?.provider && (
+                      <span className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-300">
+                        {a.model_profile.provider}
                       </span>
-                    ))}
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
-            {agents.length === 0 && (
-              <div className="md:col-span-2 text-center py-8">
-                <p className="text-xs text-gray-400">Нет зарегистрированных агентов</p>
-              </div>
+                  {(a.allowed_tools ?? a.tools ?? []).length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {(a.allowed_tools ?? a.tools ?? []).map((t: string, i: number) => (
+                        <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-dark-700 text-gray-500 font-mono">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {agents.length === 0 && (
+                <div className="md:col-span-2 text-center py-8">
+                  <p className="text-xs text-gray-400">Нет зарегистрированных агентов</p>
+                </div>
+              )}
+            </div>
+
+            {editingAgent && (
+              <AgentEditModal
+                agent={editingAgent}
+                saving={updateAgent.isPending}
+                onClose={() => setEditingAgent(null)}
+                onSave={(agentId, data) => {
+                  updateAgent.mutate({ agentId, data }, { onSuccess: () => setEditingAgent(null) })
+                }}
+              />
             )}
-          </div>
+          </>
         )}
       </div>
     </AppLayout>

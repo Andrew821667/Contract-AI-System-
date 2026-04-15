@@ -4,9 +4,11 @@ API v2 — Tools & Agents
 
 Просмотр зарегистрированных инструментов и агентов.
 """
-from typing import List
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
@@ -16,6 +18,16 @@ from src.core.tools.models import ToolDefinition
 from src.core.tools.schemas import ToolDefinitionRead
 from src.core.agents.models import AgentDefinition
 from src.core.agents.schemas import AgentDefinitionRead
+
+
+class AgentDefinitionUpdate(BaseModel):
+    """Поля, доступные для редактирования агента."""
+    allowed_tools: Optional[List[str]] = None
+    autonomy_level: Optional[str] = None
+    confidence_threshold: Optional[float] = None
+    model_profile: Optional[Dict[str, Any]] = None
+    active: Optional[bool] = None
+    description: Optional[str] = None
 
 router = APIRouter(tags=["Tools & Agents"])
 
@@ -99,4 +111,41 @@ async def get_agent(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Агент не найден",
         )
+    return agent
+
+
+# ──────────────────────────────────────────────
+# PATCH /agents/{agent_id}
+# ──────────────────────────────────────────────
+@router.patch(
+    "/agents/{agent_id}",
+    response_model=AgentDefinitionRead,
+    summary="Обновить конфигурацию агента",
+)
+async def update_agent(
+    agent_id: str,
+    body: AgentDefinitionUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Обновляет настройки агента. Только для admin."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Только для администраторов")
+
+    agent = db.query(AgentDefinition).filter(AgentDefinition.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Агент не найден")
+
+    VALID_AUTONOMY = {"advisor", "copilot", "processor", "autonomous"}
+    update_data = body.model_dump(exclude_unset=True)
+    if "autonomy_level" in update_data and update_data["autonomy_level"] not in VALID_AUTONOMY:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail=f"autonomy_level должен быть одним из: {sorted(VALID_AUTONOMY)}")
+
+    for field, value in update_data.items():
+        setattr(agent, field, value)
+    agent.updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(agent)
     return agent
