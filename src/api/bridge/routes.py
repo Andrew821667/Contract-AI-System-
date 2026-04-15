@@ -207,18 +207,18 @@ async def bridge_analyze(
     # Создаём запись договора
     contract = Contract(
         id=file_id,
-        filename=safe_name,
+        file_name=safe_name,
         file_path=file_path,
-        file_type=ext.lstrip('.'),
-        file_size=file_size,
         document_type=document_type,
         status='uploaded',
         assigned_to=user.id,
-        meta_info=json.dumps({
+        meta_info={
             "source": "bridge",
             "org_id": org_id,
             "platform": "legal-ai-platform",
-        }),
+            "file_type": ext.lstrip('.'),
+            "file_size": file_size,
+        },
     )
     db.add(contract)
     db.commit()
@@ -440,7 +440,7 @@ async def bridge_result_summary(
 
     # Формируем markdown-отчёт
     lines = []
-    lines.append(f"**Анализ договора: {contract.filename}**")
+    lines.append(f"**Анализ договора: {contract.file_name}**")
     lines.append("")
 
     # Статистика рисков
@@ -514,7 +514,7 @@ async def bridge_result_pdf(
         return StreamingResponse(
             open(pdf_path, "rb"),
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=report_{contract.filename}.pdf"}
+            headers={"Content-Disposition": f"attachment; filename=report_{contract.file_name}.pdf"}
         )
 
     # Генерируем PDF на лету
@@ -528,7 +528,7 @@ async def bridge_result_pdf(
             return StreamingResponse(
                 io.BytesIO(pdf_bytes),
                 media_type="application/pdf",
-                headers={"Content-Disposition": f"attachment; filename=report_{contract.filename}.pdf"}
+                headers={"Content-Disposition": f"attachment; filename=report_{contract.file_name}.pdf"}
             )
     except Exception as e:
         logger.error(f"PDF generation failed: {e}")
@@ -544,7 +544,7 @@ def _build_summary(contract: Contract, risks: list, recommendations: list) -> st
     critical = sum(1 for r in risks if r['severity'] == 'critical')
     high = sum(1 for r in risks if r['severity'] == 'high')
 
-    parts = [f"Договор '{contract.filename}': найдено {total} рисков"]
+    parts = [f"Договор '{contract.file_name}': найдено {total} рисков"]
     if critical:
         parts.append(f"{critical} критических")
     if high:
@@ -586,7 +586,7 @@ def _generate_pdf_report(contract: Contract, db: Session) -> Optional[bytes]:
 
         # Заголовок
         story.append(Paragraph(f"Otchet po analizu dogovora", title_style))
-        story.append(Paragraph(f"Fayl: {contract.filename}", body_style))
+        story.append(Paragraph(f"Fayl: {contract.file_name}", body_style))
         story.append(Paragraph(f"Data: {datetime.now().strftime('%d.%m.%Y %H:%M')}", body_style))
         story.append(Spacer(1, 20))
 

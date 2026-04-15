@@ -37,55 +37,63 @@ import src.core.templates.models
 import src.core.integrations.models
 import src.core.graph_rag.models
 
-# Module-level state shared between fixtures within one test
-_current_engine = None
-_current_session_factory = None
-
-
 @pytest.fixture(autouse=True)
 def test_db(tmp_path):
-    """Create a fresh SQLite DB file per test."""
-    global _current_engine, _current_session_factory
-
+    """Create a fresh SQLite DB file per test. No module-level globals — fully isolated."""
     db_path = str(tmp_path / "test.db")
-    _current_engine = create_engine(
+    engine = create_engine(
         f"sqlite:///{db_path}",
         connect_args={"check_same_thread": False},
     )
-    Base.metadata.create_all(bind=_current_engine)
-    _current_session_factory = sessionmaker(
-        autocommit=False, autoflush=False, bind=_current_engine
-    )
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-    db = _current_session_factory()
+    db = session_factory()
     try:
         yield db
     finally:
         db.close()
-        _current_engine.dispose()
-        _current_engine = None
-        _current_session_factory = None
-
-
-def _get_test_db():
-    db = _current_session_factory()
-    try:
-        yield db
-    finally:
-        db.close()
+        engine.dispose()
 
 
 if _FULL_APP_AVAILABLE:
     @pytest.fixture()
     def client(test_db):
-        """FastAPI TestClient with overridden DB dependency."""
+        """FastAPI TestClient with overridden DB dependency (closure — no globals)."""
+        # Capture the session factory bound to THIS test's engine via closure.
+        # Safe for parallel test runs (pytest-xdist) since there are no module globals.
+        bound_engine = test_db.bind
+
+        def _get_test_db():
+            _session_factory = sessionmaker(autocommit=False, autoflush=False, bind=bound_engine)
+            db = _session_factory()
+            try:
+                yield db
+            finally:
+                db.close()
+
         app.dependency_overrides[get_db_database] = _get_test_db
         app.dependency_overrides[get_db_models] = _get_test_db
         app.dependency_overrides[get_async_db] = _get_test_db
         _clear_rate_limit_buckets(app)
+        _flush_redis_rate_limits()
         with TestClient(app) as c:
             yield c
         app.dependency_overrides.clear()
+
+    def _flush_redis_rate_limits():
+        """Flush Redis rate-limit and auth-cache keys so tests don't bleed into each other."""
+        try:
+            import redis as _redis
+            from config.settings import settings as _s
+            r = _redis.Redis.from_url(getattr(_s, "redis_url", "redis://localhost:6379"))
+            patterns = ["ratelimit:*", "rate_limit:*", "rl:*", "auth:*"]
+            for pat in patterns:
+                keys = r.keys(pat)
+                if keys:
+                    r.delete(*keys)
+        except Exception:
+            pass  # Redis not available — in-memory buckets already cleared above
 
     def _clear_rate_limit_buckets(application):
         """Walk the entire ASGI middleware stack and clear any rate limiter buckets."""

@@ -150,8 +150,11 @@ app = FastAPI(
 setup_security_middleware(app)
 
 
-# Release the thread-local core DB session after every request,
-# so each new request starts with a fresh session (no stale ORM cache).
+# ScopedSession is thread-local — safe for core services that run in uvicorn's
+# sync threadpool (via run_in_executor). It is NOT used in async endpoint handlers
+# directly; those always use Depends(get_db) → plain SessionLocal per-request.
+# .remove() here cleans up any thread-local session that sync core service code
+# may have opened during the request, preventing session leaks across requests.
 @app.middleware("http")
 async def cleanup_scoped_session(request: Request, call_next):
     response = await call_next(request)
@@ -164,14 +167,21 @@ async def cleanup_scoped_session(request: Request, call_next):
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     """Handle HTTP exceptions with unified format"""
+    if isinstance(exc.detail, str):
+        error = exc.detail
+        message = exc.detail
+        details = None
+    elif isinstance(exc.detail, dict):
+        error = exc.detail.get("error", "Request error")
+        message = exc.detail.get("message", error)
+        details = exc.detail.get("details")
+    else:
+        error = "Request error"
+        message = str(exc.detail)
+        details = exc.detail
     return JSONResponse(
         status_code=exc.status_code,
-        content={
-            "error": exc.detail if isinstance(exc.detail, str) else "Request error",
-            "message": exc.detail if isinstance(exc.detail, str) else (exc.detail.get("message") if isinstance(exc.detail, dict) else str(exc.detail)),
-            "detail": exc.detail,
-            "details": None,
-        }
+        content={"error": error, "message": message, "details": details},
     )
 
 

@@ -283,9 +283,10 @@ async def register(
     from src.models.auth_models import UserSession
     from datetime import timedelta, timezone
 
+    import hashlib as _hl
     session = UserSession(
         user_id=user.id,
-        access_token=access_token,
+        access_token_hash=_hl.sha256(access_token.encode()).hexdigest(),
         refresh_token=refresh_token,
         ip_address=ip_address,
         user_agent=user_agent,

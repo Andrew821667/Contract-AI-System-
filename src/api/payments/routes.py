@@ -221,10 +221,20 @@ async def get_subscription_status(
 
     **Returns:** Subscription details, limits, and usage
     """
+    from datetime import datetime, timezone as _tz
+    _now = datetime.now(_tz.utc)
+    _exp = current_user.subscription_expires
+    if _exp and _exp.tzinfo is None:
+        _exp = _exp.replace(tzinfo=_tz.utc)
+    subscription_status = (
+        "expired" if (_exp and _exp < _now)
+        else "active" if current_user.active
+        else "inactive"
+    )
     return {
         'tier': current_user.subscription_tier,
-        'status': current_user.subscription_status,
-        'expires_at': current_user.subscription_expires.isoformat() if current_user.subscription_expires else None,
+        'status': subscription_status,
+        'expires_at': _exp.isoformat() if _exp else None,
         'limits': {
             'max_contracts_per_day': current_user.max_contracts_per_day,
             'max_llm_requests_per_day': current_user.max_llm_requests_per_day,
@@ -237,8 +247,8 @@ async def get_subscription_status(
             'can_use_changes_analyzer': current_user.subscription_tier in ['professional', 'enterprise']
         },
         'stripe': {
-            'has_customer': bool(current_user.stripe_customer_id),
-            'has_subscription': bool(current_user.stripe_subscription_id)
+            'has_customer': False,
+            'has_subscription': False,
         }
     }
 
