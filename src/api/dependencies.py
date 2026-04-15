@@ -156,7 +156,7 @@ async def get_current_user(
     # Check token revocation: verify session is not revoked
     session = db.query(UserSession).filter(
         UserSession.user_id == user_id,
-        UserSession.access_token == token,
+        UserSession.access_token_hash == hashlib.sha256(token.encode()).hexdigest(),
         UserSession.revoked == False
     ).first()
     if not session:

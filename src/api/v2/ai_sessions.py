@@ -37,6 +37,28 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["AI Sessions"])
 
 
+def _create_session(
+    document_id: str | None,
+    stage: str,
+    user: User,
+    db: Session,
+) -> AISession:
+    """Shared logic: create an AI session, optionally bound to a document."""
+    if document_id:
+        verify_document_access(document_id, user, db)
+    session = AISession(
+        id=generate_uuid(),
+        document_id=document_id,
+        user_id=user.id,
+        stage=stage,
+        status="active",
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+
 # ──────────────────────────────────────────────
 # POST /ai/sessions  (general — without document)
 # ──────────────────────────────────────────────
@@ -51,26 +73,8 @@ async def create_ai_session_general(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Создаёт AI-сессию. Если document_id указан — привязывает к документу.
-    Иначе создаёт общую сессию (агент-помощник).
-    """
-    document_id = body.document_id
-
-    if document_id:
-        verify_document_access(document_id, current_user, db)
-
-    session = AISession(
-        id=generate_uuid(),
-        document_id=document_id,
-        user_id=current_user.id,
-        stage=body.stage,
-        status="active",
-    )
-    db.add(session)
-    db.commit()
-    db.refresh(session)
-    return session
+    """Создаёт AI-сессию. Если document_id указан — привязывает к документу."""
+    return _create_session(body.document_id, body.stage, current_user, db)
 
 
 # ──────────────────────────────────────────────
@@ -88,24 +92,8 @@ async def create_ai_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Создаёт новую AI-сессию для указанного документа.
-    Привязывает сессию к текущему пользователю.
-    """
-    # IDOR fix: проверяем доступ к документу
-    verify_document_access(document_id, current_user, db)
-
-    session = AISession(
-        id=generate_uuid(),
-        document_id=document_id,
-        user_id=current_user.id,
-        stage=body.stage,
-        status="active",
-    )
-    db.add(session)
-    db.commit()
-    db.refresh(session)
-    return session
+    """Создаёт новую AI-сессию для указанного документа."""
+    return _create_session(document_id, body.stage, current_user, db)
 
 
 # ──────────────────────────────────────────────

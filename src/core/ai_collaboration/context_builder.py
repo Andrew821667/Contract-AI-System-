@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload, noload
 
 from src.core.base import AIContext
 from src.models.database import Contract, AnalysisResult
@@ -104,6 +104,11 @@ class AIContextBuilderService:
 
         comments = (
             self.db.query(Comment)
+            .options(
+                selectinload(Comment.mentions),
+                noload(Comment.replies),
+                noload(Comment.assignment),
+            )
             .filter(Comment.document_id == document_id)
             .order_by(Comment.created_at.desc())
             .limit(30)

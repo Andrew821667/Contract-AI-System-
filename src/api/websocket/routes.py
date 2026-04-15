@@ -8,7 +8,8 @@ This prevents connection pool exhaustion with many WebSocket clients.
 """
 import json
 import asyncio
-from typing import Dict, Set
+import time
+from typing import Dict, Set, Tuple
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
 from sqlalchemy.orm import Session
 from loguru import logger
@@ -21,29 +22,55 @@ from src.services.auth_service import AuthService
 
 router = APIRouter()
 
+_WS_STALE_TIMEOUT = 3600  # seconds — close connections silent for 1 hour
+
 
 class ConnectionManager:
     """Manage WebSocket connections"""
 
     def __init__(self):
-        # Maps: contract_id -> set of websockets
-        self.active_connections: Dict[str, Set[WebSocket]] = {}
+        # Maps: contract_id -> set of (websocket, connected_at)
+        self.active_connections: Dict[str, Dict[WebSocket, float]] = {}
 
     async def connect(self, websocket: WebSocket, contract_id: str):
         """Connect client to contract updates"""
         await websocket.accept()
         if contract_id not in self.active_connections:
-            self.active_connections[contract_id] = set()
-        self.active_connections[contract_id].add(websocket)
+            self.active_connections[contract_id] = {}
+        self.active_connections[contract_id][websocket] = time.monotonic()
         logger.info(f"WebSocket connected for contract {contract_id}. Total: {len(self.active_connections[contract_id])}")
 
     def disconnect(self, websocket: WebSocket, contract_id: str):
         """Disconnect client"""
         if contract_id in self.active_connections:
-            self.active_connections[contract_id].discard(websocket)
+            self.active_connections[contract_id].pop(websocket, None)
             if not self.active_connections[contract_id]:
                 del self.active_connections[contract_id]
             logger.info(f"WebSocket disconnected for contract {contract_id}")
+
+    async def cleanup_stale(self) -> int:
+        """Close and remove connections silent for longer than _WS_STALE_TIMEOUT. Returns count."""
+        now = time.monotonic()
+        removed = 0
+        for contract_id, sockets in list(self.active_connections.items()):
+            stale = [ws for ws, ts in sockets.items() if now - ts > _WS_STALE_TIMEOUT]
+            for ws in stale:
+                try:
+                    await ws.close(code=1001, reason="Connection idle timeout")
+                except Exception:
+                    pass
+                sockets.pop(ws, None)
+                removed += 1
+            if not sockets:
+                del self.active_connections[contract_id]
+        if removed:
+            logger.info(f"WebSocket cleanup: removed {removed} stale connections")
+        return removed
+
+    def refresh(self, websocket: WebSocket, contract_id: str) -> None:
+        """Update last-activity timestamp for a connection."""
+        if contract_id in self.active_connections and websocket in self.active_connections[contract_id]:
+            self.active_connections[contract_id][websocket] = time.monotonic()
 
     async def send_personal_message(self, message: dict, websocket: WebSocket):
         """Send message to specific client. Returns False if send failed (client gone)."""
@@ -56,17 +83,21 @@ class ConnectionManager:
     async def broadcast_to_contract(self, message: dict, contract_id: str):
         """Broadcast message to all clients watching this contract"""
         if contract_id in self.active_connections:
-            disconnected = set()
-            for connection in self.active_connections[contract_id]:
+            disconnected = []
+            now = time.monotonic()
+            for connection in list(self.active_connections[contract_id]):
                 try:
                     await connection.send_json(message)
+                    self.active_connections[contract_id][connection] = now  # refresh on activity
                 except Exception as e:
                     logger.error(f"Error broadcasting to contract {contract_id}: {e}")
-                    disconnected.add(connection)
+                    disconnected.append(connection)
 
             # Remove disconnected clients
             for conn in disconnected:
-                self.active_connections[contract_id].discard(conn)
+                self.active_connections[contract_id].pop(conn, None)
+            if not self.active_connections.get(contract_id):
+                self.active_connections.pop(contract_id, None)
 
 
 manager = ConnectionManager()

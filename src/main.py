@@ -3,6 +3,7 @@
 FastAPI Main Application
 Contract AI System Backend Server
 """
+import asyncio
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -98,9 +99,37 @@ async def lifespan(app: FastAPI):
         logger.warning(f"⚠️ Core services import failed: {e}")
         app.state.core_services = None
 
+    # Background task: periodic WebSocket stale connection cleanup
+    async def _ws_cleanup_loop():
+        from src.api.websocket.routes import manager as ws_manager
+        while True:
+            await asyncio.sleep(600)  # every 10 minutes
+            try:
+                await ws_manager.cleanup_stale()
+            except Exception as e:
+                logger.warning(f"WS cleanup error: {e}")
+
+    cleanup_task = asyncio.create_task(_ws_cleanup_loop())
+
     yield
 
-    # Shutdown — remove scoped session registry
+    # Shutdown
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
+    # Close all active WebSocket connections gracefully
+    try:
+        from src.api.websocket.routes import manager as ws_manager
+        for contract_id, sockets in list(ws_manager.active_connections.items()):
+            for ws in list(sockets):
+                try:
+                    await ws.close(code=1001, reason="Server shutdown")
+                except Exception:
+                    pass
+    except Exception:
+        pass
     ScopedSession.remove()
     logger.info("👋 Shutting down Contract AI System Backend...")
 

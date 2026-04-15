@@ -154,8 +154,8 @@ class UserSession(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     user_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
 
-    # Tokens
-    access_token = Column(String(500), unique=True, nullable=False, index=True)
+    # Tokens — stored as SHA-256 hashes to prevent exposure in DB/query logs
+    access_token_hash = Column(String(64), unique=True, nullable=False, index=True)
     refresh_token = Column(String(500), unique=True, nullable=False, index=True)
     token_type = Column(String(20), default='Bearer')
 

@@ -108,6 +108,11 @@ class AuthService:
     # Claims that cannot be overridden via additional_claims
     _RESERVED_CLAIMS = {"user_id", "type", "exp", "iat", "jti", "iss", "aud"}
 
+    @staticmethod
+    def _hash_token(token: str) -> str:
+        """SHA-256 hash of a token for safe storage in DB."""
+        return hashlib.sha256(token.encode()).hexdigest()
+
     def create_access_token(self, user_id: str, additional_claims: Optional[Dict] = None) -> str:
         """
         Create JWT access token with jti, iss, aud claims.
@@ -427,7 +432,7 @@ class AuthService:
         # Create session
         session = UserSession(
             user_id=user.id,
-            access_token=access_token,
+            access_token_hash=self._hash_token(access_token),
             refresh_token=refresh_token,
             ip_address=ip_address,
             user_agent=user_agent,
@@ -605,7 +610,7 @@ class AuthService:
         # Create session
         session = UserSession(
             user_id=user.id,
-            access_token=access_token,
+            access_token_hash=self._hash_token(access_token),
             refresh_token=refresh_token,
             ip_address=ip_address,
             expires_at=demo_token.expires_at
@@ -720,7 +725,7 @@ class AuthService:
         # --- Create new session ---
         new_session = UserSession(
             user_id=user_id,
-            access_token=new_access_token,
+            access_token_hash=self._hash_token(new_access_token),
             refresh_token=new_refresh_token,
             ip_address=session.ip_address,
             user_agent=session.user_agent,
@@ -762,7 +767,7 @@ class AuthService:
             True if successful
         """
         session = self.db.query(UserSession).filter(
-            UserSession.access_token == access_token
+            UserSession.access_token_hash == self._hash_token(access_token)
         ).first()
 
         if session:
