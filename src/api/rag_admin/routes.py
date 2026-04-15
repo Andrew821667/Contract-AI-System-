@@ -201,10 +201,14 @@ async def list_documents(
     coll = _get_collection(collection)
     all_items = coll.get(include=["metadatas"])
 
+    is_admin = current_user.role in ("admin", "senior_lawyer")
     docs: Dict[str, Dict[str, Any]] = {}
     for meta in all_items["metadatas"]:
         doc_id = meta.get("doc_id")
         if not doc_id:
+            continue
+        # IDOR fix: non-admin users see only their own documents
+        if not is_admin and meta.get("uploaded_by") != str(current_user.id):
             continue
         if doc_id not in docs:
             docs[doc_id] = {

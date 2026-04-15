@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils \
     postgresql-client \
     libmagic1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app user
@@ -69,12 +70,14 @@ EXPOSE 8000 8501
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health', timeout=5)"
+    CMD curl -f http://localhost:8000/health || exit 1
 
 # Entrypoint: wait for DB + run migrations
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
 # Default command (FastAPI backend)
-# Gunicorn with 4 Uvicorn workers for multi-core utilization.
+# 4 Uvicorn workers for multi-core utilization.
+# --timeout 350: gunicorn worker timeout > nginx proxy_read_timeout (300s)
+# --max-requests 1000: periodic worker restart to prevent memory leaks
 # Requires Redis for rate limiting (in-memory rate limiter is per-process).
-CMD ["gunicorn", "src.main:app", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "180", "--graceful-timeout", "30"]
+CMD ["gunicorn", "src.main:app", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--timeout", "350", "--graceful-timeout", "30", "--max-requests", "1000", "--max-requests-jitter", "100"]

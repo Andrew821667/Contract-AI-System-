@@ -27,7 +27,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 # 3 DB queries per request (verify_token + session check + user fetch).
 # Uses Redis if available, falls back to in-memory LRU.
 
-_AUTH_CACHE_TTL = 10  # seconds (short to limit revoked-session window)
+_AUTH_CACHE_TTL = 300  # seconds — invalidated explicitly on logout/revoke
 _AUTH_CACHE_MAX = 512  # max entries for in-memory fallback
 
 _redis_client = None
@@ -106,6 +106,13 @@ def _cache_invalidate(token_hash: str) -> None:
         except Exception:
             pass
     _mem_cache.pop(token_hash, None)
+
+
+def invalidate_auth_cache(token: str) -> None:
+    """Public helper: invalidate auth cache for a given raw token (call on logout)."""
+    import hashlib
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    _cache_invalidate(token_hash)
 
 
 async def get_current_user(

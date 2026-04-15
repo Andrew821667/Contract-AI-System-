@@ -387,8 +387,8 @@ else:
     engine = create_engine(
         DATABASE_URL,
         echo=False,
-        pool_size=10,
-        max_overflow=20,
+        pool_size=20,
+        max_overflow=30,
         pool_pre_ping=True,  # Detect stale connections
         pool_recycle=300,     # Recycle connections after 5 minutes
     )

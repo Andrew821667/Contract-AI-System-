@@ -141,14 +141,30 @@ class Settings(BaseSettings):
         # Auto-generate SECRET_KEY in dev if not set (with loud warning)
         if self.secret_key in ["", "your-secret-key-here", "changeme", "secret"]:
             if self.app_env in ("development", "testing"):
-                import secrets
-                self.secret_key = secrets.token_urlsafe(32)
+                import secrets as _secrets
                 import warnings
+                generated_key = _secrets.token_urlsafe(32)
+                self.secret_key = generated_key
+                # Persist to .env so the same key survives restarts
+                env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+                try:
+                    if os.path.exists(env_path):
+                        with open(env_path, "r") as f:
+                            env_content = f.read()
+                        if "SECRET_KEY=" in env_content:
+                            import re as _re
+                            env_content = _re.sub(
+                                r"^SECRET_KEY=.*$", f"SECRET_KEY={generated_key}", env_content, flags=_re.MULTILINE
+                            )
+                        else:
+                            env_content += f"\nSECRET_KEY={generated_key}\n"
+                        with open(env_path, "w") as f:
+                            f.write(env_content)
+                except OSError:
+                    pass
                 warnings.warn(
-                    "⚠️  SECRET_KEY not set! Auto-generated a temporary key for development.\n"
-                    "JWT tokens will be INVALIDATED on every restart!\n"
-                    "Set SECRET_KEY in .env for persistent sessions:\n"
-                    f"  SECRET_KEY={self.secret_key}",
+                    "⚠️  SECRET_KEY not set! Auto-generated and saved to .env.\n"
+                    f"  SECRET_KEY={generated_key}",
                     UserWarning,
                     stacklevel=2
                 )

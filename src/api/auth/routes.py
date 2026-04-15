@@ -184,7 +184,7 @@ class UpdateRoleRequest(BaseModel):
 
 # ==================== Dependencies (from shared module) ====================
 
-from src.api.dependencies import get_current_user, require_admin  # noqa: E402
+from src.api.dependencies import get_current_user, require_admin, invalidate_auth_cache  # noqa: E402
 
 
 def get_client_ip(request: Request) -> Optional[str]:
@@ -244,6 +244,7 @@ async def register(
     }
     ```
     """
+    _check_csrf(request)
     auth_service = AuthService(db)
 
     user, error = auth_service.register_user(
@@ -465,6 +466,8 @@ async def login(
     }
     ```
     """
+    if request:
+        _check_csrf(request)
     auth_service = AuthService(db)
 
     ip_address = get_client_ip(request) if request else None
@@ -657,6 +660,9 @@ async def logout(
         )
 
     access_token = authorization.replace("Bearer ", "")
+
+    # Invalidate auth cache so the revoked token is rejected immediately
+    invalidate_auth_cache(access_token)
 
     auth_service = AuthService(db)
     success = auth_service.logout_user(access_token)
