@@ -17,6 +17,8 @@ from loguru import logger
 
 # Configure logging
 logger.remove()
+# Default request_id ("-") для логов вне HTTP-контекста (startup, background tasks)
+logger.configure(extra={"request_id": "-"})
 _is_production = os.getenv("APP_ENV") == "production"
 if _is_production:
     # JSON format for machine parsing in production (ELK, CloudWatch, etc.)
@@ -24,7 +26,7 @@ if _is_production:
 else:
     logger.add(
         sys.stdout,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <magenta>rid={extra[request_id]}</magenta> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
         level="INFO",
         colorize=True,
     )
@@ -33,7 +35,7 @@ logger.add(
     rotation="10 MB",
     retention="30 days",
     level="DEBUG",
-    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | rid={extra[request_id]} | {name}:{function}:{line} - {message}",
 )
 
 # Import settings
@@ -44,6 +46,7 @@ from src.models.database import engine, Base, SessionLocal, ScopedSession
 
 # Import middleware
 from src.middleware.security import setup_security_middleware
+from src.middleware.request_id import request_id_middleware
 
 # Import routers
 from src.api.auth.routes import router as auth_router
@@ -148,6 +151,22 @@ app = FastAPI(
 
 # Security middleware setup (includes CORS, rate limiting, security headers)
 setup_security_middleware(app)
+
+# Request ID middleware — propagates X-Request-Id через loguru-контекст и response headers
+app.middleware("http")(request_id_middleware)
+
+# Prometheus metrics — GET /metrics (HTTP latency/requests + custom LLM metrics)
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+
+    Instrumentator(
+        should_group_status_codes=True,
+        should_ignore_untemplated=True,
+        excluded_handlers=["/metrics", "/health"],
+    ).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+    logger.info("📈 Prometheus metrics mounted at /metrics")
+except ImportError:
+    logger.warning("⚠️ prometheus-fastapi-instrumentator не установлен — /metrics недоступен")
 
 
 # ScopedSession is thread-local — safe for core services that run in uvicorn's

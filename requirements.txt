@@ -108,3 +108,7 @@ mypy==1.8.0
 # Logging
 loguru==0.7.2
 bleach>=6.0.0
+
+# Observability
+prometheus-client==0.20.0
+prometheus-fastapi-instrumentator==7.0.0

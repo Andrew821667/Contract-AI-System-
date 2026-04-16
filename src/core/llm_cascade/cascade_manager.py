@@ -10,9 +10,17 @@ Cascade Manager — управление 3-уровневой LLM cascade.
 """
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from loguru import logger
+
+from src.middleware.metrics import (
+    llm_call_duration_seconds,
+    llm_cascade_attempts_total,
+    llm_cascade_fallbacks_total,
+    llm_cascade_total_failures_total,
+)
 
 from .routing_policy import LLMRoutingPolicy, LLMRoutingPolicyService
 from .fallback import FallbackHandler, FallbackMode
@@ -171,21 +179,43 @@ class CascadeManager:
         )
 
         models_to_try = [selection["model"]] + selection["fallback_chain"]
+        primary_model = selection["model"]
 
         for attempt, model in enumerate(models_to_try, start=1):
+            start_ts = time.perf_counter()
             try:
                 result = await call_fn(
                     model,
                     selection["temperature"],
                     selection["max_tokens"],
                 )
+                duration = time.perf_counter() - start_ts
+                llm_call_duration_seconds.labels(
+                    model=model, cascade_level=cascade_level, success="true"
+                ).observe(duration)
+                llm_cascade_attempts_total.labels(
+                    model=model, cascade_level=cascade_level, success="true"
+                ).inc()
+                if model != primary_model:
+                    llm_cascade_fallbacks_total.labels(
+                        cascade_level=cascade_level,
+                        from_model=primary_model,
+                        to_model=model,
+                    ).inc()
                 return {
                     "result": result,
                     "model_used": model,
                     "attempts": attempt,
-                    "fallback_used": model != selection["model"],
+                    "fallback_used": model != primary_model,
                 }
             except Exception as exc:
+                duration = time.perf_counter() - start_ts
+                llm_call_duration_seconds.labels(
+                    model=model, cascade_level=cascade_level, success="false"
+                ).observe(duration)
+                llm_cascade_attempts_total.labels(
+                    model=model, cascade_level=cascade_level, success="false"
+                ).inc()
                 logger.warning(
                     f"Cascade attempt {attempt}/{len(models_to_try)} failed "
                     f"(model={model}): {exc}"
@@ -194,6 +224,7 @@ class CascadeManager:
                 self.fallback_handler.record_failure(model)
 
         # All attempts failed
+        llm_cascade_total_failures_total.labels(cascade_level=cascade_level).inc()
         fallback_result = await self.fallback_handler.handle_total_failure(
             cascade_level=cascade_level,
             task_type=task_type,
