@@ -206,8 +206,9 @@ async def _generate_ai_response(
     user_id: str,
     db: Session,
 ) -> str:
-    """Генерирует ответ AI через LLMGateway."""
+    """Генерирует ответ AI через LLMGateway с RAG-обогащением."""
     from src.services.llm_gateway import LLMGateway
+    from src.services.admin_rag_retriever import get_legal_context, has_legal_docs
 
     # Собираем историю диалога
     history = (
@@ -216,6 +217,13 @@ async def _generate_ai_response(
         .order_by(AIConversationTurn.created_at)
         .all()
     )
+
+    # Последнее сообщение пользователя — основа RAG-запроса
+    user_query = ""
+    for turn in reversed(history):
+        if turn.role == "user":
+            user_query = turn.content
+            break
 
     # Собираем контекст документа
     context_parts = []
@@ -239,6 +247,27 @@ async def _generate_ai_response(
         except Exception as e:
             logger.warning(f"Failed to load document context: {e}")
 
+    # RAG-обогащение: законы, судебная практика, база знаний системы
+    rag_context = ""
+    if user_query:
+        try:
+            rag_query = user_query
+            if ai_session.document_id and context_parts:
+                # Уточняем запрос контекстом документа
+                doc_hint = context_parts[0] if context_parts else ""
+                rag_query = f"{doc_hint}. {user_query}" if doc_hint else user_query
+
+            rag_context = get_legal_context(
+                query=rag_query,
+                collections=["laws", "case_law", "knowledge"],
+                n_results=3,
+                max_chars=2000,
+            )
+            if rag_context:
+                logger.debug(f"RAG context retrieved for session {session_id}: {len(rag_context)} chars")
+        except Exception as e:
+            logger.warning(f"RAG retrieval failed (non-fatal): {e}")
+
     # Системный промпт
     system_prompt = (
         "Ты — AI-ассистент юридической системы Contract AI System. "
@@ -248,10 +277,13 @@ async def _generate_ai_response(
         "- Отвечай на русском языке\n"
         "- Будь конкретным и полезным\n"
         "- Ссылайся на конкретные пункты документа, если они есть в контексте\n"
+        "- При наличии правовой базы — ссылайся на конкретные законы и нормы\n"
         "- Если не знаешь ответ, честно скажи об этом\n"
     )
     if context_parts:
-        system_prompt += "\n# Контекст\n" + "\n".join(context_parts)
+        system_prompt += "\n\n# Контекст документа\n" + "\n".join(context_parts)
+    if rag_context:
+        system_prompt += f"\n\n# Правовая база и база знаний\n{rag_context}"
 
     # Формируем промпт из истории
     messages_text = []

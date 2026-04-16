@@ -753,7 +753,11 @@ class APIClient {
 
   async listAISessions(documentId: string): Promise<{ sessions: AISession[]; total: number }> {
     const response = await this.client.get(`/api/v2/documents/${documentId}/ai/sessions`);
-    return response.data;
+    const data = response.data;
+    if (Array.isArray(data)) {
+      return { sessions: data, total: data.length };
+    }
+    return data;
   }
 
   async sendAIMessage(sessionId: string, content: string): Promise<AIMessage> {
