@@ -25,6 +25,7 @@ from src.utils.file_validator import (
     MAX_FILE_SIZE,
 )
 from src.api.dependencies import get_current_user
+from src.api.v2.dependencies import OrganizationContext, get_org_context
 
 from .schemas import ContractUploadResponse
 
@@ -39,7 +40,8 @@ async def upload_contract(
     file: UploadFile = File(...),
     document_type: str = Form("contract"),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Upload a contract file for analysis
@@ -142,6 +144,7 @@ async def upload_contract(
             contract_type='unknown',  # Will be determined during analysis
             status='uploaded',
             assigned_to=current_user.id,
+            organization_id=ctx.org.id if ctx else None,
             meta_info={}
         )
         db.add(contract)

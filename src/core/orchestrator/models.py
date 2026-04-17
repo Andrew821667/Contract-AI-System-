@@ -32,6 +32,7 @@ class OrchestratorRun(Base):
     id = Column(String(36), primary_key=True, default=generate_uuid)
     goal = Column(Text, nullable=False)  # High-level цель: "Подготовь документ к согласованию"
     initiated_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    organization_id = Column(String(36), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
     document_id = Column(String(36), ForeignKey("contracts.id", ondelete="SET NULL"), nullable=True, index=True)
     session_id = Column(String(36), ForeignKey("ai_sessions.id", ondelete="SET NULL"), nullable=True, index=True)
 

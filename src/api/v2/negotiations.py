@@ -13,7 +13,9 @@ from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
 from src.api.v2.dependencies import (
+    OrganizationContext,
     get_core_services,
+    get_org_context,
     verify_document_access,
     verify_negotiation_ownership,
 )
@@ -67,17 +69,22 @@ async def start_negotiation(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Создаёт новый процесс переговоров по документу.
     """
     # IDOR fix: проверяем доступ к документу
-    verify_document_access(body.document_id, current_user, db)
+    verify_document_access(body.document_id, current_user, db, ctx)
 
     svc = _get_negotiation_service(db, request)
 
     try:
-        result = await svc.start_negotiation(body, user_id=current_user.id)
+        result = await svc.start_negotiation(
+            body,
+            user_id=current_user.id,
+            org_id=ctx.org.id if ctx else None,
+        )
     except PermissionError:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа")
 
@@ -97,12 +104,13 @@ async def generate_objections(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Генерирует AI-возражения для указанного процесса переговоров.
     """
     # IDOR fix: проверяем ownership переговоров
-    verify_negotiation_ownership(body.negotiation_id, current_user, db)
+    verify_negotiation_ownership(body.negotiation_id, current_user, db, ctx)
 
     svc = _get_negotiation_service(db, request)
 
@@ -129,12 +137,13 @@ async def select_objections(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Выбирает возражения для включения в протокол переговоров.
     """
     # IDOR fix: проверяем ownership
-    verify_negotiation_ownership(body.negotiation_id, current_user, db)
+    verify_negotiation_ownership(body.negotiation_id, current_user, db, ctx)
 
     svc = _get_negotiation_service(db, request)
     result = await svc.select_objections(body, user_id=current_user.id)
@@ -154,12 +163,13 @@ async def prepare_position(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Подготавливает переговорную позицию на основе выбранных возражений.
     """
     # IDOR fix: проверяем ownership
-    verify_negotiation_ownership(body.negotiation_id, current_user, db)
+    verify_negotiation_ownership(body.negotiation_id, current_user, db, ctx)
 
     svc = _get_negotiation_service(db, request)
 
@@ -184,12 +194,13 @@ async def get_negotiation(
     negotiation_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ) -> dict[str, Any]:
     """
     Возвращает полную информацию о процессе переговоров.
     """
     # IDOR fix: проверяем ownership
-    negotiation = verify_negotiation_ownership(negotiation_id, current_user, db)
+    negotiation = verify_negotiation_ownership(negotiation_id, current_user, db, ctx)
 
     return {
         "id": negotiation.id,

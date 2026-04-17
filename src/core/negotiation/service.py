@@ -69,6 +69,7 @@ class NegotiationService:
             id=negotiation_id,
             document_id=request.document_id,
             user_id=user_id,
+            organization_id=org_id,
             analysis_id=request.analysis_id,
             goal=request.goal,
             status="active",

@@ -10,7 +10,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
-from src.api.v2.dependencies import verify_ai_session_ownership
+from src.api.v2.dependencies import (
+    OrganizationContext,
+    get_org_context,
+    verify_ai_session_ownership,
+)
 from src.models.database import get_db
 from src.models.auth_models import User
 from src.core.ai_collaboration.models import AIAction, AISession
@@ -23,11 +27,20 @@ from src.core.ai_collaboration.approval_service import AIApprovalService
 router = APIRouter(tags=["AI Actions"])
 
 
-def _verify_action_access(action_id: str, user: User, db: Session) -> AIAction:
+def _verify_action_access(
+    action_id: str,
+    user: User,
+    db: Session,
+    ctx: OrganizationContext | None = None,
+) -> tuple[AIAction, AISession]:
     """
     Проверить доступ к AI-действию через ownership сессии.
-    Также запрещает self-approval (нельзя одобрять собственные действия).
+
+    Tenant isolation: если у сессии заполнен organization_id и передан ctx —
+    проверяем совпадение. Legacy записи (NULL org_id) пропускают проверку.
     """
+    from src.api.v2.dependencies import _check_tenant_match
+
     action = db.query(AIAction).filter(AIAction.id == action_id).first()
     if not action:
         raise HTTPException(
@@ -41,7 +54,11 @@ def _verify_action_access(action_id: str, user: User, db: Session) -> AIAction:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="AI-сессия для данного действия не найдена",
         )
-    # Для просмотра — проверяем ownership сессии
+    if not _check_tenant_match(ai_session.organization_id, ctx):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="AI-сессия принадлежит другой организации",
+        )
     # Для approve/reject — проверяем, что это НЕ owner (anti self-approval)
     return action, ai_session
 
@@ -60,12 +77,13 @@ async def list_session_actions(
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Возвращает AI-действия для указанной сессии.
     """
     # IDOR fix: проверяем ownership сессии
-    verify_ai_session_ownership(session_id, current_user, db)
+    verify_ai_session_ownership(session_id, current_user, db, ctx)
 
     actions = (
         db.query(AIAction)
@@ -91,11 +109,12 @@ async def approve_action(
     body: AIActionApprovalCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Одобряет AI-действие. Запрещено одобрять собственные действия (self-approval).
     """
-    action, ai_session = _verify_action_access(action_id, current_user, db)
+    action, ai_session = _verify_action_access(action_id, current_user, db, ctx)
 
     # Anti self-approval: владелец сессии не может одобрять действия своей сессии
     if ai_session.user_id == current_user.id and current_user.role != "admin":
@@ -134,11 +153,12 @@ async def reject_action(
     body: AIActionApprovalCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Отклоняет AI-действие.
     """
-    action, ai_session = _verify_action_access(action_id, current_user, db)
+    action, ai_session = _verify_action_access(action_id, current_user, db, ctx)
 
     # Anti self-approval
     if ai_session.user_id == current_user.id and current_user.role != "admin":
@@ -177,6 +197,7 @@ async def edit_and_approve_action(
     body: AIActionApprovalCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Редактирует payload AI-действия и одобряет его.
@@ -188,7 +209,7 @@ async def edit_and_approve_action(
             detail="Поле edited_payload обязательно для edit-and-approve",
         )
 
-    action, ai_session = _verify_action_access(action_id, current_user, db)
+    action, ai_session = _verify_action_access(action_id, current_user, db, ctx)
 
     # Anti self-approval
     if ai_session.user_id == current_user.id and current_user.role != "admin":

@@ -40,12 +40,14 @@ class AgentOrchestratorService:
         user_id: str,
         document_id: str | None = None,
         session_id: str | None = None,
+        org_id: str | None = None,
     ) -> OrchestratorRun:
         """Запустить оркестрацию по цели."""
 
         run = OrchestratorRun(
             goal=goal,
             initiated_by=user_id,
+            organization_id=org_id,
             document_id=document_id,
             session_id=session_id,
             status="planning",

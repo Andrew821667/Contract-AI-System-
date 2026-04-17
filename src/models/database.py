@@ -88,6 +88,12 @@ class Contract(Base):
     upload_date = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     status = Column(String(50), default='pending', index=True)
     assigned_to = Column(String(36), ForeignKey('users.id', ondelete='SET NULL'), index=True)
+    organization_id = Column(
+        String(36),
+        ForeignKey('organizations.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
     risk_level = Column(String(20), index=True)
     meta_info = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

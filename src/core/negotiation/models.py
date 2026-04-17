@@ -42,6 +42,12 @@ class Negotiation(Base):
         nullable=False,
         index=True,
     )
+    organization_id = Column(
+        String(36),
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     analysis_id = Column(String(36), nullable=True)
     goal = Column(Text, nullable=False)
     status = Column(String(32), nullable=False, default="active")

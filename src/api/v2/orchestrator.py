@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
 from src.api.v2.dependencies import (
+    OrganizationContext,
+    get_org_context,
     verify_document_access,
     verify_orchestrator_run_ownership,
 )
@@ -46,18 +48,20 @@ async def create_run(
     body: OrchestratorRunCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Создаёт OrchestratorRun с указанной целью.
     """
     # IDOR fix: проверяем доступ к документу (если указан)
     if body.document_id:
-        verify_document_access(body.document_id, current_user, db)
+        verify_document_access(body.document_id, current_user, db, ctx)
 
     run = OrchestratorRun(
         id=generate_uuid(),
         goal=body.goal,
         initiated_by=current_user.id,
+        organization_id=ctx.org.id if ctx else None,
         document_id=body.document_id,
         status="planning",
     )
@@ -79,10 +83,11 @@ async def get_run(
     run_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """Возвращает текущий статус OrchestratorRun."""
     # IDOR fix: проверяем ownership
-    run = verify_orchestrator_run_ownership(run_id, current_user, db)
+    run = verify_orchestrator_run_ownership(run_id, current_user, db, ctx)
     return run
 
 
@@ -98,12 +103,13 @@ async def continue_run(
     run_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Продолжает выполнение оркестрации после одобрения checkpoint.
     """
     # IDOR fix: проверяем ownership
-    run = verify_orchestrator_run_ownership(run_id, current_user, db)
+    run = verify_orchestrator_run_ownership(run_id, current_user, db, ctx)
 
     if run.status != "paused":
         raise HTTPException(
@@ -146,12 +152,13 @@ async def cancel_run(
     run_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Отменяет выполнение оркестрации.
     """
     # IDOR fix: проверяем ownership
-    run = verify_orchestrator_run_ownership(run_id, current_user, db)
+    run = verify_orchestrator_run_ownership(run_id, current_user, db, ctx)
 
     terminal_statuses = {"completed", "failed", "cancelled"}
     if run.status in terminal_statuses:
@@ -181,12 +188,13 @@ async def get_run_plan(
     run_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Возвращает текущий (последний по версии) план выполнения.
     """
     # IDOR fix: проверяем ownership
-    verify_orchestrator_run_ownership(run_id, current_user, db)
+    verify_orchestrator_run_ownership(run_id, current_user, db, ctx)
 
     plan = (
         db.query(ExecutionPlan)
@@ -214,12 +222,13 @@ async def list_run_steps(
     run_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Возвращает все шаги текущего плана выполнения.
     """
     # IDOR fix: проверяем ownership
-    verify_orchestrator_run_ownership(run_id, current_user, db)
+    verify_orchestrator_run_ownership(run_id, current_user, db, ctx)
 
     plan = (
         db.query(ExecutionPlan)

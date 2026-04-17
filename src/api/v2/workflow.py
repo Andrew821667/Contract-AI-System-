@@ -14,7 +14,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
-from src.api.v2.dependencies import verify_workflow_task_ownership
+from src.api.v2.dependencies import (
+    OrganizationContext,
+    get_org_context,
+    verify_workflow_task_ownership,
+)
 from src.models.database import get_db
 from src.models.auth_models import User
 from src.core.workflow.engine import WorkflowEngineService
@@ -114,10 +118,11 @@ async def start_workflow_execution(
     body: WorkflowStartRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ) -> WorkflowExecutionRead:
     """Запустить маршрут согласования для документа."""
     from src.api.v2.dependencies import verify_document_access
-    verify_document_access(body.document_id, current_user, db)
+    verify_document_access(body.document_id, current_user, db, ctx)
 
     engine = WorkflowEngineService(db)
     try:
@@ -145,10 +150,11 @@ async def get_document_executions(
     document_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ) -> List[WorkflowExecutionRead]:
     """Получить workflow-процессы для документа."""
     from src.api.v2.dependencies import verify_document_access
-    verify_document_access(document_id, current_user, db)
+    verify_document_access(document_id, current_user, db, ctx)
 
     executions = (
         db.query(WorkflowExecution)
@@ -218,10 +224,11 @@ async def complete_task(
     body: TaskCompleteBody,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ) -> WorkflowTaskRead:
     """Завершить задачу с решением (approve/reject/return_for_revision)."""
     # IDOR fix: проверяем, что задача назначена текущему пользователю
-    verify_workflow_task_ownership(task_id, current_user, db)
+    verify_workflow_task_ownership(task_id, current_user, db, ctx)
 
     engine = WorkflowEngineService(db)
     try:
@@ -254,10 +261,11 @@ async def escalate_task(
     body: TaskEscalateBody | None = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ) -> WorkflowTaskRead:
     """Эскалировать задачу на следующий уровень."""
     # IDOR fix: проверяем, что задача назначена текущему пользователю
-    task = verify_workflow_task_ownership(task_id, current_user, db)
+    task = verify_workflow_task_ownership(task_id, current_user, db, ctx)
 
     if task.status in ("completed", "escalated"):
         raise HTTPException(

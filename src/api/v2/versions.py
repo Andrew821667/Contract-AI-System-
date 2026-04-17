@@ -12,7 +12,12 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
-from src.api.v2.dependencies import get_core_services, verify_document_access
+from src.api.v2.dependencies import (
+    OrganizationContext,
+    get_core_services,
+    get_org_context,
+    verify_document_access,
+)
 from src.models.database import get_db
 from src.models.auth_models import User
 from src.models.changes_models import ContractVersion
@@ -40,12 +45,13 @@ async def compare_versions(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Запускает интеллектуальное сравнение двух версий документа.
     """
     # IDOR fix: проверяем доступ к документу
-    verify_document_access(body.document_id, current_user, db)
+    verify_document_access(body.document_id, current_user, db, ctx)
 
     # CoreServices injection
     core = getattr(request.app.state, "core_services", None)
@@ -85,6 +91,7 @@ async def get_material_changes(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Возвращает список существенных изменений для указанного сравнения.
@@ -93,7 +100,7 @@ async def get_material_changes(
     from src.core.negotiation.version_service import _comparison_cache
     cached = _comparison_cache.get(comparison_id)
     if cached and cached.get("document_id"):
-        verify_document_access(cached["document_id"], current_user, db)
+        verify_document_access(cached["document_id"], current_user, db, ctx)
 
     core = getattr(request.app.state, "core_services", None)
     if core:
@@ -123,6 +130,7 @@ async def get_recommendations(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ) -> dict[str, Any]:
     """
     Возвращает рекомендации: принять / отклонить / обсудить каждое изменение.
@@ -131,7 +139,7 @@ async def get_recommendations(
     from src.core.negotiation.version_service import _comparison_cache
     cached = _comparison_cache.get(comparison_id)
     if cached and cached.get("document_id"):
-        verify_document_access(cached["document_id"], current_user, db)
+        verify_document_access(cached["document_id"], current_user, db, ctx)
 
     core = getattr(request.app.state, "core_services", None)
     if core:
@@ -160,12 +168,13 @@ async def get_version_history(
     document_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ) -> list[dict[str, Any]]:
     """
     Возвращает историю версий документа.
     """
     # IDOR fix: проверяем доступ к документу
-    verify_document_access(document_id, current_user, db)
+    verify_document_access(document_id, current_user, db, ctx)
 
     versions = (
         db.query(ContractVersion)

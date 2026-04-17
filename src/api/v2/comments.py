@@ -11,7 +11,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
-from src.api.v2.dependencies import verify_document_access
+from src.api.v2.dependencies import (
+    OrganizationContext,
+    get_org_context,
+    verify_document_access,
+)
 from src.models.database import get_db
 from src.models.auth_models import User
 from src.core.collaboration.models import Comment
@@ -22,7 +26,10 @@ router = APIRouter(tags=["Comments"])
 
 
 def _get_comment_with_access(
-    comment_id: str, user: User, db: Session,
+    comment_id: str,
+    user: User,
+    db: Session,
+    ctx: OrganizationContext | None = None,
 ) -> Comment:
     """Загрузить комментарий и проверить доступ к его документу."""
     comment = db.query(Comment).filter(Comment.id == comment_id).first()
@@ -31,7 +38,7 @@ def _get_comment_with_access(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Комментарий {comment_id} не найден",
         )
-    verify_document_access(comment.document_id, user, db)
+    verify_document_access(comment.document_id, user, db, ctx)
     return comment
 
 
@@ -60,10 +67,11 @@ async def create_comment(
     body: CommentCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ) -> CommentRead:
     """Создать комментарий к документу."""
     # IDOR fix: проверяем доступ к документу
-    verify_document_access(document_id, current_user, db)
+    verify_document_access(document_id, current_user, db, ctx)
 
     svc = CommentService(db)
     comment = svc.create_comment(
@@ -93,10 +101,11 @@ async def list_comments(
     include_resolved: bool = Query(False, description="Включить закрытые комментарии"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ) -> List[CommentRead]:
     """Получить комментарии к документу с опциональной фильтрацией."""
     # IDOR fix: проверяем доступ к документу
-    verify_document_access(document_id, current_user, db)
+    verify_document_access(document_id, current_user, db, ctx)
 
     svc = CommentService(db)
     comments = svc.get_document_comments(
@@ -121,9 +130,10 @@ async def reply_to_comment(
     body: ReplyBody,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ) -> CommentRead:
     """Ответить на существующий комментарий."""
-    _get_comment_with_access(comment_id, current_user, db)
+    _get_comment_with_access(comment_id, current_user, db, ctx)
     svc = CommentService(db)
     try:
         comment = svc.reply(
@@ -153,9 +163,10 @@ async def resolve_comment(
     comment_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ) -> CommentRead:
     """Закрыть (resolve) комментарий."""
-    _get_comment_with_access(comment_id, current_user, db)
+    _get_comment_with_access(comment_id, current_user, db, ctx)
     svc = CommentService(db)
     comment = svc.resolve_comment(
         comment_id=comment_id,
@@ -184,9 +195,10 @@ async def assign_comment(
     body: AssignBody,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ) -> dict:
     """Назначить ответственного за комментарий."""
-    _get_comment_with_access(comment_id, current_user, db)
+    _get_comment_with_access(comment_id, current_user, db, ctx)
     svc = CommentService(db)
     try:
         assignment = svc.assign_comment(

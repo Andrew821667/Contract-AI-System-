@@ -14,6 +14,8 @@ from sqlalchemy.orm import Session
 
 from src.api.dependencies import get_current_user
 from src.api.v2.dependencies import (
+    OrganizationContext,
+    get_org_context,
     verify_ai_session_ownership,
     verify_document_access,
 )
@@ -42,14 +44,16 @@ def _create_session(
     stage: str,
     user: User,
     db: Session,
+    ctx: OrganizationContext | None = None,
 ) -> AISession:
     """Shared logic: create an AI session, optionally bound to a document."""
     if document_id:
-        verify_document_access(document_id, user, db)
+        verify_document_access(document_id, user, db, ctx)
     session = AISession(
         id=generate_uuid(),
         document_id=document_id,
         user_id=user.id,
+        organization_id=ctx.org.id if ctx else None,
         stage=stage,
         status="active",
     )
@@ -72,9 +76,10 @@ async def create_ai_session_general(
     body: AISessionCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """Создаёт AI-сессию. Если document_id указан — привязывает к документу."""
-    return _create_session(body.document_id, body.stage, current_user, db)
+    return _create_session(body.document_id, body.stage, current_user, db, ctx)
 
 
 # ──────────────────────────────────────────────
@@ -91,9 +96,10 @@ async def create_ai_session(
     body: AISessionCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """Создаёт новую AI-сессию для указанного документа."""
-    return _create_session(document_id, body.stage, current_user, db)
+    return _create_session(document_id, body.stage, current_user, db, ctx)
 
 
 # ──────────────────────────────────────────────
@@ -110,12 +116,13 @@ async def list_ai_sessions(
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Возвращает AI-сессии текущего пользователя для указанного документа.
     """
     # IDOR fix: проверяем доступ к документу
-    verify_document_access(document_id, current_user, db)
+    verify_document_access(document_id, current_user, db, ctx)
 
     # Пользователь видит только свои сессии (admin видит все)
     query = db.query(AISession).filter(AISession.document_id == document_id)
@@ -140,12 +147,13 @@ async def send_message(
     body: AIMessageCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Добавляет сообщение пользователя в AI-сессию и генерирует ответ AI.
     """
     # IDOR fix: проверяем ownership AI-сессии
-    ai_session = verify_ai_session_ownership(session_id, current_user, db)
+    ai_session = verify_ai_session_ownership(session_id, current_user, db, ctx)
 
     if ai_session.status == "closed":
         raise HTTPException(
@@ -319,12 +327,13 @@ async def list_messages(
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Возвращает сообщения для указанной сессии.
     """
     # IDOR fix: проверяем ownership
-    verify_ai_session_ownership(session_id, current_user, db)
+    verify_ai_session_ownership(session_id, current_user, db, ctx)
 
     turns = (
         db.query(AIConversationTurn)
@@ -349,12 +358,13 @@ async def get_session_context(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    ctx: OrganizationContext | None = Depends(get_org_context),
 ):
     """
     Собирает и возвращает полный контекст AI-сессии.
     """
     # IDOR fix: проверяем ownership
-    ai_session = verify_ai_session_ownership(session_id, current_user, db)
+    ai_session = verify_ai_session_ownership(session_id, current_user, db, ctx)
 
     builder = AIContextBuilderService(db)
     context = await builder.build(
