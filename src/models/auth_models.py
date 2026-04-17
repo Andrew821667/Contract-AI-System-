@@ -52,6 +52,9 @@ class User(Base):
     demo_expires = Column(DateTime)
     demo_token = Column(String(255), unique=True, index=True)
 
+    # Onboarding
+    onboarding_completed = Column(Boolean, default=False, server_default="0")
+
     # Usage metrics (for rate limiting)
     contracts_today = Column(Integer, default=0)
     llm_requests_today = Column(Integer, default=0)

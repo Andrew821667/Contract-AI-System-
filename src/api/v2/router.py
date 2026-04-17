@@ -20,6 +20,7 @@ from src.api.v2.integrations import router as integrations_router
 from src.api.v2.templates import router as templates_router
 from src.api.v2.admin_llm import router as admin_llm_router
 from src.api.v2.graph import router as graph_router
+from src.api.v2.onboarding import router as onboarding_router
 
 v2_router = APIRouter()
 
@@ -37,3 +38,4 @@ v2_router.include_router(negotiations_router)
 v2_router.include_router(versions_router)
 v2_router.include_router(integrations_router)
 v2_router.include_router(templates_router)
+v2_router.include_router(onboarding_router)
