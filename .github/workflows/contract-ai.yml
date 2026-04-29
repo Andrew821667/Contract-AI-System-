@@ -26,7 +26,7 @@ env:
   JWT_SECRET_KEY: ci-jwt-secret-key
   DATABASE_URL: sqlite:///./test_ci.db
   REDIS_URL: redis://localhost:6379/0
-  DEFAULT_LLM_PROVIDER: mock
+  DEFAULT_LLM_PROVIDER: openai
   OPENAI_API_KEY: test
   ANTHROPIC_API_KEY: test
   DEEPSEEK_API_KEY: test
