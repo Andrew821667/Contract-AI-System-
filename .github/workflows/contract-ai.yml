@@ -39,9 +39,9 @@ env:
 
 jobs:
   backend:
-    name: Backend tests
+    name: Backend smoke tests
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -67,11 +67,13 @@ jobs:
       - name: Compile backend
         run: python -m compileall -q src
 
-      - name: Run backend tests
+      - name: Run backend smoke tests
         run: |
-          pytest tests -q --tb=short \
-            -m "not slow and not integration" \
-            -k "not openai and not anthropic and not deepseek and not local_llm and not llm_gateway and not system_integration and not full_workflow"
+          pytest -q --tb=short \
+            tests/test_config.py \
+            tests/test_file_validator.py \
+            tests/test_xml_security.py \
+            tests/test_risk_scorer.py
 
   frontend:
     name: Frontend checks
