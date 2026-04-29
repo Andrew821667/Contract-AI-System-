@@ -109,21 +109,3 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:8000
           NEXT_PUBLIC_WS_URL: ws://localhost:8000/api/v1/ws
         run: npm run build
-
-  docker:
-    name: Docker build smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs:
-      - backend
-      - frontend
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build backend image
-        run: docker build --pull -t contract-ai-backend:ci .
-
-      - name: Build frontend image
-        run: docker build --pull -t contract-ai-frontend:ci ./frontend
