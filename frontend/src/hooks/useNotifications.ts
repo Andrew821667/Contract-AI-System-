@@ -103,12 +103,16 @@ export function useNotifications(): UseNotificationsReturn {
     const token = useAuthStore.getState().accessToken
     if (!token) return
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    const configuredWsUrl = process.env.NEXT_PUBLIC_WS_URL
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || ''
     // Security: do NOT pass token as query parameter (it leaks into server logs / Referer headers).
     // Send it as the first message after connection.
-    const wsUrl =
-      apiUrl.replace(/^http/, 'ws') +
-      `/api/v1/ws/notifications`
+    const wsBaseUrl = configuredWsUrl || (
+      apiUrl
+        ? apiUrl.replace(/^http/, 'ws')
+        : `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
+    )
+    const wsUrl = `${wsBaseUrl.replace(/\/$/, '')}/api/v1/ws/notifications`
 
     closeWs()
 
