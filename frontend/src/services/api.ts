@@ -193,7 +193,18 @@ class APIClient {
 
   async register(data: RegisterRequest): Promise<any> {
     const response = await this.client.post('/api/v1/auth/register', data);
-    // Backend returns {user, access_token, ...} for auto-login, or {message} for email verification flow
+    if (response.data?.access_token) {
+      this.setAccessToken(response.data.access_token);
+    }
+    if (typeof window !== 'undefined' && response.data?.user && response.data?.access_token) {
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+      try {
+        const { useAuthStore } = require('../stores/authStore');
+        useAuthStore.getState().setAuth(response.data.user, response.data.access_token);
+      } catch {
+        // Store not available
+      }
+    }
     return response.data;
   }
 

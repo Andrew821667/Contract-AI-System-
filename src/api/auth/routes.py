@@ -37,6 +37,7 @@ REFRESH_COOKIE_MAX_AGE = 30 * 24 * 3600  # 30 days
 _ALLOWED_ORIGINS = {
     "http://localhost:3000",
     "http://localhost:8090",
+    "https://contract.ai-verdict.ru",
 }
 # Extend from settings and env if available
 try:
