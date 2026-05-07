@@ -342,15 +342,17 @@ async def get_personal_stats(
     from src.models.database import Contract
     from src.models.analyzer_models import ContractRisk
 
+    contract_owner_filter = Contract.assigned_to == current_user.id
+
     # Contracts total
     total_contracts = db.query(func.count(Contract.id)).filter(
-        Contract.user_id == current_user.id
+        contract_owner_filter
     ).scalar() or 0
 
     # Contracts this month
     month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     month_contracts = db.query(func.count(Contract.id)).filter(
-        Contract.user_id == current_user.id,
+        contract_owner_filter,
         Contract.created_at >= month_start
     ).scalar() or 0
 
@@ -358,7 +360,7 @@ async def get_personal_stats(
     total_risks = db.query(func.count(ContractRisk.id)).join(
         Contract, Contract.id == ContractRisk.contract_id
     ).filter(
-        Contract.user_id == current_user.id
+        contract_owner_filter
     ).scalar() or 0
 
     # Risks by severity
@@ -366,7 +368,7 @@ async def get_personal_stats(
         db.query(ContractRisk.severity, func.count(ContractRisk.id)).join(
             Contract, Contract.id == ContractRisk.contract_id
         ).filter(
-            Contract.user_id == current_user.id
+            contract_owner_filter
         ).group_by(ContractRisk.severity).all()
     )
 
@@ -421,13 +423,13 @@ async def get_group_stats(
 
     # Contracts total for org
     total_contracts = db.query(func.count(Contract.id)).filter(
-        Contract.user_id.in_(member_ids)
+        Contract.assigned_to.in_(member_ids)
     ).scalar() or 0
 
     # This month
     month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     month_contracts = db.query(func.count(Contract.id)).filter(
-        Contract.user_id.in_(member_ids),
+        Contract.assigned_to.in_(member_ids),
         Contract.created_at >= month_start
     ).scalar() or 0
 
@@ -435,7 +437,7 @@ async def get_group_stats(
     total_risks = db.query(func.count(ContractRisk.id)).join(
         Contract, Contract.id == ContractRisk.contract_id
     ).filter(
-        Contract.user_id.in_(member_ids)
+        Contract.assigned_to.in_(member_ids)
     ).scalar() or 0
 
     # Per-member stats
@@ -445,7 +447,7 @@ async def get_group_stats(
         if not member_user:
             continue
         count = db.query(func.count(Contract.id)).filter(
-            Contract.user_id == mid
+            Contract.assigned_to == mid
         ).scalar() or 0
         per_member.append({
             "user_id": mid,
