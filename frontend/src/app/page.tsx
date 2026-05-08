@@ -172,7 +172,7 @@ export default function Home() {
             >
               <a href="#login" className="text-stone-300 hover:text-white transition text-sm font-medium">Вход</a>
               <a href="#pricing" className="text-stone-300 hover:text-white transition text-sm font-medium">Тарифы</a>
-              <Button variant="primary" size="sm" onClick={() => router.push('/register')}>
+              <Button variant="primary" size="sm" href="/register">
                 Попробовать
               </Button>
             </motion.div>
@@ -519,7 +519,7 @@ export default function Home() {
                   5 бесплатных анализов. Без кредитной карты. Результат за 30 секунд.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <Button variant="primary" size="lg" onClick={() => router.push('/register')}>
+                  <Button variant="primary" size="lg" href="/register">
                     Начать бесплатно
                   </Button>
                   <a href="#login">
@@ -554,7 +554,7 @@ export default function Home() {
               <h4 className="font-bold text-white mb-4">Продукт</h4>
               <ul className="space-y-2 text-sm text-stone-300">
                 <li><a href="/pricing" className="hover:text-white transition">Тарифы</a></li>
-                <li><a href="/demo" className="hover:text-white transition">Демо</a></li>
+                <li><a href="/register" className="hover:text-white transition">Демо</a></li>
                 <li><a href="#login" className="hover:text-white transition">Вход</a></li>
                 <li><a href="/register" className="hover:text-white transition">Регистрация</a></li>
               </ul>

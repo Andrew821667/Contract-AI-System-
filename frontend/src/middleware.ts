@@ -4,8 +4,11 @@ import type { NextRequest } from 'next/server'
 // Routes that require authentication
 const protectedRoutes = ['/dashboard', '/contracts', '/clauses', '/conditions', '/ai', '/negotiations', '/workflow', '/admin']
 
-// Routes that should redirect to dashboard if already logged in
-const authRoutes = ['/login', '/register']
+// Routes that should redirect to dashboard if already logged in.
+// Keep /register always reachable: browsers can retain a stale has_token cookie
+// after failed/partial auth flows, and the registration page must remain a
+// single reliable entry point from all public CTAs.
+const authRoutes = ['/login']
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -41,6 +44,5 @@ export const config = {
     '/workflow/:path*',
     '/admin/:path*',
     '/login',
-    '/register',
   ],
 }

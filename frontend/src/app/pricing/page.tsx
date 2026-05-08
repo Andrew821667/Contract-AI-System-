@@ -175,7 +175,7 @@ export default function PricingPage() {
               <Button variant="outline" size="sm" onClick={() => router.push('/')}>
                 ← На главную
               </Button>
-              <Button variant="primary" size="sm" onClick={() => router.push('/register')}>
+              <Button variant="primary" size="sm" href="/register">
                 Попробовать бесплатно
               </Button>
             </motion.div>
@@ -317,11 +317,11 @@ export default function PricingPage() {
                         Связаться с нами
                       </Button>
                     ) : plan.price.monthly === 0 ? (
-                      <Button variant="outline" className="w-full" onClick={() => router.push('/register')}>
+                      <Button variant="outline" className="w-full" href="/register">
                         Попробовать
                       </Button>
                     ) : (
-                      <Button variant={plan.popular ? 'primary' : 'outline'} className="w-full" onClick={() => router.push('/register')}>
+                      <Button variant={plan.popular ? 'primary' : 'outline'} className="w-full" href="/register">
                         Выбрать
                       </Button>
                     )}
@@ -369,7 +369,7 @@ export default function PricingPage() {
                     )}
 
                     <div className="mt-4">
-                      <Button variant="outline" className="w-full" onClick={() => router.push('/register')}>
+                      <Button variant="outline" className="w-full" href="/register">
                         Купить
                       </Button>
                     </div>
@@ -474,7 +474,7 @@ export default function PricingPage() {
                 <Button variant="primary" onClick={() => window.open('https://t.me/legal_ai_helper_new_bot', '_blank')}>
                   Связаться с нами
                 </Button>
-                <Button variant="outline" onClick={() => router.push('/register')}>
+                <Button variant="outline" href="/register">
                   Начать бесплатно
                 </Button>
               </div>
