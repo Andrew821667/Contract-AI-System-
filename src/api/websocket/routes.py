@@ -9,6 +9,7 @@ This prevents connection pool exhaustion with many WebSocket clients.
 import json
 import asyncio
 import time
+from datetime import datetime, timezone
 from typing import Dict, Set, Tuple
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
 from sqlalchemy.orm import Session
@@ -115,11 +116,19 @@ def _authenticate_ws(db: Session, ws_token: str):
     # Check session revocation
     session = db.query(UserSession).filter(
         UserSession.user_id == user_id,
-        UserSession.access_token == ws_token,
+        UserSession.access_token_hash == AuthService._hash_token(ws_token),
         UserSession.revoked == False
     ).first()
     if not session:
         return None
+
+    expires_at = session.expires_at
+    now = datetime.now(timezone.utc)
+    if expires_at is not None:
+        if expires_at.tzinfo is None:
+            now = now.replace(tzinfo=None)
+        if expires_at < now:
+            return None
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
