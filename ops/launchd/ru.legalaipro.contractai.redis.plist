@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ru.legalaipro.contractai.redis</string>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/legalai/.local/redis</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/legalai/.local/redis/bin/redis-server</string>
+    <string>/Users/legalai/.config/contract-ai/redis.conf</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/legalai/.local/redis/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>HOME</key>
+    <string>/Users/legalai</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/legalai/projects/Contract-AI-System-/logs/redis.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/legalai/projects/Contract-AI-System-/logs/redis.err.log</string>
+</dict>
+</plist>

@@ -40,6 +40,7 @@ logger.add(
 
 # Import settings
 from config.settings import settings
+from src.services.redis_runtime import ensure_local_redis
 
 # Import database
 from src.models.database import engine, Base, SessionLocal, ScopedSession
@@ -66,6 +67,7 @@ from src.api.rag_admin import router as rag_admin_router
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     logger.info("🚀 Starting Contract AI System Backend...")
+    ensure_local_redis()
 
     # Create tables (dev/testing only — in production use `alembic upgrade head`)
     if settings.app_env in ("development", "testing"):
@@ -148,6 +150,9 @@ app = FastAPI(
     openapi_url="/api/openapi.json" if _is_debug else None,
     lifespan=lifespan,
 )
+
+# Local Redis should be available before rate-limiting middleware initializes.
+ensure_local_redis()
 
 # Security middleware setup (includes CORS, rate limiting, security headers)
 setup_security_middleware(app)
@@ -257,6 +262,7 @@ async def health_check() -> Dict[str, Any]:
 
     # Check Redis
     try:
+        ensure_local_redis()
         import redis
         r = redis.Redis.from_url(settings.redis_url, socket_connect_timeout=2)
         r.ping()
