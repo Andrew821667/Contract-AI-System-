@@ -17,7 +17,7 @@
     <string>-m</string>
     <string>streamlit</string>
     <string>run</string>
-    <string>admin/streamlit_dashboard.py</string>
+    <string>admin/Главная.py</string>
     <string>--server.address</string>
     <string>127.0.0.1</string>
     <string>--server.port</string>

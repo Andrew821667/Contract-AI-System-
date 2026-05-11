@@ -198,10 +198,10 @@ else:
                 # Ссылки на повторные действия
                 if item["type"] == "Анализ":
                     if st.button("🔄 Повторить анализ", key=f"reanalyze_{i}", use_container_width=True):
-                        st.switch_page("pages/1_Process_Documents.py")
+                        st.switch_page("pages/1_Обработка_документов.py")
                 elif item["type"] == "Генерация":
                     if st.button("✍️ Новая генерация", key=f"regenerate_{i}", use_container_width=True):
-                        st.switch_page("pages/2_Generate_Contract.py")
+                        st.switch_page("pages/2_Генерация_договоров.py")
 
 # ─── Экспорт всей библиотеки ────────────────────────────────
 if all_items:

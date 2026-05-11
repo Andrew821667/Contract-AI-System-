@@ -117,7 +117,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: contract-ai-streamlit
-    command: ["streamlit", "run", "admin/streamlit_dashboard.py", "--server.port=8502", "--server.address=0.0.0.0", "--server.baseUrlPath=streamlit-admin", "--server.enableXsrfProtection=true", "--server.enableCORS=false"]
+    command: ["streamlit", "run", "admin/Главная.py", "--server.port=8502", "--server.address=0.0.0.0", "--server.baseUrlPath=streamlit-admin", "--server.enableXsrfProtection=true", "--server.enableCORS=false"]
     environment:
       - DATABASE_URL=postgresql://contract_user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/contract_ai
       - REDIS_URL=redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}@redis:6379/0

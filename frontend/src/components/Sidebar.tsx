@@ -12,11 +12,12 @@ interface NavItem {
   href: string
   icon: React.ReactNode
   permission?: keyof ReturnType<typeof getRolePermissions>
+  external?: boolean
 }
 
 const navItems: NavItem[] = [
   {
-    label: 'Дашборд',
+    label: 'Главная',
     href: '/dashboard',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -34,7 +35,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    label: 'Загрузить',
+    label: 'Загрузка',
     href: '/contracts/upload',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -44,7 +45,7 @@ const navItems: NavItem[] = [
     permission: 'canAnalyze',
   },
   {
-    label: 'Генерировать',
+    label: 'Генерация',
     href: '/contracts/generate',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -72,7 +73,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    label: 'Workflow',
+    label: 'Процессы',
     href: '/workflow',
     icon: (
       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -109,6 +110,18 @@ const navItems: NavItem[] = [
     ),
     permission: 'canManageUsers',
   },
+  {
+    label: 'Админ-панель',
+    href: '/streamlit-admin/',
+    external: true,
+    icon: (
+      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8.25A2.25 2.25 0 015.25 6h13.5A2.25 2.25 0 0121 8.25v7.5A2.25 2.25 0 0118.75 18H5.25A2.25 2.25 0 013 15.75v-7.5z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7.5 10.5h3m-3 3h6m3-3h.008v.008H16.5V10.5zm0 3h.008v.008H16.5V13.5z" />
+      </svg>
+    ),
+    permission: 'canManageUsers',
+  },
 ]
 
 interface SidebarProps {
@@ -137,6 +150,12 @@ function SidebarContent({ user, onLogout, onNavigate }: {
   })
 
   const handleNav = (href: string) => {
+    const item = filteredItems.find(navItem => navItem.href === href)
+    if (item?.external) {
+      window.location.href = href
+      onNavigate()
+      return
+    }
     router.push(href)
     onNavigate()
   }
