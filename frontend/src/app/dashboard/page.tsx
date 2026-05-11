@@ -157,7 +157,10 @@ export default function DashboardPage() {
     )
   }
 
-  const contractsUsagePercent = ((user?.contracts_today || 0) / (user?.max_contracts_per_day || 1)) * 100
+  const contractQuotaUsed = user?.contract_quota_period === 'month' ? (user?.contracts_month || 0) : (user?.contracts_today || 0)
+  const contractQuotaLimit = user?.contract_quota_period === 'month' ? (user?.max_contracts_per_month || 3) : (user?.max_contracts_per_day || 1)
+  const contractQuotaLabel = user?.contract_quota_period === 'month' ? 'Контракты за месяц' : 'Контракты сегодня'
+  const contractsUsagePercent = (contractQuotaUsed / contractQuotaLimit) * 100
   const llmUsagePercent = ((user?.llm_requests_today || 0) / (user?.max_llm_requests_per_day || 1)) * 100
 
   // Prepare chart data
@@ -234,7 +237,7 @@ export default function DashboardPage() {
                 <p className="text-2xl font-bold text-stone-800">
                   {permissions.maxContractsPerDay === -1 ? '∞' : permissions.maxContractsPerDay}
                 </p>
-                <p className="text-xs text-stone-500">в день</p>
+                <p className="text-xs text-stone-500">{user?.contract_quota_period === 'month' ? 'в месяц' : 'в день'}</p>
               </div>
               <div className="p-4 bg-stone-50 rounded-xl text-center">
                 <p className="text-sm text-stone-600 mb-1">Форматы экспорта</p>
@@ -278,10 +281,10 @@ export default function DashboardPage() {
               <div className="relative z-10">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <p className="text-sm font-semibold text-gray-600 mb-1">Контракты сегодня</p>
+                    <p className="text-sm font-semibold text-gray-600 mb-1">{contractQuotaLabel}</p>
                     <p className="text-4xl font-bold text-primary-700">
-                      {user?.contracts_today || 0}
-                      <span className="text-lg text-gray-400 font-normal"> / {user?.max_contracts_per_day}</span>
+                      {contractQuotaUsed}
+                      <span className="text-lg text-gray-400 font-normal"> / {contractQuotaLimit}</span>
                     </p>
                   </div>
                   <motion.div

@@ -19,6 +19,7 @@ from src.models.database import get_db, SessionLocal
 from src.models import Contract, AnalysisResult
 from src.models.auth_models import User, UserSession
 from src.services.auth_service import AuthService
+from src.services.quota_service import get_contract_quota
 
 
 router = APIRouter()
@@ -388,12 +389,14 @@ async def websocket_notifications(
                             "severity": "warning"
                         })
 
-                # Check daily limits
-                if user.contracts_today >= user.max_contracts_per_day:
+                # Check contract quota limits.
+                contract_quota = get_contract_quota(poll_db, user)
+                if contract_quota["used"] >= contract_quota["limit"]:
+                    period_label = "месячного" if contract_quota["period"] == "month" else "дневного"
                     notifications.append({
                         "type": "limit_reached",
                         "title": "Лимит достигнут",
-                        "message": "Вы достигли дневного лимита контрактов",
+                        "message": f"Вы достигли {period_label} лимита договоров",
                         "severity": "warning"
                     })
             finally:

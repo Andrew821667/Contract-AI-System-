@@ -114,7 +114,7 @@ class User(Base):
             return False
         return True
 
-    # Tier limits lookup (daily).
+    # Tier limits lookup.
     # Tiers match pricing page: demo → personal → team → business → enterprise.
     # Legacy names (basic, pro) kept as aliases for backwards compatibility.
     TIER_LIMITS = {
@@ -140,6 +140,14 @@ class User(Base):
     @property
     def max_llm_requests_per_day(self) -> int:
         return self.TIER_LIMITS.get(self.subscription_tier, self.TIER_LIMITS['demo'])['max_llm_requests_per_day']
+
+    @property
+    def contract_quota_period(self) -> str:
+        return "month" if self.subscription_tier == "demo" or self.role == "demo" or self.is_demo else "day"
+
+    @property
+    def max_contracts_per_month(self) -> int:
+        return 3 if self.contract_quota_period == "month" else self.max_contracts_per_day
 
     def reset_daily_limits(self):
         """Reset daily usage limits"""

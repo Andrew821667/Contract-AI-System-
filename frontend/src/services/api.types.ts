@@ -10,8 +10,11 @@ export interface User {
   created_at: string;
   last_login?: string;
   contracts_today: number;
+  contracts_month?: number;
   llm_requests_today: number;
   max_contracts_per_day?: number;
+  max_contracts_per_month?: number;
+  contract_quota_period?: 'day' | 'month';
   max_llm_requests_per_day?: number;
   demo_expires?: string;
 }
@@ -59,8 +62,10 @@ export interface AuthResponse {
 export interface QuotaResponse {
   contracts_used: number;
   contracts_limit: number;
+  contracts_period?: 'day' | 'month';
   llm_used: number;
   llm_limit: number;
+  llm_period?: 'day';
   subscription_tier: string;
 }
 
@@ -68,6 +73,7 @@ export interface PersonalStats {
   total_contracts: number;
   month_contracts: number;
   contracts_today: number;
+  contracts_month?: number;
   llm_requests_today: number;
   total_risks: number;
   risks_by_severity: {
