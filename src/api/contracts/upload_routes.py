@@ -16,6 +16,7 @@ from loguru import logger
 from src.models.database import get_db
 from src.models import Contract
 from src.models.auth_models import User
+from src.services.quota_service import contract_limit_message, get_contract_quota
 from src.utils.file_validator import (
     FileValidationError,
     sanitize_filename,
@@ -62,14 +63,16 @@ async def upload_contract(
 
     tmp_path = None
     try:
-        # Reset daily limits if new day
+        # Reset daily LLM/legacy counters if needed. Free contract uploads are limited monthly.
         current_user.reset_daily_limits()
+        db.commit()
 
         # Check usage limits
-        if current_user.contracts_today >= current_user.max_contracts_per_day:
+        contract_quota = get_contract_quota(db, current_user)
+        if contract_quota["used"] >= contract_quota["limit"]:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Дневной лимит загрузки ({current_user.max_contracts_per_day}) исчерпан. Попробуйте завтра."
+                detail=contract_limit_message(contract_quota["limit"], contract_quota["period"])
             )
 
         # Validate filename and extension before streaming
@@ -151,24 +154,32 @@ async def upload_contract(
         db.commit()
         db.refresh(contract)
 
-        # Atomic increment with limit re-check (prevents race condition).
-        # max_contracts_per_day is a @property (not a DB column), so we pass the
-        # resolved Python value as a literal into the WHERE clause.
-        limit_value = current_user.max_contracts_per_day
-        result = db.execute(
-            sql_update(User)
-            .where(User.id == current_user.id)
-            .where(User.contracts_today < limit_value)
-            .values(contracts_today=User.contracts_today + 1)
-        )
-        if result.rowcount == 0:
-            db.delete(contract)
-        db.commit()
-        if result.rowcount == 0:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Дневной лимит загрузки ({limit_value}) исчерпан. Попробуйте завтра."
+        if contract_quota["period"] == "day":
+            # Atomic increment with limit re-check (prevents race condition).
+            # max_contracts_per_day is a @property (not a DB column), so we pass the
+            # resolved Python value as a literal into the WHERE clause.
+            limit_value = contract_quota["limit"]
+            result = db.execute(
+                sql_update(User)
+                .where(User.id == current_user.id)
+                .where(User.contracts_today < limit_value)
+                .values(contracts_today=User.contracts_today + 1)
             )
+            if result.rowcount == 0:
+                db.delete(contract)
+            db.commit()
+            if result.rowcount == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=contract_limit_message(limit_value, "day")
+                )
+        else:
+            db.execute(
+                sql_update(User)
+                .where(User.id == current_user.id)
+                .values(contracts_today=User.contracts_today + 1)
+            )
+            db.commit()
 
         logger.info(f"Contract uploaded: {contract.id} by user {current_user.id} ({file_size} bytes, streamed)")
 

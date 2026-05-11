@@ -16,6 +16,7 @@ export default function QuotaCounter() {
 
   const contractsLeft = Math.max(0, quota.contracts_limit - quota.contracts_used)
   const llmLeft = Math.max(0, quota.llm_limit - quota.llm_used)
+  const contractsPeriodLabel = quota.contracts_period === 'month' ? 'за месяц' : 'сегодня'
   const contractsPct = quota.contracts_limit > 0
     ? (quota.contracts_used / quota.contracts_limit) * 100
     : 0
@@ -35,13 +36,13 @@ export default function QuotaCounter() {
   return (
     <div className="px-4 py-3 border-t border-gray-100 dark:border-dark-700">
       <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 uppercase tracking-wide">
-        Лимиты сегодня
+        Лимиты
       </p>
 
       {/* Contracts */}
       <div className="mb-2">
         <div className="flex justify-between text-xs mb-1">
-          <span className="text-gray-600 dark:text-gray-400">Договоры</span>
+          <span className="text-gray-600 dark:text-gray-400">Договоры {contractsPeriodLabel}</span>
           <span className="font-medium text-gray-700 dark:text-gray-300">
             {contractsLeft}/{quota.contracts_limit}
           </span>

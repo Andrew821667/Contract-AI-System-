@@ -9,7 +9,7 @@ Provides REST API endpoints for:
 - Analytics
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Header, Request, Cookie
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Header, Request, Cookie
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, Field
@@ -23,6 +23,8 @@ from loguru import logger
 
 from src.models import get_db, User
 from src.services.auth_service import AuthService
+from src.services.quota_service import get_contract_quota
+from src.services.telegram_service import notify_new_user
 
 
 # Cookie settings for refresh token
@@ -209,6 +211,7 @@ router = APIRouter(tags=["authentication"])
 async def register(
     request_data: UserRegisterRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """
@@ -276,6 +279,15 @@ async def register(
         status="success",
         ip_address=ip_address
     )
+    background_tasks.add_task(
+        notify_new_user,
+        user.id,
+        user.email,
+        user.name,
+        user.role,
+        user.subscription_tier,
+        ip_address,
+    )
 
     # Create tokens and session (same pattern as login)
     access_token = auth_service.create_access_token(user.id)
@@ -295,6 +307,7 @@ async def register(
     )
     db.add(session)
     db.commit()
+    contract_quota = get_contract_quota(db, user)
 
     login_data = {
         "user": {
@@ -307,6 +320,9 @@ async def register(
             "contracts_today": 0,
             "llm_requests_today": 0,
             "max_contracts_per_day": user.max_contracts_per_day,
+            "contracts_month": contract_quota["used"],
+            "max_contracts_per_month": contract_quota["limit"],
+            "contract_quota_period": contract_quota["period"],
             "max_llm_requests_per_day": user.max_llm_requests_per_day,
         },
         "access_token": access_token,
@@ -329,9 +345,10 @@ async def get_quota(
 
     Возвращает использованные и максимальные лимиты по договорам и AI-запросам.
     """
-    # Reset daily limits if needed
+    # Reset daily LLM limits if needed; contract quota may be monthly for free users.
     current_user.reset_daily_limits()
     db.commit()
+    contract_quota = get_contract_quota(db, current_user)
 
     tier_limits = User.TIER_LIMITS.get(
         current_user.subscription_tier,
@@ -339,10 +356,12 @@ async def get_quota(
     )
 
     return {
-        "contracts_used": current_user.contracts_today or 0,
-        "contracts_limit": tier_limits['max_contracts_per_day'],
+        "contracts_used": contract_quota["used"],
+        "contracts_limit": contract_quota["limit"],
+        "contracts_period": contract_quota["period"],
         "llm_used": current_user.llm_requests_today or 0,
         "llm_limit": tier_limits['max_llm_requests_per_day'],
+        "llm_period": "day",
         "subscription_tier": current_user.subscription_tier,
     }
 
@@ -685,7 +704,8 @@ async def logout(
 
 @router.get("/me")
 async def get_current_user_info(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """
     Get current authenticated user information
@@ -714,6 +734,7 @@ async def get_current_user_info(
     }
     ```
     """
+    contract_quota = get_contract_quota(db, current_user)
     return {
         "id": current_user.id,
         "email": current_user.email,
@@ -728,7 +749,12 @@ async def get_current_user_info(
         "last_login": current_user.last_login.isoformat() if current_user.last_login else None,
         "login_count": current_user.login_count,
         "contracts_today": current_user.contracts_today,
+        "max_contracts_per_day": current_user.max_contracts_per_day,
+        "contracts_month": contract_quota["used"],
+        "max_contracts_per_month": contract_quota["limit"],
+        "contract_quota_period": contract_quota["period"],
         "llm_requests_today": current_user.llm_requests_today,
+        "max_llm_requests_per_day": current_user.max_llm_requests_per_day,
         "demo_expires": current_user.demo_expires.isoformat() if current_user.demo_expires else None
     }
 
