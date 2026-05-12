@@ -1,10 +1,12 @@
 /** @type {import('next').NextConfig} */
 
 const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000'
+const streamlitUrl = process.env.STREAMLIT_URL || 'http://127.0.0.1:8501'
 
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  skipTrailingSlashRedirect: true,
 
   // Enable standalone output for Docker
   output: 'standalone',
@@ -12,6 +14,14 @@ const nextConfig = {
   // API proxy
   async rewrites() {
     return [
+      {
+        source: '/streamlit-admin/:path*',
+        destination: `${streamlitUrl}/:path*`,
+      },
+      {
+        source: '/health',
+        destination: `${backendUrl}/health`,
+      },
       {
         source: '/api/:path*',
         destination: `${backendUrl}/api/:path*`,

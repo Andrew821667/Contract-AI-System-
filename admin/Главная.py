@@ -54,22 +54,6 @@ with st.sidebar:
     st.caption("Единая консоль управления")
     st.markdown("---")
 
-    st.markdown("### 📂 Разделы")
-    st.markdown("""
-    - **Главная** ← вы здесь
-    - 📋 Тесты инфраструктуры
-    - 📄 Обработка документов
-    - ✍️ Генерация договоров
-    - 📊 Метрики моделей
-    - ⚖️ Протокол разногласий
-    - 📚 Библиотека договоров
-    - ⏰ Планировщик
-    - 🧠 База знаний RAG
-    - 📑 Извлечённые клаузулы
-    """)
-
-    st.markdown("---")
-
     # Статус API
     st.markdown("### 🔌 API-ключи")
     api_status = get_api_keys_status()
@@ -126,7 +110,7 @@ with col1:
     </div>
     """, unsafe_allow_html=True)
     if st.button("Перейти к анализу →", key="goto_analysis", use_container_width=True):
-        st.switch_page("pages/1_Process_Documents.py")
+        st.switch_page("pages/1_Обработка_документов.py")
 
 with col2:
     st.markdown("""
@@ -137,7 +121,7 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
     if st.button("Перейти к генерации →", key="goto_generate", use_container_width=True):
-        st.switch_page("pages/2_Generate_Contract.py")
+        st.switch_page("pages/2_Генерация_договоров.py")
 
 with col3:
     st.markdown("""
@@ -148,7 +132,7 @@ with col3:
     </div>
     """, unsafe_allow_html=True)
     if st.button("Перейти к протоколу →", key="goto_disagreement", use_container_width=True):
-        st.switch_page("pages/4_Disagreement_Protocol.py")
+        st.switch_page("pages/4_Протокол_разногласий.py")
 
 with col4:
     st.markdown("""
@@ -159,7 +143,7 @@ with col4:
     </div>
     """, unsafe_allow_html=True)
     if st.button("Открыть библиотеку →", key="goto_library", use_container_width=True):
-        st.switch_page("pages/5_Contract_Library.py")
+        st.switch_page("pages/5_Библиотека_договоров.py")
 
 st.markdown("---")
 

@@ -16,6 +16,31 @@ interface RegisterFormData {
   confirmPassword: string
 }
 
+const translateRegistrationError = (err: any) => {
+  const detail = err?.response?.data?.detail || err?.response?.data?.message
+
+  if (typeof detail !== 'string') {
+    return 'Ошибка регистрации. Попробуйте снова.'
+  }
+
+  const normalized = detail.toLowerCase()
+
+  if (normalized.includes('at least') || normalized.includes('minimum')) {
+    return 'Пароль должен быть не короче 8 символов.'
+  }
+  if (normalized.includes('uppercase')) {
+    return 'Пароль должен содержать хотя бы одну заглавную букву.'
+  }
+  if (normalized.includes('lowercase')) {
+    return 'Пароль должен содержать хотя бы одну строчную букву.'
+  }
+  if (normalized.includes('digit')) {
+    return 'Пароль должен содержать хотя бы одну цифру.'
+  }
+
+  return detail
+}
+
 export default function RegisterPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
@@ -47,8 +72,7 @@ export default function RegisterPage() {
         router.push('/login')
       }
     } catch (err: any) {
-      const message = err?.response?.data?.detail || 'Ошибка регистрации. Попробуйте снова.'
-      setError(message)
+      setError(translateRegistrationError(err))
     } finally {
       setIsLoading(false)
     }
@@ -172,7 +196,12 @@ export default function RegisterPage() {
                 <input
                   {...register('password', {
                     required: 'Введите пароль',
-                    minLength: { value: 8, message: 'Минимум 8 символов' }
+                    minLength: { value: 8, message: 'Минимум 8 символов' },
+                    validate: {
+                      uppercase: value => /[A-ZА-ЯЁ]/.test(value) || 'Добавьте заглавную букву',
+                      lowercase: value => /[a-zа-яё]/.test(value) || 'Добавьте строчную букву',
+                      digit: value => /\d/.test(value) || 'Добавьте цифру',
+                    }
                   })}
                   type="password"
                   placeholder="••••••••"
@@ -184,6 +213,9 @@ export default function RegisterPage() {
               </div>
               {errors.password && (
                 <p className="text-danger-600 text-sm mt-1">{errors.password.message}</p>
+              )}
+              {!errors.password && (
+                <p className="text-gray-500 text-xs mt-1">Минимум 8 символов: заглавная буква, строчная буква и цифра</p>
               )}
             </div>
 

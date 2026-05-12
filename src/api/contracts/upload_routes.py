@@ -17,7 +17,8 @@ from loguru import logger
 from src.models.database import get_db
 from src.models import Contract, ContractParty, ContractRelation, Counterparty
 from src.models.auth_models import User
-from src.models.contract_relations_models import PARTY_ROLES, RELATION_TYPES
+from src.models.contract_relations_models import RELATION_TYPES
+from src.services.quota_service import contract_limit_message, get_contract_quota
 from src.utils.file_validator import (
     FileValidationError,
     sanitize_filename,
@@ -94,17 +95,72 @@ async def upload_contract(
             detail="Для custom-связи укажите custom_label и/или custom_prompt",
         )
 
-    tmp_path = None
+    tmp_path: Optional[str] = None
+    final_path: Optional[str] = None
+    upload_committed = False
     try:
-        # Reset daily limits if new day
+        # Reset daily LLM/legacy counters if needed. Free contract uploads are limited monthly.
         current_user.reset_daily_limits()
+        db.commit()
 
         # Check usage limits
-        if current_user.contracts_today >= current_user.max_contracts_per_day:
+        contract_quota = get_contract_quota(db, current_user)
+        if contract_quota["used"] >= contract_quota["limit"]:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Дневной лимит загрузки ({current_user.max_contracts_per_day}) исчерпан. Попробуйте завтра."
+                detail=contract_limit_message(contract_quota["limit"], contract_quota["period"])
             )
+
+        # Validate optional DB links before writing the final file or creating a contract.
+        # This prevents orphaned files/contracts when a selected counterparty or parent
+        # contract is invalid or belongs to another organization.
+        selected_counterparty: Optional[Counterparty] = None
+        if counterparty_id:
+            selected_counterparty = (
+                db.query(Counterparty).filter(Counterparty.id == counterparty_id).first()
+            )
+            if not selected_counterparty:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Контрагент {counterparty_id} не найден",
+                )
+            if (
+                ctx
+                and selected_counterparty.organization_id
+                and selected_counterparty.organization_id != ctx.org.id
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Контрагент принадлежит другой организации",
+                )
+
+        selected_parent: Optional[Contract] = None
+        if parent_contract_id:
+            selected_parent = (
+                db.query(Contract).filter(Contract.id == parent_contract_id).first()
+            )
+            if not selected_parent:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Основной договор {parent_contract_id} не найден",
+                )
+            if (
+                selected_parent.assigned_to != current_user.id
+                and current_user.role != "admin"
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Нет доступа к основному договору",
+                )
+            if (
+                ctx
+                and selected_parent.organization_id
+                and selected_parent.organization_id != ctx.org.id
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Основной договор принадлежит другой организации",
+                )
 
         # Validate filename and extension before streaming
         try:
@@ -182,51 +238,16 @@ async def upload_contract(
             meta_info={}
         )
         db.add(contract)
-        db.commit()
-        db.refresh(contract)
-
-        # Atomic increment with limit re-check (prevents race condition).
-        # max_contracts_per_day is a @property (not a DB column), so we pass the
-        # resolved Python value as a literal into the WHERE clause.
-        limit_value = current_user.max_contracts_per_day
-        result = db.execute(
-            sql_update(User)
-            .where(User.id == current_user.id)
-            .where(User.contracts_today < limit_value)
-            .values(contracts_today=User.contracts_today + 1)
-        )
-        if result.rowcount == 0:
-            db.delete(contract)
-        db.commit()
-        if result.rowcount == 0:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Дневной лимит загрузки ({limit_value}) исчерпан. Попробуйте завтра."
-            )
+        db.flush()
 
         logger.info(f"Contract uploaded: {contract.id} by user {current_user.id} ({file_size} bytes, streamed)")
 
         # ── Привязка контрагента (если задан) ────────────────────────────────
         counterparty_party_id: Optional[str] = None
-        if counterparty_id:
-            cp = db.query(Counterparty).filter(Counterparty.id == counterparty_id).first()
-            if not cp:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Контрагент {counterparty_id} не найден",
-                )
-            if (
-                contract.organization_id
-                and cp.organization_id
-                and cp.organization_id != contract.organization_id
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Контрагент принадлежит другой организации",
-                )
+        if selected_counterparty:
             party = ContractParty(
                 contract_id=contract.id,
-                counterparty_id=cp.id,
+                counterparty_id=selected_counterparty.id,
                 role="counterparty",
             )
             db.add(party)
@@ -234,36 +255,18 @@ async def upload_contract(
             counterparty_party_id = party.id
             contract.parties_summary = [
                 {
-                    "counterparty_id": cp.id,
-                    "name": cp.name,
-                    "inn": cp.inn,
+                    "counterparty_id": selected_counterparty.id,
+                    "name": selected_counterparty.name,
+                    "inn": selected_counterparty.inn,
                     "role": "counterparty",
                 }
             ]
 
         # ── Привязка к основному договору (если задан явно) ──────────────────
         parent_relation_id: Optional[str] = None
-        if parent_contract_id:
-            parent = (
-                db.query(Contract)
-                .filter(Contract.id == parent_contract_id)
-                .first()
-            )
-            if not parent:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Основной договор {parent_contract_id} не найден",
-                )
-            if (
-                parent.assigned_to != current_user.id
-                and current_user.role != "admin"
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Нет доступа к основному договору",
-                )
+        if selected_parent:
             relation = ContractRelation(
-                parent_contract_id=parent.id,
+                parent_contract_id=selected_parent.id,
                 child_contract_id=contract.id,
                 relation_type=relation_type,
                 custom_label=custom_label,
@@ -276,7 +279,30 @@ async def upload_contract(
             contract.document_type = "derivative"
             contract.primary_relation_type = relation_type
 
+        if contract_quota["period"] == "day":
+            # Atomic increment with limit re-check (prevents race condition).
+            limit_value = contract_quota["limit"]
+            result = db.execute(
+                sql_update(User)
+                .where(User.id == current_user.id)
+                .where(User.contracts_today < limit_value)
+                .values(contracts_today=User.contracts_today + 1)
+            )
+            if result.rowcount == 0:
+                db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=contract_limit_message(limit_value, "day")
+                )
+        else:
+            db.execute(
+                sql_update(User)
+                .where(User.id == current_user.id)
+                .values(contracts_today=User.contracts_today + 1)
+            )
+
         db.commit()
+        upload_committed = True
         db.refresh(contract)
 
         # ── Opportunistic parse + auto-find родителя ─────────────────────────
@@ -331,9 +357,23 @@ async def upload_contract(
             parent_candidates=parent_candidates,
         )
 
-    except (HTTPException, FileValidationError):
+    except HTTPException:
+        db.rollback()
+        if final_path and not upload_committed and os.path.exists(final_path):
+            os.unlink(final_path)
         raise
+    except FileValidationError as e:
+        db.rollback()
+        if final_path and not upload_committed and os.path.exists(final_path):
+            os.unlink(final_path)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File validation failed: {e}",
+        )
     except Exception as e:
+        db.rollback()
+        if final_path and not upload_committed and os.path.exists(final_path):
+            os.unlink(final_path)
         logger.error(f"Error uploading contract: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

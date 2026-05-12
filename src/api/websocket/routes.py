@@ -9,6 +9,7 @@ This prevents connection pool exhaustion with many WebSocket clients.
 import json
 import asyncio
 import time
+from datetime import datetime, timezone
 from typing import Dict, Set, Tuple
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query
 from sqlalchemy.orm import Session
@@ -18,6 +19,7 @@ from src.models.database import get_db, SessionLocal
 from src.models import Contract, AnalysisResult
 from src.models.auth_models import User, UserSession
 from src.services.auth_service import AuthService
+from src.services.quota_service import get_contract_quota
 
 
 router = APIRouter()
@@ -115,11 +117,19 @@ def _authenticate_ws(db: Session, ws_token: str):
     # Check session revocation
     session = db.query(UserSession).filter(
         UserSession.user_id == user_id,
-        UserSession.access_token == ws_token,
+        UserSession.access_token_hash == AuthService._hash_token(ws_token),
         UserSession.revoked == False
     ).first()
     if not session:
         return None
+
+    expires_at = session.expires_at
+    now = datetime.now(timezone.utc)
+    if expires_at is not None:
+        if expires_at.tzinfo is None:
+            now = now.replace(tzinfo=None)
+        if expires_at < now:
+            return None
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -379,12 +389,14 @@ async def websocket_notifications(
                             "severity": "warning"
                         })
 
-                # Check daily limits
-                if user.contracts_today >= user.max_contracts_per_day:
+                # Check contract quota limits.
+                contract_quota = get_contract_quota(poll_db, user)
+                if contract_quota["used"] >= contract_quota["limit"]:
+                    period_label = "месячного" if contract_quota["period"] == "month" else "дневного"
                     notifications.append({
                         "type": "limit_reached",
                         "title": "Лимит достигнут",
-                        "message": "Вы достигли дневного лимита контрактов",
+                        "message": f"Вы достигли {period_label} лимита договоров",
                         "severity": "warning"
                     })
             finally:

@@ -327,6 +327,7 @@ from dataclasses import asdict
 import os
 from loguru import logger
 from sqlalchemy import func
+from src.services.quota_service import get_contract_quota
 
 
 @router.get("/personal")
@@ -372,9 +373,11 @@ async def get_personal_stats(
         ).group_by(ContractRisk.severity).all()
     )
 
+    contract_quota = get_contract_quota(db, current_user)
     return {
         "total_contracts": total_contracts,
         "month_contracts": month_contracts,
+        "contracts_month": contract_quota["used"],
         "contracts_today": current_user.contracts_today or 0,
         "llm_requests_today": current_user.llm_requests_today or 0,
         "total_risks": total_risks,
