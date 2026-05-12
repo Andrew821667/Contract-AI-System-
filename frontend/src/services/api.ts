@@ -20,6 +20,17 @@ import type {
   ClauseLibraryResponse, ClauseStats, ExtractedClause,
   ConditionListResponse, ConditionCategory, CompanyCondition,
   CompanyConditionCreate, CompanyConditionUpdate,
+  Counterparty, CounterpartyCreate, CounterpartyUpdate,
+  CounterpartyListResponse, CounterpartyTypeOption,
+  CounterpartyLookupRequest, CounterpartyLookupResponse,
+  CounterpartyContractsResponse,
+  ContractParty, ContractPartyCreate, ContractPartyUpdate, ContractPartiesResponse,
+  ContractRelation, ContractRelationCreate, ContractRelationUpdate,
+  ContractRelatedBundle, RelationTypeOption, PartyRoleOption,
+  ContractRelationType,
+  ContractUploadOptions, ParentCandidate, FindParentResponse,
+  ContractListItem, ContractListResponse, ContractGroup,
+  VerificationReport, VerificationsListResponse,
   RiskPredictionRequest, RiskPredictionResponse, RiskFeedbackRequest, ModelStatus,
   ContractVersionInfo, CompareResult, VersionCompareResult, MaterialChange, VersionHistoryItem,
   AISession, AIMessage, AIContext, AIAction,
@@ -193,7 +204,18 @@ class APIClient {
 
   async register(data: RegisterRequest): Promise<any> {
     const response = await this.client.post('/api/v1/auth/register', data);
-    // Backend returns {user, access_token, ...} for auto-login, or {message} for email verification flow
+    if (response.data?.access_token) {
+      this.setAccessToken(response.data.access_token);
+    }
+    if (typeof window !== 'undefined' && response.data?.user && response.data?.access_token) {
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+      try {
+        const { useAuthStore } = require('../stores/authStore');
+        useAuthStore.getState().setAuth(response.data.user, response.data.access_token);
+      } catch {
+        // Store not available
+      }
+    }
     return response.data;
   }
 
@@ -380,20 +402,55 @@ class APIClient {
 
   // ==================== Contract Operations ====================
 
-  async uploadContract(file: File, metadata?: any): Promise<any> {
+  async uploadContract(
+    file: File,
+    optionsOrMetadata?: ContractUploadOptions | Record<string, any>,
+  ): Promise<ContractUploadResponse> {
     const formData = new FormData();
     formData.append('file', file);
-    if (metadata) {
-      formData.append('metadata', JSON.stringify(metadata));
+
+    if (optionsOrMetadata) {
+      const opts = optionsOrMetadata as ContractUploadOptions;
+      // Известные form-поля backend'а: добавляем явно по имени.
+      const formFields: Array<keyof ContractUploadOptions> = [
+        'document_type',
+        'counterparty_id',
+        'parent_contract_id',
+        'relation_type',
+        'custom_label',
+        'custom_prompt',
+        'auto_find_parent',
+      ];
+      let used = false;
+      for (const key of formFields) {
+        const value = opts[key];
+        if (value !== undefined && value !== null && value !== '') {
+          formData.append(key, String(value));
+          used = true;
+        }
+      }
+      // Backward-compat: если переданы только legacy-поля — оборачиваем в metadata.
+      if (!used) {
+        formData.append('metadata', JSON.stringify(optionsOrMetadata));
+      }
     }
 
-    const response = await this.client.post('/api/v1/contracts/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
+    const response = await this.client.post<ContractUploadResponse>(
+      '/api/v1/contracts/upload',
+      formData,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120000,
       },
-      timeout: 120000, // 2 minutes for large files
-    });
+    );
 
+    return response.data;
+  }
+
+  async findContractParent(contractId: string): Promise<FindParentResponse> {
+    const response = await this.client.post<FindParentResponse>(
+      `/api/v1/contracts/${contractId}/find-parent`,
+    );
     return response.data;
   }
 
@@ -430,10 +487,31 @@ class APIClient {
   async listContracts(params?: {
     page?: number;
     limit?: number;
+    page_size?: number;
     status?: string;
+    contract_type?: string;
     search?: string;
-  }): Promise<any> {
-    const response = await this.client.get('/api/v1/contracts', { params });
+    cursor?: string;
+    q?: string;
+    document_type?: string;
+    relation_type?: string;
+    parent_contract_id?: string;
+    counterparty_id?: string;
+    counterparty_inn?: string;
+    contract_date_from?: string;
+    contract_date_to?: string;
+    amount_from?: number;
+    amount_to?: number;
+    currency?: string;
+    group_by?: 'counterparty' | 'parent';
+  }): Promise<ContractListResponse> {
+    // Backend ожидает page_size, фронт исторически шлёт limit; маппим обе.
+    const mapped: Record<string, any> = { ...(params || {}) };
+    if (params?.limit !== undefined && params.page_size === undefined) {
+      mapped.page_size = params.limit;
+      delete mapped.limit;
+    }
+    const response = await this.client.get<ContractListResponse>('/api/v1/contracts', { params: mapped });
     return response.data;
   }
 
@@ -657,6 +735,202 @@ class APIClient {
 
   async deleteCondition(id: string): Promise<void> {
     await this.client.delete(`/api/v1/conditions/${id}`);
+  }
+
+  // ==================== Counterparties ====================
+
+  async listCounterparties(params?: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    type?: string;
+    status?: string;
+  }): Promise<CounterpartyListResponse> {
+    const response = await this.client.get<CounterpartyListResponse>(
+      '/api/v1/counterparties',
+      { params }
+    );
+    return response.data;
+  }
+
+  async getCounterpartyTypes(): Promise<CounterpartyTypeOption[]> {
+    const response = await this.client.get<CounterpartyTypeOption[]>(
+      '/api/v1/counterparties/types'
+    );
+    return response.data;
+  }
+
+  async getCounterparty(id: string): Promise<Counterparty> {
+    const response = await this.client.get<Counterparty>(`/api/v1/counterparties/${id}`);
+    return response.data;
+  }
+
+  async createCounterparty(data: CounterpartyCreate): Promise<Counterparty> {
+    const response = await this.client.post<Counterparty>('/api/v1/counterparties', data);
+    return response.data;
+  }
+
+  async updateCounterparty(id: string, data: CounterpartyUpdate): Promise<Counterparty> {
+    const response = await this.client.patch<Counterparty>(
+      `/api/v1/counterparties/${id}`,
+      data
+    );
+    return response.data;
+  }
+
+  async archiveCounterparty(id: string, hard = false): Promise<{ ok: boolean; message: string }> {
+    const response = await this.client.delete<{ ok: boolean; message: string }>(
+      `/api/v1/counterparties/${id}`,
+      { params: { hard } }
+    );
+    return response.data;
+  }
+
+  async lookupCounterparty(data: CounterpartyLookupRequest): Promise<CounterpartyLookupResponse> {
+    const response = await this.client.post<CounterpartyLookupResponse>(
+      '/api/v1/counterparties/lookup',
+      data
+    );
+    return response.data;
+  }
+
+  async listCounterpartyContracts(id: string): Promise<CounterpartyContractsResponse> {
+    const response = await this.client.get<CounterpartyContractsResponse>(
+      `/api/v1/counterparties/${id}/contracts`
+    );
+    return response.data;
+  }
+
+  // ==================== Contract Relations & Parties ====================
+
+  async getRelationTypes(): Promise<RelationTypeOption[]> {
+    const response = await this.client.get<RelationTypeOption[]>(
+      '/api/v1/contracts/relation-types'
+    );
+    return response.data;
+  }
+
+  async getPartyRoles(): Promise<PartyRoleOption[]> {
+    const response = await this.client.get<PartyRoleOption[]>(
+      '/api/v1/contracts/party-roles'
+    );
+    return response.data;
+  }
+
+  async getContractParties(contractId: string): Promise<ContractPartiesResponse> {
+    const response = await this.client.get<ContractPartiesResponse>(
+      `/api/v1/contracts/${contractId}/parties`
+    );
+    return response.data;
+  }
+
+  async addContractParty(contractId: string, data: ContractPartyCreate): Promise<ContractParty> {
+    const response = await this.client.post<ContractParty>(
+      `/api/v1/contracts/${contractId}/parties`,
+      data
+    );
+    return response.data;
+  }
+
+  async updateContractParty(
+    contractId: string,
+    partyId: string,
+    data: ContractPartyUpdate
+  ): Promise<ContractParty> {
+    const response = await this.client.patch<ContractParty>(
+      `/api/v1/contracts/${contractId}/parties/${partyId}`,
+      data
+    );
+    return response.data;
+  }
+
+  async removeContractParty(contractId: string, partyId: string): Promise<{ ok: boolean; message: string }> {
+    const response = await this.client.delete<{ ok: boolean; message: string }>(
+      `/api/v1/contracts/${contractId}/parties/${partyId}`
+    );
+    return response.data;
+  }
+
+  async getContractParents(contractId: string): Promise<ContractRelation[]> {
+    const response = await this.client.get<ContractRelation[]>(
+      `/api/v1/contracts/${contractId}/parents`
+    );
+    return response.data;
+  }
+
+  async getContractDerivatives(
+    contractId: string,
+    relationType?: ContractRelationType
+  ): Promise<ContractRelation[]> {
+    const response = await this.client.get<ContractRelation[]>(
+      `/api/v1/contracts/${contractId}/derivatives`,
+      { params: relationType ? { relation_type: relationType } : undefined }
+    );
+    return response.data;
+  }
+
+  async getContractRelated(contractId: string): Promise<ContractRelatedBundle> {
+    const response = await this.client.get<ContractRelatedBundle>(
+      `/api/v1/contracts/${contractId}/related`
+    );
+    return response.data;
+  }
+
+  async linkContractParent(
+    contractId: string,
+    data: ContractRelationCreate
+  ): Promise<ContractRelation> {
+    const response = await this.client.post<ContractRelation>(
+      `/api/v1/contracts/${contractId}/relations`,
+      data
+    );
+    return response.data;
+  }
+
+  async updateContractRelation(
+    contractId: string,
+    relationId: string,
+    data: ContractRelationUpdate
+  ): Promise<ContractRelation> {
+    const response = await this.client.patch<ContractRelation>(
+      `/api/v1/contracts/${contractId}/relations/${relationId}`,
+      data
+    );
+    return response.data;
+  }
+
+  async unlinkContractRelation(
+    contractId: string,
+    relationId: string
+  ): Promise<{ ok: boolean; message: string }> {
+    const response = await this.client.delete<{ ok: boolean; message: string }>(
+      `/api/v1/contracts/${contractId}/relations/${relationId}`
+    );
+    return response.data;
+  }
+
+  async verifyAgainstParent(
+    contractId: string,
+    relationId?: string
+  ): Promise<VerificationReport> {
+    const response = await this.client.post<VerificationReport>(
+      `/api/v1/contracts/${contractId}/verify-against-parent`,
+      undefined,
+      { params: relationId ? { relation_id: relationId } : undefined, timeout: 120_000 }
+    );
+    return response.data;
+  }
+
+  async listVerifications(
+    contractId: string,
+    relationId?: string,
+    limit = 20
+  ): Promise<VerificationsListResponse> {
+    const response = await this.client.get<VerificationsListResponse>(
+      `/api/v1/contracts/${contractId}/verifications`,
+      { params: { relation_id: relationId, limit } }
+    );
+    return response.data;
   }
 
   // ==================== ML Risk Prediction ====================

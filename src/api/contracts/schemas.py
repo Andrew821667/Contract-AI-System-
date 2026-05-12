@@ -13,6 +13,27 @@ class ContractUploadResponse(BaseModel):
     file_size: int
     status: str
     message: str
+    document_type: Optional[str] = None
+    primary_relation_type: Optional[str] = None
+    parent_relation_id: Optional[str] = None
+    counterparty_party_id: Optional[str] = None
+    parent_candidates: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ParentCandidateItem(BaseModel):
+    contract_id: str
+    file_name: str
+    contract_number: Optional[str] = None
+    contract_date: Optional[str] = None
+    counterparties: List[Dict[str, Any]] = Field(default_factory=list)
+    confidence: float
+    matched_fields: List[str] = Field(default_factory=list)
+
+
+class FindParentResponse(BaseModel):
+    contract_id: str
+    candidates: List[ParentCandidateItem]
+    extracted: Dict[str, Any] = Field(default_factory=dict)
 
 
 class AnalysisResultRequest(BaseModel):
@@ -75,12 +96,22 @@ class ExportRequest(BaseModel):
     allow_lossy_conversion: bool = False
 
 
+class ContractGroup(BaseModel):
+    """Группа договоров (по контрагенту или по основному договору)."""
+    group_id: Optional[str] = None
+    group_label: str
+    group_meta: Dict[str, Any] = Field(default_factory=dict)
+    contracts: List[Dict[str, Any]] = Field(default_factory=list)
+    total: int = 0
+
+
 class ContractListResponse(BaseModel):
     contracts: List[Dict[str, Any]]
     total: int
     page: int
     page_size: int
     next_cursor: Optional[str] = None  # Keyset cursor for efficient deep pagination
+    groups: Optional[List[ContractGroup]] = None  # Заполняется при group_by
 
 
 class ContractVersionResponse(BaseModel):

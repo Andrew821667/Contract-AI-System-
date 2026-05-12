@@ -689,7 +689,7 @@ export default function DashboardPage() {
             </div>
           ) : contractsData && contractsData.contracts?.length > 0 ? (
             <div className="space-y-3">
-              {contractsData.contracts.map((contract: Contract, idx: number) => (
+              {contractsData.contracts.map((contract, idx: number) => (
                 <motion.div
                   key={contract.id}
                   initial={{ opacity: 0, x: -20 }}
@@ -717,7 +717,7 @@ export default function DashboardPage() {
                             <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
-                            {new Date(contract.created_at).toLocaleDateString('ru-RU')}
+                            {contract.created_at ? new Date(contract.created_at).toLocaleDateString('ru-RU') : '—'}
                           </span>
                         </div>
                       </div>

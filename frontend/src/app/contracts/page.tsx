@@ -1,323 +1,419 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
-import api from '@/services/api'
+import api, {
+  ContractListItem,
+  Counterparty,
+  RelationTypeOption,
+} from '@/services/api'
 import AppLayout from '@/components/AppLayout'
+import CounterpartyAutocomplete from '@/components/CounterpartyAutocomplete'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
 
-interface Contract {
-  id: string
-  file_name: string
-  status: 'analyzing' | 'completed' | 'error' | 'pending' | 'uploaded'
-  contract_type: string
-  created_at: string
-  updated_at: string
+type ViewMode = 'list' | 'by_counterparty' | 'by_parent'
+
+const TYPE_LABELS: Record<string, string> = {
+  all: 'Все типы',
+  supply: 'Договор поставки',
+  service: 'Договор услуг',
+  lease: 'Договор аренды',
+  purchase: 'Договор купли-продажи',
+  employment: 'Трудовой договор',
+  unknown: 'Не определён',
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  all: 'Все статусы',
+  completed: 'Завершён',
+  analyzing: 'Анализируется',
+  error: 'Ошибка',
+  pending: 'Ожидание',
+  uploaded: 'Загружен',
+  parsing: 'Парсится',
+}
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  all: 'Все документы',
+  contract: 'Основные договоры',
+  derivative: 'Производные документы',
+  disagreement: 'Разногласия',
+  tracked_changes: 'С правками',
 }
 
 export default function ContractsListPage() {
   const { isReady } = useAuthGuard()
   const router = useRouter()
-  const [searchQuery, setSearchQuery] = useState('')
+
+  const [view, setView] = useState<ViewMode>('list')
+  const [q, setQ] = useState('')
   const [filterType, setFilterType] = useState<string>('all')
   const [filterStatus, setFilterStatus] = useState<string>('all')
+  const [filterDocType, setFilterDocType] = useState<string>('all')
+  const [filterRelType, setFilterRelType] = useState<string>('all')
+  const [counterparty, setCounterparty] = useState<Counterparty | null>(null)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [amountFrom, setAmountFrom] = useState('')
+  const [amountTo, setAmountTo] = useState('')
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [page, setPage] = useState(1)
   const pageSize = 20
 
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['contracts', page, pageSize, searchQuery, filterType, filterStatus],
-    queryFn: () => api.listContracts({
-      page,
-      limit: pageSize,
-      status: filterStatus !== 'all' ? filterStatus : undefined,
-      search: searchQuery || undefined,
-    }),
+  const { data: relationTypes = [] } = useQuery<RelationTypeOption[]>({
+    queryKey: ['relation-types'],
+    queryFn: () => api.getRelationTypes(),
+    staleTime: 5 * 60_000,
   })
 
-  const contracts: Contract[] = data?.contracts ?? []
+  const groupBy = view === 'by_counterparty' ? 'counterparty' : view === 'by_parent' ? 'parent' : undefined
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: [
+      'contracts',
+      { page, pageSize, q, filterType, filterStatus, filterDocType, filterRelType,
+        counterpartyId: counterparty?.id, dateFrom, dateTo, amountFrom, amountTo, groupBy },
+    ],
+    queryFn: () =>
+      api.listContracts({
+        page,
+        page_size: pageSize,
+        q: q || undefined,
+        contract_type: filterType !== 'all' ? filterType : undefined,
+        status: filterStatus !== 'all' ? filterStatus : undefined,
+        document_type: filterDocType !== 'all' ? filterDocType : undefined,
+        relation_type: filterRelType !== 'all' ? filterRelType : undefined,
+        counterparty_id: counterparty?.id,
+        contract_date_from: dateFrom || undefined,
+        contract_date_to: dateTo || undefined,
+        amount_from: amountFrom ? Number(amountFrom) : undefined,
+        amount_to: amountTo ? Number(amountTo) : undefined,
+        group_by: groupBy,
+      }),
+  })
+
+  const contracts: ContractListItem[] = data?.contracts ?? []
+  const groups = data?.groups || null
   const total: number = data?.total ?? 0
-  const totalPages = Math.ceil(total / pageSize)
+  const totalPages = Math.max(1, Math.ceil(total / pageSize))
 
-  const contractTypes = ['all', 'supply', 'service', 'lease', 'purchase', 'employment', 'unknown']
-  const statuses = ['all', 'completed', 'analyzing', 'error', 'uploaded', 'pending']
-
-  const typeLabels: Record<string, string> = {
-    all: 'Все типы',
-    supply: 'Договор поставки',
-    service: 'Договор услуг',
-    lease: 'Договор аренды',
-    purchase: 'Договор купли-продажи',
-    employment: 'Трудовой договор',
-    unknown: 'Не определён',
-  }
-
-  const getStatusBadge = (status: string) => {
-    const badges = {
-      completed: { variant: 'success' as const, text: 'Завершён' },
-      analyzing: { variant: 'info' as const, text: 'Анализируется...' },
-      error: { variant: 'danger' as const, text: 'Ошибка' },
-      pending: { variant: 'warning' as const, text: 'Ожидание' },
-      uploaded: { variant: 'default' as const, text: 'Загружен' },
+  const activeFilters = useMemo(() => {
+    const list: { label: string; clear: () => void }[] = []
+    if (q) list.push({ label: `Поиск: "${q}"`, clear: () => setQ('') })
+    if (filterType !== 'all') list.push({ label: TYPE_LABELS[filterType] || filterType, clear: () => setFilterType('all') })
+    if (filterStatus !== 'all') list.push({ label: STATUS_LABELS[filterStatus] || filterStatus, clear: () => setFilterStatus('all') })
+    if (filterDocType !== 'all') list.push({ label: DOC_TYPE_LABELS[filterDocType] || filterDocType, clear: () => setFilterDocType('all') })
+    if (filterRelType !== 'all') {
+      const rt = relationTypes.find(r => r.value === filterRelType)
+      list.push({ label: rt?.label || filterRelType, clear: () => setFilterRelType('all') })
     }
-    return badges[status as keyof typeof badges] || badges.pending
+    if (counterparty) list.push({ label: `Контрагент: ${counterparty.name}`, clear: () => setCounterparty(null) })
+    if (dateFrom) list.push({ label: `с ${dateFrom}`, clear: () => setDateFrom('') })
+    if (dateTo) list.push({ label: `до ${dateTo}`, clear: () => setDateTo('') })
+    if (amountFrom) list.push({ label: `сумма от ${amountFrom}`, clear: () => setAmountFrom('') })
+    if (amountTo) list.push({ label: `сумма до ${amountTo}`, clear: () => setAmountTo('') })
+    return list
+  }, [q, filterType, filterStatus, filterDocType, filterRelType, counterparty, dateFrom, dateTo, amountFrom, amountTo, relationTypes])
+
+  function clearAll() {
+    setQ(''); setFilterType('all'); setFilterStatus('all')
+    setFilterDocType('all'); setFilterRelType('all')
+    setCounterparty(null)
+    setDateFrom(''); setDateTo(''); setAmountFrom(''); setAmountTo('')
+    setPage(1)
   }
 
   if (!isReady) return null
 
-  // Filtering is now server-side; client-side filter only for contract_type (not yet in API)
-  const filteredContracts = contracts.filter(contract => {
-    const matchesType = filterType === 'all' || contract.contract_type === filterType
-    return matchesType
-  })
-
   return (
     <AppLayout title="Мои договоры">
       <div>
-        {/* Title & Stats */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <h1 className="text-5xl font-bold text-stone-900 mb-4">
-            Мои договоры
-          </h1>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
+          <h1 className="text-5xl font-bold text-stone-900 mb-2">Мои договоры</h1>
           <div className="flex items-center space-x-6">
             <div className="flex items-center">
               <span className="text-3xl font-bold text-primary-600 mr-2">{total}</span>
-              <span className="text-gray-600">всего договоров</span>
-            </div>
-            <div className="flex items-center">
-              <span className="text-3xl font-bold text-success-600 mr-2">
-                {contracts.filter(c => c.status === 'completed').length}
-              </span>
-              <span className="text-gray-600">проанализировано</span>
+              <span className="text-gray-600">всего</span>
             </div>
           </div>
         </motion.div>
 
-        {/* Filters & Search */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="mb-8"
-        >
-          <Card>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Search */}
-              <div className="md:col-span-1">
-                <div className="relative">
-                  <label htmlFor="contract-search" className="sr-only">Поиск по названию</label>
-                  <input
-                    id="contract-search"
-                    type="text"
-                    placeholder="Поиск по названию..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-primary-400 focus:outline-none transition-colors"
-                  />
-                  <svg className="absolute left-3 top-3.5 h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </div>
-              </div>
-
-              {/* Type Filter */}
-              <div>
-                <label htmlFor="contract-type-filter" className="sr-only">Фильтр по типу</label>
-                <select
-                  id="contract-type-filter"
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
-                  className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-primary-400 focus:outline-none transition-colors"
-                >
-                  {contractTypes.map(type => (
-                    <option key={type} value={type}>
-                      {typeLabels[type] || type}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Status Filter */}
-              <div>
-                <label htmlFor="contract-status-filter" className="sr-only">Фильтр по статусу</label>
-                <select
-                  id="contract-status-filter"
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-primary-400 focus:outline-none transition-colors"
-                >
-                  {statuses.map(status => (
-                    <option key={status} value={status}>
-                      {status === 'all' ? 'Все статусы' : getStatusBadge(status).text}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </Card>
-        </motion.div>
-
-        {/* Live region for screen readers */}
-        <div aria-live="polite" className="sr-only">
-          {isLoading ? 'Загрузка договоров...' : `Найдено ${filteredContracts.length} договоров`}
+        {/* View toggle */}
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <ViewBtn active={view === 'list'} onClick={() => setView('list')}>Список</ViewBtn>
+          <ViewBtn active={view === 'by_counterparty'} onClick={() => setView('by_counterparty')}>По контрагентам</ViewBtn>
+          <ViewBtn active={view === 'by_parent'} onClick={() => setView('by_parent')}>Иерархия</ViewBtn>
         </div>
 
-        {/* Loading State */}
-        {isLoading && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-          >
-            <Card className="text-center py-12">
-              <div className="flex flex-col items-center">
-                <svg className="animate-spin h-10 w-10 text-primary-500 mb-4" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-                <p className="text-gray-600">Загрузка договоров...</p>
-              </div>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* Error State */}
-        {isError && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-          >
-            <Card className="text-center py-12">
-              <div className="text-6xl mb-4">⚠️</div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                Ошибка загрузки
-              </h3>
-              <p className="text-gray-600 mb-6">
-                {(error as any)?.response?.data?.detail || 'Не удалось загрузить список договоров. Проверьте авторизацию.'}
-              </p>
-              <div className="flex justify-center space-x-3">
-                <Button variant="primary" onClick={() => window.location.reload()}>
-                  Попробовать снова
-                </Button>
-                <Button variant="outline" onClick={() => router.push('/login')}>
-                  Войти
-                </Button>
-              </div>
-            </Card>
-          </motion.div>
-        )}
-
-        {/* Contracts Grid */}
-        {!isLoading && !isError && filteredContracts.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-          >
-            <Card className="text-center py-12">
-              <div className="text-6xl mb-4">📭</div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                Договоры не найдены
-              </h3>
-              <p className="text-gray-600 mb-6">
-                {searchQuery || filterType !== 'all' || filterStatus !== 'all'
-                  ? 'Попробуйте изменить фильтры поиска'
-                  : 'Загрузите первый договор для анализа'}
-              </p>
-              <Button variant="primary" onClick={() => router.push('/contracts/upload')}>
-                + Загрузить договор
+        {/* Filters */}
+        <Card className="mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+            <div className="md:col-span-5">
+              <input
+                type="text"
+                value={q}
+                onChange={(e) => { setQ(e.target.value); setPage(1) }}
+                placeholder="Поиск по названию, № договора, содержимому"
+                className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-primary-400 focus:outline-none"
+              />
+            </div>
+            <div className="md:col-span-3">
+              <select value={filterDocType} onChange={(e) => { setFilterDocType(e.target.value); setPage(1) }}
+                className="w-full px-3 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-primary-400 focus:outline-none">
+                {Object.entries(DOC_TYPE_LABELS).map(([v, l]) => (<option key={v} value={v}>{l}</option>))}
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1) }}
+                className="w-full px-3 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-primary-400 focus:outline-none">
+                {Object.entries(STATUS_LABELS).map(([v, l]) => (<option key={v} value={v}>{l}</option>))}
+              </select>
+            </div>
+            <div className="md:col-span-2 flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAdvanced(s => !s)}
+                className="w-full"
+              >
+                {showAdvanced ? 'Скрыть фильтры' : 'Доп. фильтры'}
               </Button>
-            </Card>
-          </motion.div>
+            </div>
+          </div>
+
+          {showAdvanced && (
+            <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Контрагент</label>
+                <CounterpartyAutocomplete value={counterparty} onChange={(cp) => { setCounterparty(cp); setPage(1) }} />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Тип производного</label>
+                <select value={filterRelType} onChange={(e) => { setFilterRelType(e.target.value); setPage(1) }}
+                  className="w-full px-3 py-2 bg-white border-2 border-gray-200 rounded-lg focus:border-primary-400 focus:outline-none">
+                  <option value="all">Любой</option>
+                  {relationTypes.map(rt => (<option key={rt.value} value={rt.value}>{rt.label}</option>))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Тип контракта</label>
+                <select value={filterType} onChange={(e) => { setFilterType(e.target.value); setPage(1) }}
+                  className="w-full px-3 py-2 bg-white border-2 border-gray-200 rounded-lg focus:border-primary-400 focus:outline-none">
+                  {Object.entries(TYPE_LABELS).map(([v, l]) => (<option key={v} value={v}>{l}</option>))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Дата договора с</label>
+                <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+                  className="w-full px-3 py-2 bg-white border-2 border-gray-200 rounded-lg focus:border-primary-400 focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Дата договора по</label>
+                <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+                  className="w-full px-3 py-2 bg-white border-2 border-gray-200 rounded-lg focus:border-primary-400 focus:outline-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Сумма от</label>
+                  <input type="number" value={amountFrom} onChange={(e) => { setAmountFrom(e.target.value); setPage(1) }}
+                    className="w-full px-3 py-2 bg-white border-2 border-gray-200 rounded-lg focus:border-primary-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Сумма до</label>
+                  <input type="number" value={amountTo} onChange={(e) => { setAmountTo(e.target.value); setPage(1) }}
+                    className="w-full px-3 py-2 bg-white border-2 border-gray-200 rounded-lg focus:border-primary-400 focus:outline-none" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeFilters.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-gray-500">Активные фильтры:</span>
+              {activeFilters.map((f, i) => (
+                <button
+                  key={i}
+                  onClick={f.clear}
+                  className="text-xs px-2 py-1 rounded-full bg-primary-50 text-primary-700 hover:bg-primary-100 border border-primary-100"
+                >
+                  {f.label} ✕
+                </button>
+              ))}
+              <button onClick={clearAll} className="text-xs text-gray-500 hover:text-gray-700 underline">
+                Очистить все
+              </button>
+            </div>
+          )}
+        </Card>
+
+        {isLoading && (<Card className="text-center py-12">Загрузка договоров…</Card>)}
+        {isError && (
+          <Card className="text-center py-12">
+            <div className="text-6xl mb-4">⚠️</div>
+            <p className="text-gray-600 mb-4">{(error as any)?.response?.data?.detail || 'Ошибка загрузки'}</p>
+            <Button variant="primary" onClick={() => window.location.reload()}>Попробовать снова</Button>
+          </Card>
         )}
 
-        {!isLoading && !isError && filteredContracts.length > 0 && (
+        {!isLoading && !isError && !groups && contracts.length === 0 && (
+          <Card className="text-center py-12">
+            <div className="text-6xl mb-4">📭</div>
+            <h3 className="text-2xl font-bold mb-2">Договоры не найдены</h3>
+            <p className="text-gray-600 mb-6">
+              {activeFilters.length > 0 ? 'Попробуйте изменить фильтры' : 'Загрузите первый договор для анализа'}
+            </p>
+            <Button variant="primary" onClick={() => router.push('/contracts/upload')}>+ Загрузить договор</Button>
+          </Card>
+        )}
+
+        {!isLoading && !isError && !groups && contracts.length > 0 && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredContracts.map((contract, idx) => (
+              {contracts.map((c, idx) => (
                 <motion.div
-                  key={contract.id}
+                  key={c.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.05 }}
+                  transition={{ delay: idx * 0.04 }}
                 >
-                  <Card
-                    hover
-                    onClick={() => router.push(`/contracts/${contract.id}`)}
-                  >
-                    {/* Header */}
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-bold text-gray-900 mb-1 line-clamp-1">
-                          {contract.file_name}
-                        </h3>
-                        <p className="text-sm text-gray-500">
-                          {typeLabels[contract.contract_type] || contract.contract_type}
-                        </p>
-                      </div>
-                      <Badge {...getStatusBadge(contract.status)} size="sm">
-                        {getStatusBadge(contract.status).text}
-                      </Badge>
-                    </div>
-
-                    {/* Footer */}
-                    <div className="flex items-center justify-between text-xs text-gray-500 mt-4 pt-4 border-t border-gray-100">
-                      <div className="flex items-center">
-                        <svg className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        {contract.created_at
-                          ? new Date(contract.created_at).toLocaleDateString('ru-RU', {
-                              day: 'numeric',
-                              month: 'short',
-                              year: 'numeric'
-                            })
-                          : '—'
-                        }
-                      </div>
-                      <span className="text-primary-600 font-semibold hover:text-primary-700">
-                        Открыть →
-                      </span>
-                    </div>
-                  </Card>
+                  <ContractCard
+                    contract={c}
+                    onClick={() => router.push(`/contracts/${c.id}`)}
+                    relationTypes={relationTypes}
+                  />
                 </motion.div>
               ))}
             </div>
 
-            {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex justify-center items-center space-x-4 mt-8">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1}
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                >
-                  ← Назад
-                </Button>
-                <span className="text-gray-600">
-                  Страница {page} из {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage(p => p + 1)}
-                >
-                  Далее →
-                </Button>
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>← Назад</Button>
+                <span className="text-gray-600">Страница {page} из {totalPages}</span>
+                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}>Далее →</Button>
               </div>
             )}
           </>
         )}
+
+        {!isLoading && !isError && groups && (
+          <div className="space-y-6">
+            {groups.length === 0 && (
+              <Card className="text-center py-12 text-gray-500">Нет данных для группировки</Card>
+            )}
+            {groups.map((g) => (
+              <div key={g.group_id || 'none'}>
+                <div className="flex items-baseline gap-3 mb-3">
+                  <h2 className="text-xl font-bold text-stone-900">{g.group_label}</h2>
+                  <span className="text-sm text-gray-500">· {g.total}</span>
+                  {g.group_meta?.inn && (
+                    <span className="text-xs font-mono text-gray-500">ИНН {g.group_meta.inn}</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {g.contracts.map((c) => (
+                    <ContractCard
+                      key={c.id}
+                      contract={c}
+                      onClick={() => router.push(`/contracts/${c.id}`)}
+                      relationTypes={relationTypes}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </AppLayout>
+  )
+}
+
+function ViewBtn({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
+        active
+          ? 'bg-primary-600 text-white'
+          : 'bg-white border-2 border-gray-200 text-gray-700 hover:border-primary-300'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function ContractCard({
+  contract: c,
+  onClick,
+  relationTypes,
+}: {
+  contract: ContractListItem
+  onClick: () => void
+  relationTypes: RelationTypeOption[]
+}) {
+  const statusBadge = (() => {
+    const map: Record<string, { variant: 'success' | 'info' | 'danger' | 'warning' | 'default'; text: string }> = {
+      completed: { variant: 'success', text: 'Завершён' },
+      analyzing: { variant: 'info', text: 'Анализ...' },
+      error: { variant: 'danger', text: 'Ошибка' },
+      pending: { variant: 'warning', text: 'Ожидание' },
+      uploaded: { variant: 'default', text: 'Загружен' },
+      parsing: { variant: 'info', text: 'Парсинг' },
+    }
+    return map[c.status] || { variant: 'default' as const, text: c.status }
+  })()
+
+  const docTypeLabel = (() => {
+    if (c.document_type === 'derivative' && c.primary_relation_type) {
+      return relationTypes.find(rt => rt.value === c.primary_relation_type)?.label || 'Производный'
+    }
+    return DOC_TYPE_LABELS[c.document_type] || c.document_type
+  })()
+
+  return (
+    <Card hover onClick={onClick}>
+      <div className="flex items-start justify-between mb-3 gap-2">
+        <div className="min-w-0 flex-1">
+          <h3 className="text-lg font-bold text-gray-900 line-clamp-2">{c.file_name}</h3>
+          <p className="text-xs text-gray-500 mt-1">
+            {docTypeLabel}
+            {c.contract_type ? ` · ${TYPE_LABELS[c.contract_type] || c.contract_type}` : ''}
+          </p>
+        </div>
+        <Badge variant={statusBadge.variant} size="sm">{statusBadge.text}</Badge>
+      </div>
+
+      <div className="space-y-1 text-sm text-gray-700">
+        {c.contract_number && (<div>№ <span className="font-mono">{c.contract_number}</span></div>)}
+        {c.contract_date && (
+          <div>от {new Date(c.contract_date).toLocaleDateString('ru-RU')}</div>
+        )}
+        {c.counterparty?.name && (
+          <div className="truncate">
+            <span className="text-gray-500">с </span>
+            {c.counterparty.name}
+            {c.counterparty.inn && (<span className="text-gray-400 text-xs"> · ИНН {c.counterparty.inn}</span>)}
+          </div>
+        )}
+        {c.total_amount !== null && c.total_amount !== undefined && (
+          <div className="text-gray-700">
+            {c.total_amount.toLocaleString('ru-RU')} {c.currency || ''}
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between text-xs text-gray-500 mt-4 pt-3 border-t border-gray-100">
+        <span>
+          {c.created_at ? new Date(c.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+        </span>
+        <span className="text-primary-600 font-semibold">Открыть →</span>
+      </div>
+    </Card>
   )
 }

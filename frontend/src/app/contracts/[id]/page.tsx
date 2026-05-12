@@ -10,6 +10,7 @@ import Card from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import Modal from '@/components/ui/Modal'
 import api, { DigitalContract, VerificationResult, RiskPredictionResponse, ContractVersionInfo, CompareChange, CompareResult } from '@/services/api'
+import RelatedDocumentsSection from '@/components/RelatedDocumentsSection'
 import { useAnalysisWebSocket, WSMessage } from '@/hooks/useAnalysisWebSocket'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
 import { useAuthStore } from '@/stores/authStore'
@@ -635,6 +636,17 @@ export default function ContractDetailPage() {
               </div>
             </motion.div>
           </div>
+        )}
+
+        {/* Связанные документы и стороны */}
+        {contract && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.08 }}
+          >
+            <RelatedDocumentsSection contractId={contractId} />
+          </motion.div>
         )}
 
         {(contract?.status === 'analyzing' || contract?.status === 'parsing' || analysisJustStarted) && (

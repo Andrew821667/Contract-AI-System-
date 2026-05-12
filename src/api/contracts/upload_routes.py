@@ -7,6 +7,7 @@ entire file into memory. Validates extension/magic bytes after streaming to disk
 """
 import os
 import tempfile
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy import update as sql_update
@@ -14,8 +15,9 @@ from sqlalchemy.orm import Session
 from loguru import logger
 
 from src.models.database import get_db
-from src.models import Contract
+from src.models import Contract, ContractParty, ContractRelation, Counterparty
 from src.models.auth_models import User
+from src.models.contract_relations_models import PARTY_ROLES, RELATION_TYPES
 from src.utils.file_validator import (
     FileValidationError,
     sanitize_filename,
@@ -39,6 +41,12 @@ UPLOAD_DIR = "data/contracts"
 async def upload_contract(
     file: UploadFile = File(...),
     document_type: str = Form("contract"),
+    counterparty_id: Optional[str] = Form(None),
+    parent_contract_id: Optional[str] = Form(None),
+    relation_type: Optional[str] = Form(None),
+    custom_label: Optional[str] = Form(None),
+    custom_prompt: Optional[str] = Form(None),
+    auto_find_parent: bool = Form(True),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     ctx: OrganizationContext | None = Depends(get_org_context),
@@ -49,15 +57,41 @@ async def upload_contract(
     **Supported formats:** DOCX, PDF, XML, TXT
     **Max size:** 50 MB
 
+    **document_type:** 'contract' | 'derivative' | 'disagreement' | 'tracked_changes'
+    **counterparty_id:** опционально, привязать контрагента к договору (роль='counterparty')
+    **parent_contract_id + relation_type:** для производных документов сразу создаст связь
+    **auto_find_parent:** если document_type='derivative' и parent_contract_id не задан —
+    после загрузки попытаемся найти кандидатов на основной договор по реквизитам
+
     **Performance:** Streams file to disk in 64KB chunks instead of loading entirely into memory.
 
-    **Returns:** Contract ID and status
+    **Returns:** Contract ID, статус, привязки и (опционально) parent_candidates.
     """
-    VALID_DOCUMENT_TYPES = {"contract", "disagreement", "tracked_changes"}
+    VALID_DOCUMENT_TYPES = {"contract", "derivative", "disagreement", "tracked_changes"}
     if document_type not in VALID_DOCUMENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid document_type. Allowed: {', '.join(sorted(VALID_DOCUMENT_TYPES))}"
+        )
+
+    # Проверки до сохранения файла: связи и реквизиты
+    if parent_contract_id and not relation_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="При указании parent_contract_id требуется relation_type",
+        )
+    if relation_type and relation_type not in RELATION_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Недопустимый relation_type. Разрешены: {', '.join(RELATION_TYPES)}",
+        )
+    if relation_type == "custom" and not (
+        (custom_label and custom_label.strip())
+        or (custom_prompt and custom_prompt.strip())
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Для custom-связи укажите custom_label и/или custom_prompt",
         )
 
     tmp_path = None
@@ -172,12 +206,129 @@ async def upload_contract(
 
         logger.info(f"Contract uploaded: {contract.id} by user {current_user.id} ({file_size} bytes, streamed)")
 
+        # ── Привязка контрагента (если задан) ────────────────────────────────
+        counterparty_party_id: Optional[str] = None
+        if counterparty_id:
+            cp = db.query(Counterparty).filter(Counterparty.id == counterparty_id).first()
+            if not cp:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Контрагент {counterparty_id} не найден",
+                )
+            if (
+                contract.organization_id
+                and cp.organization_id
+                and cp.organization_id != contract.organization_id
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Контрагент принадлежит другой организации",
+                )
+            party = ContractParty(
+                contract_id=contract.id,
+                counterparty_id=cp.id,
+                role="counterparty",
+            )
+            db.add(party)
+            db.flush()
+            counterparty_party_id = party.id
+            contract.parties_summary = [
+                {
+                    "counterparty_id": cp.id,
+                    "name": cp.name,
+                    "inn": cp.inn,
+                    "role": "counterparty",
+                }
+            ]
+
+        # ── Привязка к основному договору (если задан явно) ──────────────────
+        parent_relation_id: Optional[str] = None
+        if parent_contract_id:
+            parent = (
+                db.query(Contract)
+                .filter(Contract.id == parent_contract_id)
+                .first()
+            )
+            if not parent:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Основной договор {parent_contract_id} не найден",
+                )
+            if (
+                parent.assigned_to != current_user.id
+                and current_user.role != "admin"
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Нет доступа к основному договору",
+                )
+            relation = ContractRelation(
+                parent_contract_id=parent.id,
+                child_contract_id=contract.id,
+                relation_type=relation_type,
+                custom_label=custom_label,
+                custom_prompt=custom_prompt,
+                created_by=current_user.id,
+            )
+            db.add(relation)
+            db.flush()
+            parent_relation_id = relation.id
+            contract.document_type = "derivative"
+            contract.primary_relation_type = relation_type
+
+        db.commit()
+        db.refresh(contract)
+
+        # ── Opportunistic parse + auto-find родителя ─────────────────────────
+        parent_candidates: list = []
+        if document_type == "derivative" and parent_contract_id is None and auto_find_parent:
+            try:
+                parsed_text = _opportunistic_parse(final_path)
+                if parsed_text:
+                    contract.parsed_text = parsed_text
+                    db.commit()
+                    from src.services.main_contract_finder import (
+                        MainContractFinderService,
+                    )
+
+                    finder = MainContractFinderService()
+                    candidates = finder.find_candidates(
+                        db=db,
+                        text=parsed_text,
+                        current_user=current_user,
+                        organization_id=ctx.org.id if ctx else None,
+                        exclude_contract_id=contract.id,
+                        limit=5,
+                    )
+                    parent_candidates = [
+                        {
+                            "contract_id": c.contract_id,
+                            "file_name": c.file_name,
+                            "contract_number": c.contract_number,
+                            "contract_date": c.contract_date,
+                            "counterparties": c.counterparties,
+                            "confidence": c.confidence,
+                            "matched_fields": c.matched_fields,
+                        }
+                        for c in candidates
+                    ]
+            except Exception as parse_err:  # noqa: BLE001
+                # Auto-find — best effort. Парсинг файла не должен ломать загрузку.
+                logger.warning(
+                    f"auto_find_parent: parse/find failed for {contract.id}: {parse_err}"
+                )
+
         return ContractUploadResponse(
             contract_id=contract.id,
             file_name=safe_filename,
             file_size=file_size,
             status='uploaded',
-            message='Contract uploaded successfully'
+            message='Contract uploaded successfully',
+            document_type=contract.document_type,
+            primary_relation_type=contract.primary_relation_type,
+            parent_relation_id=parent_relation_id,
+            counterparty_party_id=counterparty_party_id,
+            parent_candidates=parent_candidates,
         )
 
     except (HTTPException, FileValidationError):
@@ -195,3 +346,23 @@ async def upload_contract(
                 os.unlink(tmp_path)
             except OSError:
                 pass
+
+
+def _opportunistic_parse(file_path: str) -> Optional[str]:
+    """Best-effort извлечение текста из файла при загрузке.
+
+    Используется только для auto_find_parent. Если что-то идёт не так —
+    возвращает None и не ломает загрузку.
+    """
+    try:
+        from src.services.document_parser import DocumentParser
+
+        parser = DocumentParser()
+        text = parser.parse(file_path)
+        if not text:
+            return None
+        # Усечём для autofind: достаточно preamble + первой страницы
+        return text[:10_000]
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(f"_opportunistic_parse failed: {exc}")
+        return None
