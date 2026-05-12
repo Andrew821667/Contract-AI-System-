@@ -5,7 +5,7 @@ SQLAlchemy <>45;8 4;O Contract AI System
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import (
-    Boolean, Column, String, Text, Integer, Float,
+    Boolean, Column, String, Text, Integer, Float, Numeric,
     DateTime, ForeignKey, CheckConstraint, UniqueConstraint, JSON
 )
 from sqlalchemy.ext.declarative import declarative_base
@@ -96,6 +96,25 @@ class Contract(Base):
     )
     risk_level = Column(String(20), index=True)
     meta_info = Column(JSON, nullable=True)
+
+    # Реквизиты договора (миграция 022)
+    contract_number = Column(String(100), nullable=True, index=True)
+    contract_date = Column(DateTime, nullable=True, index=True)
+    effective_from = Column(DateTime, nullable=True)
+    effective_to = Column(DateTime, nullable=True)
+    total_amount = Column(Numeric(18, 2), nullable=True)
+    currency = Column(String(3), nullable=True)
+
+    # Извлечённый из документа текст для full-text поиска
+    parsed_text = Column(Text, nullable=True)
+
+    # Денормализованная копия ContractRelation.relation_type для быстрой
+    # фильтрации в списке (источник истины — ContractRelation).
+    primary_relation_type = Column(String(50), nullable=True, index=True)
+
+    # Кэш сторон для отображения в списке без join
+    parties_summary = Column(JSON, nullable=True)
+
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -105,9 +124,28 @@ class Contract(Base):
     review_tasks = relationship("ReviewTask", back_populates="contract", cascade="all, delete-orphan")
     export_logs = relationship("ExportLog", back_populates="contract")
 
+    parties = relationship(
+        "ContractParty",
+        back_populates="contract",
+        cascade="all, delete-orphan",
+        foreign_keys="ContractParty.contract_id",
+    )
+    derivative_relations = relationship(
+        "ContractRelation",
+        back_populates="parent_contract",
+        cascade="all, delete-orphan",
+        foreign_keys="ContractRelation.parent_contract_id",
+    )
+    parent_relations = relationship(
+        "ContractRelation",
+        back_populates="child_contract",
+        cascade="all, delete-orphan",
+        foreign_keys="ContractRelation.child_contract_id",
+    )
+
     __table_args__ = (
         CheckConstraint(
-            document_type.in_(['contract', 'disagreement', 'tracked_changes']),
+            document_type.in_(['contract', 'disagreement', 'tracked_changes', 'derivative']),
             name='check_document_type'
         ),
         CheckConstraint(

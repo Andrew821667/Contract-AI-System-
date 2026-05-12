@@ -15,6 +15,13 @@ from .ml_feedback_models import RiskPredictionFeedback, ModelTrainingBatch
 from .digital_models import DigitalContract
 from .clause_models import ExtractedClause
 from .condition_models import CompanyCondition
+from .counterparty_models import Counterparty
+from .contract_relations_models import (
+    ContractParty,
+    ContractRelation,
+    DerivativeGenerationHistory,
+    DerivativeVerification,
+)
 
 
 def init_db():
@@ -73,5 +80,12 @@ __all__ = [
     # Clause library models
     "ExtractedClause",
     # Company conditions models
-    "CompanyCondition"
+    "CompanyCondition",
+    # Counterparty models
+    "Counterparty",
+    # Contract relations
+    "ContractParty",
+    "ContractRelation",
+    "DerivativeGenerationHistory",
+    "DerivativeVerification",
 ]

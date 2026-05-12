@@ -57,6 +57,7 @@ from src.api.payments import router as payments_router
 from src.api.contracts.digital_routes import router as digital_router
 from src.api.clauses import router as clauses_router
 from src.api.conditions import router as conditions_router
+from src.api.counterparties import router as counterparties_router
 from src.api.analytics.routes import router as analytics_router
 from src.api.ml import router as ml_router
 from src.api.bridge import router as bridge_router
@@ -299,6 +300,7 @@ app.include_router(websocket_router, prefix="/api/v1/ws", tags=["WebSocket"])
 app.include_router(payments_router, prefix="/api/v1/payments", tags=["Payments"])
 app.include_router(clauses_router, prefix="/api/v1/clauses", tags=["Clause Library"])
 app.include_router(conditions_router, prefix="/api/v1/conditions", tags=["Company Conditions"])
+app.include_router(counterparties_router, prefix="/api/v1/counterparties", tags=["Counterparties"])
 app.include_router(rag_admin_router, prefix="/api/v1/rag", tags=["RAG Admin"])
 app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["Analytics"])
 app.include_router(ml_router, prefix="/api/v1/ml", tags=["ML & AI"])

@@ -298,6 +298,275 @@ export interface ConditionCategory {
   label: string;
 }
 
+// Counterparty types
+export type CounterpartyType =
+  | 'legal'
+  | 'individual'
+  | 'individual_entrepreneur'
+  | 'foreign'
+  | 'other';
+
+export type CounterpartyStatus = 'active' | 'archived';
+
+export interface Counterparty {
+  id: string;
+  organization_id: string | null;
+  created_by: string | null;
+  type: CounterpartyType;
+  status: CounterpartyStatus;
+  name: string;
+  short_name: string | null;
+  inn: string | null;
+  kpp: string | null;
+  ogrn: string | null;
+  legal_address: string | null;
+  postal_address: string | null;
+  contact_person: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  bank_details: Record<string, any> | null;
+  fns_data: Record<string, any> | null;
+  fns_checked_at: string | null;
+  bankruptcy_data: Record<string, any> | null;
+  bankruptcy_checked_at: string | null;
+  notes: string | null;
+  meta_info: Record<string, any> | null;
+  created_at: string | null;
+  updated_at: string | null;
+  contracts_count?: number | null;
+}
+
+export interface CounterpartyCreate {
+  type?: CounterpartyType;
+  name: string;
+  short_name?: string;
+  inn?: string;
+  kpp?: string;
+  ogrn?: string;
+  legal_address?: string;
+  postal_address?: string;
+  contact_person?: string;
+  contact_email?: string;
+  contact_phone?: string;
+  bank_details?: Record<string, any>;
+  notes?: string;
+  meta_info?: Record<string, any>;
+}
+
+export interface CounterpartyUpdate extends Partial<CounterpartyCreate> {
+  status?: CounterpartyStatus;
+}
+
+export interface CounterpartyListResponse {
+  counterparties: Counterparty[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface CounterpartyTypeOption {
+  value: CounterpartyType;
+  label: string;
+}
+
+export interface CounterpartyLookupRequest {
+  inn: string;
+  save?: boolean;
+  check_bankruptcy?: boolean;
+}
+
+export interface CounterpartyLookupResponse {
+  counterparty: Counterparty | null;
+  fns_data: Record<string, any>;
+  bankruptcy_data: Record<string, any>;
+  overall_status: string;
+  warnings: string[];
+  errors: string[];
+  saved: boolean;
+}
+
+export interface CounterpartyContractItem {
+  id: string;
+  file_name: string;
+  contract_type: string | null;
+  document_type: string;
+  status: string;
+  created_at: string | null;
+}
+
+export interface CounterpartyContractsResponse {
+  counterparty_id: string;
+  total: number;
+  contracts: CounterpartyContractItem[];
+}
+
+// Contract relations & parties
+
+export type ContractRelationType =
+  | 'supplementary_agreement'
+  | 'specification'
+  | 'annex'
+  | 'act'
+  | 'addendum'
+  | 'termination'
+  | 'custom';
+
+export type ContractPartyRole = 'counterparty' | 'guarantor' | 'third_party' | 'other';
+
+export interface ContractParty {
+  id: string;
+  contract_id: string;
+  counterparty_id: string;
+  counterparty_name: string | null;
+  counterparty_inn: string | null;
+  role: ContractPartyRole;
+  sequence_number: number | null;
+  notes: string | null;
+  created_at: string | null;
+}
+
+export interface ContractPartyCreate {
+  counterparty_id: string;
+  role?: ContractPartyRole;
+  sequence_number?: number;
+  notes?: string;
+}
+
+export interface ContractPartyUpdate {
+  role?: ContractPartyRole;
+  sequence_number?: number;
+  notes?: string;
+}
+
+export interface ContractPartiesResponse {
+  contract_id: string;
+  parties: ContractParty[];
+}
+
+export interface ContractBriefRef {
+  id: string;
+  file_name: string;
+  document_type: string;
+  contract_type: string | null;
+  contract_number: string | null;
+  contract_date: string | null;
+  status: string;
+  primary_relation_type: string | null;
+  parties_summary: Array<Record<string, any>> | null;
+}
+
+export interface ContractRelation {
+  id: string;
+  parent_contract_id: string;
+  child_contract_id: string;
+  relation_type: ContractRelationType;
+  custom_label: string | null;
+  custom_prompt: string | null;
+  derived_from_text: string | null;
+  confidence: number | null;
+  auto_detected: boolean;
+  created_by: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  parent: ContractBriefRef | null;
+  child: ContractBriefRef | null;
+}
+
+export interface ContractRelationCreate {
+  parent_contract_id: string;
+  relation_type: ContractRelationType;
+  custom_label?: string;
+  custom_prompt?: string;
+  derived_from_text?: string;
+  confidence?: number;
+  auto_detected?: boolean;
+}
+
+export interface ContractRelationUpdate {
+  relation_type?: ContractRelationType;
+  custom_label?: string;
+  custom_prompt?: string;
+}
+
+export interface ContractRelatedBundle {
+  contract_id: string;
+  parents: ContractRelation[];
+  derivatives: ContractRelation[];
+  parties: ContractParty[];
+}
+
+export interface RelationTypeOption {
+  value: ContractRelationType;
+  label: string;
+  description: string | null;
+}
+
+export interface PartyRoleOption {
+  value: ContractPartyRole;
+  label: string;
+}
+
+// Derivative verification
+
+export interface VerificationRequisiteMismatch {
+  field: string
+  severity: 'critical' | 'warning' | 'info'
+  parent_value?: any
+  child_value?: any
+  message: string
+}
+
+export interface VerificationContradictionItem {
+  clause: string
+  parent_reference: string | null
+  severity: 'critical' | 'warning' | 'info'
+  rationale: string
+}
+
+export interface VerificationDiffItem {
+  change_type: 'addition' | 'deletion' | 'modification' | 'relocation'
+  change_category: 'textual' | 'structural' | 'semantic' | 'legal'
+  old_content: string | null
+  new_content: string | null
+}
+
+export interface VerificationReport {
+  id: string
+  relation_id: string
+  parent_contract_id: string
+  child_contract_id: string
+  overall_assessment: 'ok' | 'warnings' | 'critical' | 'error'
+  status: 'completed' | 'partial' | 'failed' | 'in_progress'
+  requisites: {
+    ok: boolean
+    mismatches: VerificationRequisiteMismatch[]
+  } | null
+  contradictions: {
+    count: number
+    items: VerificationContradictionItem[]
+    skipped?: boolean
+    reason?: string
+  } | null
+  diff: {
+    skipped?: boolean
+    reason?: string
+    total_changes: number
+    by_category: Record<string, number>
+    items: VerificationDiffItem[]
+    truncated?: boolean
+  } | null
+  llm_model: string | null
+  duration_ms: number | null
+  error: string | null
+  created_by: string | null
+  created_at: string | null
+}
+
+export interface VerificationsListResponse {
+  contract_id: string
+  verifications: VerificationReport[]
+}
+
 // ML Risk Prediction types
 export interface RiskPredictionRequest {
   contract_type: string;
@@ -797,10 +1066,91 @@ export interface Contract {
   updated_at?: string;
 }
 
+export interface ParentCandidate {
+  contract_id: string;
+  file_name: string;
+  contract_number: string | null;
+  contract_date: string | null;
+  counterparties: Array<{ id: string; name: string; inn: string | null; role: string }>;
+  confidence: number;
+  matched_fields: string[];
+}
+
+export interface ContractListItemCounterparty {
+  id: string | null;
+  name: string | null;
+  inn: string | null;
+  role: string | null;
+}
+
+export interface ContractListItem {
+  id: string;
+  file_name: string;
+  status: string;
+  contract_type: string | null;
+  document_type: string;
+  primary_relation_type: string | null;
+  contract_number: string | null;
+  contract_date: string | null;
+  effective_from: string | null;
+  effective_to: string | null;
+  total_amount: number | null;
+  currency: string | null;
+  counterparty: ContractListItemCounterparty | null;
+  parties_summary: Array<Record<string, any>>;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ContractGroup {
+  group_id: string | null;
+  group_label: string;
+  group_meta: Record<string, any>;
+  contracts: ContractListItem[];
+  total: number;
+}
+
+export interface ContractListResponse {
+  contracts: ContractListItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  next_cursor: string | null;
+  groups: ContractGroup[] | null;
+}
+
 export interface ContractUploadResponse {
   contract_id: string;
   file_name: string;
   status: string;
+  file_size?: number;
+  message?: string;
+  document_type?: string;
+  primary_relation_type?: string | null;
+  parent_relation_id?: string | null;
+  counterparty_party_id?: string | null;
+  parent_candidates?: ParentCandidate[];
+}
+
+export interface ContractUploadOptions {
+  document_type?: 'contract' | 'derivative' | 'disagreement' | 'tracked_changes';
+  counterparty_id?: string;
+  parent_contract_id?: string;
+  relation_type?: ContractRelationType;
+  custom_label?: string;
+  custom_prompt?: string;
+  auto_find_parent?: boolean;
+}
+
+export interface FindParentResponse {
+  contract_id: string;
+  candidates: ParentCandidate[];
+  extracted: {
+    numbers?: string[];
+    dates?: string[];
+    inns?: string[];
+  };
+  message?: string;
 }
 
 export interface AnalysisResultRequest {

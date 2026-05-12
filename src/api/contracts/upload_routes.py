@@ -7,6 +7,7 @@ entire file into memory. Validates extension/magic bytes after streaming to disk
 """
 import os
 import tempfile
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy import update as sql_update
@@ -14,8 +15,9 @@ from sqlalchemy.orm import Session
 from loguru import logger
 
 from src.models.database import get_db
-from src.models import Contract
+from src.models import Contract, ContractParty, ContractRelation, Counterparty
 from src.models.auth_models import User
+from src.models.contract_relations_models import RELATION_TYPES
 from src.services.quota_service import contract_limit_message, get_contract_quota
 from src.utils.file_validator import (
     FileValidationError,
@@ -40,6 +42,12 @@ UPLOAD_DIR = "data/contracts"
 async def upload_contract(
     file: UploadFile = File(...),
     document_type: str = Form("contract"),
+    counterparty_id: Optional[str] = Form(None),
+    parent_contract_id: Optional[str] = Form(None),
+    relation_type: Optional[str] = Form(None),
+    custom_label: Optional[str] = Form(None),
+    custom_prompt: Optional[str] = Form(None),
+    auto_find_parent: bool = Form(True),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     ctx: OrganizationContext | None = Depends(get_org_context),
@@ -50,18 +58,46 @@ async def upload_contract(
     **Supported formats:** DOCX, PDF, XML, TXT
     **Max size:** 50 MB
 
+    **document_type:** 'contract' | 'derivative' | 'disagreement' | 'tracked_changes'
+    **counterparty_id:** опционально, привязать контрагента к договору (роль='counterparty')
+    **parent_contract_id + relation_type:** для производных документов сразу создаст связь
+    **auto_find_parent:** если document_type='derivative' и parent_contract_id не задан —
+    после загрузки попытаемся найти кандидатов на основной договор по реквизитам
+
     **Performance:** Streams file to disk in 64KB chunks instead of loading entirely into memory.
 
-    **Returns:** Contract ID and status
+    **Returns:** Contract ID, статус, привязки и (опционально) parent_candidates.
     """
-    VALID_DOCUMENT_TYPES = {"contract", "disagreement", "tracked_changes"}
+    VALID_DOCUMENT_TYPES = {"contract", "derivative", "disagreement", "tracked_changes"}
     if document_type not in VALID_DOCUMENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid document_type. Allowed: {', '.join(sorted(VALID_DOCUMENT_TYPES))}"
         )
 
-    tmp_path = None
+    # Проверки до сохранения файла: связи и реквизиты
+    if parent_contract_id and not relation_type:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="При указании parent_contract_id требуется relation_type",
+        )
+    if relation_type and relation_type not in RELATION_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Недопустимый relation_type. Разрешены: {', '.join(RELATION_TYPES)}",
+        )
+    if relation_type == "custom" and not (
+        (custom_label and custom_label.strip())
+        or (custom_prompt and custom_prompt.strip())
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Для custom-связи укажите custom_label и/или custom_prompt",
+        )
+
+    tmp_path: Optional[str] = None
+    final_path: Optional[str] = None
+    upload_committed = False
     try:
         # Reset daily LLM/legacy counters if needed. Free contract uploads are limited monthly.
         current_user.reset_daily_limits()
@@ -74,6 +110,57 @@ async def upload_contract(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=contract_limit_message(contract_quota["limit"], contract_quota["period"])
             )
+
+        # Validate optional DB links before writing the final file or creating a contract.
+        # This prevents orphaned files/contracts when a selected counterparty or parent
+        # contract is invalid or belongs to another organization.
+        selected_counterparty: Optional[Counterparty] = None
+        if counterparty_id:
+            selected_counterparty = (
+                db.query(Counterparty).filter(Counterparty.id == counterparty_id).first()
+            )
+            if not selected_counterparty:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Контрагент {counterparty_id} не найден",
+                )
+            if (
+                ctx
+                and selected_counterparty.organization_id
+                and selected_counterparty.organization_id != ctx.org.id
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Контрагент принадлежит другой организации",
+                )
+
+        selected_parent: Optional[Contract] = None
+        if parent_contract_id:
+            selected_parent = (
+                db.query(Contract).filter(Contract.id == parent_contract_id).first()
+            )
+            if not selected_parent:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Основной договор {parent_contract_id} не найден",
+                )
+            if (
+                selected_parent.assigned_to != current_user.id
+                and current_user.role != "admin"
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Нет доступа к основному договору",
+                )
+            if (
+                ctx
+                and selected_parent.organization_id
+                and selected_parent.organization_id != ctx.org.id
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Основной договор принадлежит другой организации",
+                )
 
         # Validate filename and extension before streaming
         try:
@@ -151,13 +238,49 @@ async def upload_contract(
             meta_info={}
         )
         db.add(contract)
-        db.commit()
-        db.refresh(contract)
+        db.flush()
+
+        logger.info(f"Contract uploaded: {contract.id} by user {current_user.id} ({file_size} bytes, streamed)")
+
+        # ── Привязка контрагента (если задан) ────────────────────────────────
+        counterparty_party_id: Optional[str] = None
+        if selected_counterparty:
+            party = ContractParty(
+                contract_id=contract.id,
+                counterparty_id=selected_counterparty.id,
+                role="counterparty",
+            )
+            db.add(party)
+            db.flush()
+            counterparty_party_id = party.id
+            contract.parties_summary = [
+                {
+                    "counterparty_id": selected_counterparty.id,
+                    "name": selected_counterparty.name,
+                    "inn": selected_counterparty.inn,
+                    "role": "counterparty",
+                }
+            ]
+
+        # ── Привязка к основному договору (если задан явно) ──────────────────
+        parent_relation_id: Optional[str] = None
+        if selected_parent:
+            relation = ContractRelation(
+                parent_contract_id=selected_parent.id,
+                child_contract_id=contract.id,
+                relation_type=relation_type,
+                custom_label=custom_label,
+                custom_prompt=custom_prompt,
+                created_by=current_user.id,
+            )
+            db.add(relation)
+            db.flush()
+            parent_relation_id = relation.id
+            contract.document_type = "derivative"
+            contract.primary_relation_type = relation_type
 
         if contract_quota["period"] == "day":
             # Atomic increment with limit re-check (prevents race condition).
-            # max_contracts_per_day is a @property (not a DB column), so we pass the
-            # resolved Python value as a literal into the WHERE clause.
             limit_value = contract_quota["limit"]
             result = db.execute(
                 sql_update(User)
@@ -166,9 +289,7 @@ async def upload_contract(
                 .values(contracts_today=User.contracts_today + 1)
             )
             if result.rowcount == 0:
-                db.delete(contract)
-            db.commit()
-            if result.rowcount == 0:
+                db.rollback()
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail=contract_limit_message(limit_value, "day")
@@ -179,21 +300,80 @@ async def upload_contract(
                 .where(User.id == current_user.id)
                 .values(contracts_today=User.contracts_today + 1)
             )
-            db.commit()
 
-        logger.info(f"Contract uploaded: {contract.id} by user {current_user.id} ({file_size} bytes, streamed)")
+        db.commit()
+        upload_committed = True
+        db.refresh(contract)
+
+        # ── Opportunistic parse + auto-find родителя ─────────────────────────
+        parent_candidates: list = []
+        if document_type == "derivative" and parent_contract_id is None and auto_find_parent:
+            try:
+                parsed_text = _opportunistic_parse(final_path)
+                if parsed_text:
+                    contract.parsed_text = parsed_text
+                    db.commit()
+                    from src.services.main_contract_finder import (
+                        MainContractFinderService,
+                    )
+
+                    finder = MainContractFinderService()
+                    candidates = finder.find_candidates(
+                        db=db,
+                        text=parsed_text,
+                        current_user=current_user,
+                        organization_id=ctx.org.id if ctx else None,
+                        exclude_contract_id=contract.id,
+                        limit=5,
+                    )
+                    parent_candidates = [
+                        {
+                            "contract_id": c.contract_id,
+                            "file_name": c.file_name,
+                            "contract_number": c.contract_number,
+                            "contract_date": c.contract_date,
+                            "counterparties": c.counterparties,
+                            "confidence": c.confidence,
+                            "matched_fields": c.matched_fields,
+                        }
+                        for c in candidates
+                    ]
+            except Exception as parse_err:  # noqa: BLE001
+                # Auto-find — best effort. Парсинг файла не должен ломать загрузку.
+                logger.warning(
+                    f"auto_find_parent: parse/find failed for {contract.id}: {parse_err}"
+                )
 
         return ContractUploadResponse(
             contract_id=contract.id,
             file_name=safe_filename,
             file_size=file_size,
             status='uploaded',
-            message='Contract uploaded successfully'
+            message='Contract uploaded successfully',
+            document_type=contract.document_type,
+            primary_relation_type=contract.primary_relation_type,
+            parent_relation_id=parent_relation_id,
+            counterparty_party_id=counterparty_party_id,
+            parent_candidates=parent_candidates,
         )
 
-    except (HTTPException, FileValidationError):
+    except HTTPException:
+        db.rollback()
+        if final_path and not upload_committed and os.path.exists(final_path):
+            os.unlink(final_path)
         raise
+    except FileValidationError as e:
+        db.rollback()
+        if final_path and not upload_committed and os.path.exists(final_path):
+            os.unlink(final_path)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File validation failed: {e}",
+        )
     except Exception as e:
+        db.rollback()
+        if final_path and not upload_committed and os.path.exists(final_path):
+            os.unlink(final_path)
         logger.error(f"Error uploading contract: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -206,3 +386,23 @@ async def upload_contract(
                 os.unlink(tmp_path)
             except OSError:
                 pass
+
+
+def _opportunistic_parse(file_path: str) -> Optional[str]:
+    """Best-effort извлечение текста из файла при загрузке.
+
+    Используется только для auto_find_parent. Если что-то идёт не так —
+    возвращает None и не ломает загрузку.
+    """
+    try:
+        from src.services.document_parser import DocumentParser
+
+        parser = DocumentParser()
+        text = parser.parse(file_path)
+        if not text:
+            return None
+        # Усечём для autofind: достаточно preamble + первой страницы
+        return text[:10_000]
+    except Exception as exc:  # noqa: BLE001
+        logger.debug(f"_opportunistic_parse failed: {exc}")
+        return None

@@ -275,6 +275,79 @@ class CounterpartyService:
             'documentation': 'https://focus.kontur.ru/api/docs'
         }
 
+    def get_or_create_by_inn(
+        self,
+        db,
+        inn: str,
+        organization_id: Optional[str],
+        created_by: Optional[str],
+        fns_check_result: Optional[Dict[str, Any]] = None,
+    ):
+        """
+        Найти контрагента по (organization_id, inn) или создать с обогащением через ФНС.
+
+        Args:
+            db: SQLAlchemy session
+            inn: ИНН контрагента
+            organization_id: ID организации-тенанта (None для legacy)
+            created_by: ID пользователя-создателя
+            fns_check_result: Готовый результат self.check_counterparty(inn) — чтобы
+                              не дёргать API повторно. Если None — будет вызов.
+
+        Returns:
+            Counterparty | None — None если ФНС не нашла компанию.
+        """
+        from src.models.counterparty_models import Counterparty
+
+        existing = (
+            db.query(Counterparty)
+            .filter(
+                Counterparty.organization_id == organization_id,
+                Counterparty.inn == inn,
+            )
+            .first()
+        )
+
+        check = fns_check_result if fns_check_result is not None else self.check_counterparty(inn)
+        fns = check.get("fns_data", {}) or {}
+        bankruptcy = check.get("bankruptcy_data", {}) or {}
+        now = datetime.now(timezone.utc)
+
+        if existing:
+            existing.fns_data = fns
+            existing.fns_checked_at = now
+            if bankruptcy:
+                existing.bankruptcy_data = bankruptcy
+                existing.bankruptcy_checked_at = now
+            db.commit()
+            db.refresh(existing)
+            return existing
+
+        if not fns.get("found"):
+            return None
+
+        cp = Counterparty(
+            organization_id=organization_id,
+            created_by=created_by,
+            type="legal",
+            status="active",
+            name=fns.get("name") or f"Компания {inn}",
+            short_name=fns.get("short_name"),
+            inn=inn,
+            kpp=fns.get("kpp"),
+            ogrn=fns.get("ogrn"),
+            legal_address=fns.get("legal_address"),
+            fns_data=fns,
+            fns_checked_at=now,
+            bankruptcy_data=bankruptcy or None,
+            bankruptcy_checked_at=now if bankruptcy else None,
+        )
+        db.add(cp)
+        db.commit()
+        db.refresh(cp)
+        logger.info(f"Counterparty created via lookup: id={cp.id} inn={inn}")
+        return cp
+
     def check_multiple(self, inn_list: list) -> Dict[str, Dict[str, Any]]:
         """
         Check multiple counterparties
