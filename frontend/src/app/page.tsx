@@ -9,6 +9,12 @@ import toast from 'react-hot-toast'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 
+const freeLimits = [
+  { value: '0 ₽', label: 'стоимость демо-доступа' },
+  { value: '3', label: 'договора бесплатно в месяц' },
+  { value: '5 МБ', label: 'размер одного файла' },
+]
+
 export default function Home() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
@@ -94,7 +100,7 @@ export default function Home() {
     {
       icon: <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
       title: 'Кратно дешевле аналогов',
-      description: 'От 20 ₽ за договор вместо 5 000–30 000 ₽ за ручной анализ.',
+      description: 'Бесплатный вход — 3 договора в месяц, дальше пилот и рабочий контур под задачу.',
       gradient: 'from-emerald-500 to-teal-600',
     },
     {
@@ -142,8 +148,8 @@ export default function Home() {
   ]
 
   const stats = [
-    { value: '10,000+', label: 'Проанализированных договоров' },
-    { value: '99.8%', label: 'Точность анализа' },
+    { value: '3/мес', label: 'Договора бесплатно' },
+    { value: '0 ₽', label: 'Стоимость первого шага' },
     { value: '1-3 мин', label: 'Среднее время обработки' },
     { value: '24/7', label: 'Доступность системы' }
   ]
@@ -202,14 +208,14 @@ export default function Home() {
               </h1>
               <p className="text-lg md:text-xl text-stone-300 mb-8 leading-relaxed">
                 AI-система для анализа, генерации и управления юридическими договорами.
-                Экономьте время и снижайте риски с помощью искусственного интеллекта.
+                Начните с 3 бесплатных договоров в месяц, чтобы проверить сценарий на практике.
               </p>
 
               {/* Мини-статистика */}
               <div className="grid grid-cols-2 gap-4">
                 {[
                   { value: '10–30 сек', label: 'анализ договора' },
-                  { value: 'от 20 ₽', label: 'за документ' },
+                  { value: '3/мес', label: 'бесплатно' },
                   { value: '99.8%', label: 'точность' },
                   { value: 'On-premise', label: 'для Enterprise' },
                 ].map((s, i) => (
@@ -315,6 +321,36 @@ export default function Home() {
               </div>
             </motion.div>
           </div>
+        </div>
+      </section>
+
+      <section className="py-8 px-4">
+        <div className="max-w-7xl mx-auto">
+          <Card className="bg-slate-600/40 border-2 border-primary-500/30">
+            <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-8 items-center">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wide text-primary-300 mb-3">
+                  Бесплатный вход
+                </p>
+                <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+                  3 договора бесплатно каждый месяц
+                </h2>
+                <p className="text-lg text-stone-300">
+                  Бесплатный режим нужен для спокойной проверки сценария: загрузить документ,
+                  посмотреть структуру отчета и понять, подходит ли система под ваш процесс.
+                  Оплата появляется только на следующем этапе — пилоте или рабочем контуре.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-4">
+                {freeLimits.map((limit) => (
+                  <div key={limit.label} className="rounded-2xl border border-primary-500/20 bg-slate-800/70 p-5">
+                    <div className="text-3xl font-bold text-white">{limit.value}</div>
+                    <div className="text-sm text-primary-300 mt-1">{limit.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
         </div>
       </section>
 
@@ -471,32 +507,32 @@ export default function Home() {
             viewport={{ once: true }}
           >
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-              Прозрачные цены
+              Бесплатный старт и пилот
             </h2>
             <p className="text-xl text-stone-300 mb-8 max-w-2xl mx-auto">
-              Подписка от 1 990 ₽/мес или пакеты от 20 ₽ за договор
+              3 договора бесплатно в месяц. После проверки сценария обсуждаем пилот и рабочий контур.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
               <Card hover className="text-center bg-slate-600/40 border-primary-500/20">
-                <div className="text-sm text-primary-300 mb-1">Персональный</div>
-                <div className="text-3xl font-bold text-stone-200">1 990 ₽</div>
-                <div className="text-sm text-stone-300">в месяц</div>
+                <div className="text-sm text-primary-300 mb-1">Демо-доступ</div>
+                <div className="text-3xl font-bold text-stone-200">0 ₽</div>
+                <div className="text-sm text-stone-300">первый шаг</div>
               </Card>
               <Card hover className="text-center border-2 border-primary-500 bg-slate-600/50">
-                <div className="text-sm text-stone-200 font-semibold mb-1">Команда</div>
-                <div className="text-3xl font-bold text-white">4 990 ₽</div>
-                <div className="text-sm text-stone-300">в месяц</div>
+                <div className="text-sm text-stone-200 font-semibold mb-1">Бесплатный лимит</div>
+                <div className="text-3xl font-bold text-white">3</div>
+                <div className="text-sm text-stone-300">договора в месяц</div>
               </Card>
               <Card hover className="text-center bg-slate-600/40 border-primary-500/20">
-                <div className="text-sm text-primary-300 mb-1">Бизнес</div>
-                <div className="text-3xl font-bold text-stone-200">19 990 ₽</div>
-                <div className="text-sm text-stone-300">в месяц</div>
+                <div className="text-sm text-primary-300 mb-1">Следующий этап</div>
+                <div className="text-3xl font-bold text-stone-200">Пилот</div>
+                <div className="text-sm text-stone-300">после проверки</div>
               </Card>
             </div>
 
             <Button variant="primary" size="lg" onClick={() => router.push('/pricing')}>
-              Все тарифы и сравнение с конкурентами
+              Форматы и условия запуска
             </Button>
           </motion.div>
         </div>
@@ -516,7 +552,7 @@ export default function Home() {
                   Готовы попробовать?
                 </h2>
                 <p className="text-xl text-stone-300 mb-8 max-w-2xl mx-auto">
-                  5 бесплатных анализов. Без кредитной карты. Результат за 30 секунд.
+                  3 договора бесплатно в месяц. Без кредитной карты. Результат за 30 секунд.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
                   <Button variant="primary" size="lg" href="/register">
@@ -571,8 +607,8 @@ export default function Home() {
             <div>
               <h4 className="font-bold text-white mb-4">Правовая информация</h4>
               <ul className="space-y-2 text-sm text-stone-300">
-                <li><span>Политика конфиденциальности</span></li>
-                <li><span>Условия использования</span></li>
+                <li><a href="/privacy" className="hover:text-white transition">Политика конфиденциальности</a></li>
+                <li><a href="/terms" className="hover:text-white transition">Условия использования</a></li>
               </ul>
             </div>
           </div>
