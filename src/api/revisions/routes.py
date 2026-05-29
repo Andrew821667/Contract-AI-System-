@@ -30,6 +30,7 @@ from typing import Any, Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from loguru import logger
+from lxml import etree
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -45,15 +46,18 @@ from src.services.revision_comparator import (
 )
 from src.services.revision_pdf_exporter import export_report as pdf_export_report
 from src.services.revision_xlsx_exporter import export_report as xlsx_export_report
+from src.utils.xml_security import XMLSecurityError, parse_xml_safely
 
 
 class _ParserAdapter:
     """Adapt DocumentParser to the interface RevisionComparator expects.
 
-    Comparator wants `extract_clauses(content) -> list[{number, title, text}]`,
-    while DocumentParser exposes `_extract_sections_from_text` returning
-    `[{title, type, paragraphs}]`. We pull the leading "1.2.3" out of the
-    title to fill `number`, and flatten paragraphs into a single text.
+    Comparator wants `extract_clauses(content) -> list[{number, title, text}]`.
+    DocumentParser.parse() always returns an XML envelope
+    (`<contract><clauses><clause><title/><content><paragraph/>...`), so we
+    descend into that envelope and emit one entry per `<clause>`. For inputs
+    that aren't the envelope (raw text passed in by tests, malformed XML),
+    we fall back to `_extract_sections_from_text`.
     """
 
     _NUMBER_RE = re.compile(r"^(\d+(?:\.\d+)*)")
@@ -65,7 +69,10 @@ class _ParserAdapter:
         return self._inner.parse(path)
 
     def extract_clauses(self, content: str) -> list[dict[str, Any]]:
-        sections = self._inner._extract_sections_from_text(content)
+        sections = self._sections_from_envelope(content)
+        if sections is None:
+            sections = self._inner._extract_sections_from_text(content)
+
         out: list[dict[str, Any]] = []
         for s in sections:
             title = (s.get("title") or "").strip()
@@ -76,6 +83,28 @@ class _ParserAdapter:
                 continue
             out.append({"number": number, "title": title, "text": text})
         return out
+
+    def _sections_from_envelope(self, content: str) -> Optional[list[dict[str, Any]]]:
+        stripped = (content or "").lstrip()
+        if not (stripped.startswith("<?xml") or stripped.startswith("<contract")):
+            return None
+        try:
+            root = parse_xml_safely(content)
+        except (etree.XMLSyntaxError, XMLSecurityError) as exc:
+            logger.warning("revision compare: failed to parse parser XML envelope, falling back: %s", exc)
+            return None
+
+        sections: list[dict[str, Any]] = []
+        for clause in root.iterfind(".//clause"):
+            title_el = clause.find("title")
+            title = (title_el.text or "").strip() if title_el is not None else ""
+            paragraphs = [
+                (p.text or "").strip()
+                for p in clause.iterfind(".//paragraph")
+                if (p.text or "").strip()
+            ]
+            sections.append({"title": title, "paragraphs": paragraphs})
+        return sections
 
 
 router = APIRouter()
