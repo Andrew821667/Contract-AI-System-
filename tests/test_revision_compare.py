@@ -188,3 +188,105 @@ def test_pdf_exporter_produces_nonempty_file(
     assert out.stat().st_size > 2 * 1024
     # PDF magic bytes — smoke check.
     assert out.read_bytes()[:5] == b"%PDF-"
+
+
+# --- _ParserAdapter on the .txt → XML envelope flow -----------------------
+# Regression: when DocumentParser.parse() was given a .txt revision it
+# returned an XML envelope, and the adapter then ran the text-mode section
+# splitter over that envelope — collapsing every clause into one giant
+# "Преамбула" row. Reproduced live on prod with two synthetic .txt
+# revisions (May 29 2026). The fix descends into <clause> elements.
+
+def test_parser_adapter_unwraps_xml_envelope() -> None:
+    from src.api.revisions.routes import _ParserAdapter
+    from src.services.document_parser import DocumentParser
+
+    envelope = """<?xml version="1.0" encoding="UTF-8"?>
+<contract>
+  <metadata><file_name>old.txt</file_name></metadata>
+  <clauses>
+    <clause id="1" type="subject">
+      <title>1.1 Предмет договора</title>
+      <content>
+        <paragraph>Поставщик передаёт Покупателю товар.</paragraph>
+      </content>
+    </clause>
+    <clause id="2" type="financial">
+      <title>2.1 Цена и порядок расчётов</title>
+      <content>
+        <paragraph>Стоимость составляет 100 000 рублей.</paragraph>
+      </content>
+    </clause>
+  </clauses>
+</contract>"""
+
+    adapter = _ParserAdapter(DocumentParser())
+    clauses = adapter.extract_clauses(envelope)
+
+    assert len(clauses) >= 2
+    numbers = [c["number"] for c in clauses]
+    assert "1.1" in numbers
+    assert "2.1" in numbers
+    # Each clause must carry only its own paragraph, not the entire envelope.
+    for c in clauses:
+        assert "<paragraph>" not in (c["text"] or "")
+        assert "<?xml" not in (c["text"] or "")
+
+
+def test_comparator_on_txt_revisions_emits_multiple_rows(tmp_path: Path) -> None:
+    from src.api.revisions.routes import _ParserAdapter
+    from src.services.document_parser import DocumentParser
+
+    old_txt = tmp_path / "old.txt"
+    new_txt = tmp_path / "new.txt"
+    # Top-level numbered headings (1./2.) make DocumentParser split into two
+    # sections; sub-clause numbering (1.1/2.1) ends up inside the section
+    # body — exactly the shape of the reproducing input from prod.
+    old_txt.write_text(
+        "1. Предмет договора\n"
+        "1.1 Поставщик передаёт Покупателю партию зерна согласно спецификации.\n"
+        "\n"
+        "2. Цена и порядок расчётов\n"
+        "2.1 Стоимость партии составляет 100 000 рублей с учётом НДС.\n",
+        encoding="utf-8",
+    )
+    new_txt.write_text(
+        "1. Предмет договора\n"
+        "1.1 Поставщик передаёт Покупателю партию зерна и масличных культур.\n"
+        "\n"
+        "2. Цена и порядок расчётов\n"
+        "2.1 Стоимость партии составляет 120 000 рублей с учётом НДС.\n",
+        encoding="utf-8",
+    )
+
+    parser = _ParserAdapter(DocumentParser())
+    old_content = parser.parse(str(old_txt))
+    new_content = parser.parse(str(new_txt))
+
+    # Sanity: parse_txt wraps content in an XML envelope — this is the
+    # exact condition that used to trip up extract_clauses.
+    assert old_content.lstrip().startswith("<?xml")
+    assert new_content.lstrip().startswith("<?xml")
+
+    comparator = RevisionComparator(
+        parser=parser,
+        old_revision_label="Редакция №1",
+        new_revision_label="Редакция №2",
+    )
+    report = comparator.compare(
+        old_content, new_content,
+        perspective=Perspective.NEUTRAL,
+        title="TXT revision compare",
+        old_file_name="old.txt", new_file_name="new.txt",
+    )
+
+    assert len(report.rows) >= 2, (
+        f"expected ≥2 rows (one per clause), got {len(report.rows)} — "
+        f"likely the adapter is treating the XML envelope as one big section"
+    )
+    # And no row should be the "everything-in-one" XML-blob row.
+    for row in report.rows:
+        assert row.clause_pair_label != "—"
+        for text in (row.old_text or "", row.new_text or ""):
+            assert "<?xml" not in text
+            assert "<clauses>" not in text
