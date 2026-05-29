@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
@@ -1610,6 +1611,22 @@ function VersionComparisonSection({ contractId }: { contractId: string }) {
               >
                 Сравнить
               </Button>
+              {/* Юридический отчёт — открывает /revisions/compare с пред-выбранным
+                  договором (и, если уже выбраны версии, с ними). Не блокируется,
+                  даже если не выбраны версии — на самой странице можно
+                  доуточнить выбор. */}
+              <Link
+                href={(() => {
+                  const params = new URLSearchParams({ contractId })
+                  if (fromVersionId !== null) params.set('old', String(fromVersionId))
+                  if (toVersionId !== null) params.set('new', String(toVersionId))
+                  return `/revisions/compare?${params.toString()}`
+                })()}
+                className="inline-flex items-center px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:border-primary-300 hover:text-primary-700"
+                title="Открыть юридический отчёт по сравнению редакций с perspective, оценкой и xlsx/PDF"
+              >
+                📋 Юр. отчёт
+              </Link>
             </div>
           </div>
         )}
