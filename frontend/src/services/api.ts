@@ -46,6 +46,7 @@ import type {
   GraphIngestRequest, GraphIngestResponse, GraphDocumentSummary, GraphDocumentTree,
   GraphNodeDetail, GraphStats, GraphEntitySummary, GraphCandidateEdge,
   ProposeEdgeRequest,
+  CompareRevisionsRequest, RevisionCompareReport, RevisionListItem,
 } from './api.types';
 
 
@@ -1630,6 +1631,40 @@ class APIClient {
 
   async deleteRagDocument(docId: string, collection: string): Promise<{ ok: boolean; deleted_chunks: number }> {
     const response = await this.client.delete(`/api/v1/rag/documents/${docId}`, { params: { collection } });
+    return response.data;
+  }
+
+  // --- Revisions: side-by-side comparison (lawyer-style report) ---
+  // These hit /api/v1/revisions/* — a parallel surface that *complements*
+  // the existing /api/v1/contracts/{id}/compare and /api/v2/versions/compare;
+  // it produces the 12-column lawyer table + xlsx/PDF (perspective-aware,
+  // complex_impact, byte-equivalent to the template).
+
+  async listRevisions(contractId: string): Promise<RevisionListItem[]> {
+    const response = await this.client.get<RevisionListItem[]>(
+      `/api/v1/revisions/${contractId}`
+    );
+    return response.data;
+  }
+
+  async compareRevisions(req: CompareRevisionsRequest): Promise<RevisionCompareReport> {
+    const response = await this.client.post<RevisionCompareReport>(
+      '/api/v1/revisions/compare',
+      req,
+      { params: { format: 'json' } }
+    );
+    return response.data;
+  }
+
+  async downloadRevisionsCompare(
+    req: CompareRevisionsRequest,
+    format: 'xlsx' | 'pdf'
+  ): Promise<Blob> {
+    const response = await this.client.post(
+      '/api/v1/revisions/compare',
+      req,
+      { params: { format }, responseType: 'blob' }
+    );
     return response.data;
   }
 }
