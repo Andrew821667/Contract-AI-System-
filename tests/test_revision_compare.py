@@ -120,6 +120,35 @@ def test_comparator_rows_have_all_fields(heuristic_report: RevisionDiffReport) -
         assert row.source
 
 
+# --- _ParserAdapter (routes.py) -------------------------------------------
+
+def test_parser_adapter_handles_xml_envelope_from_parse_txt(tmp_path: Path) -> None:
+    """Regression: comparator must extract clauses even when DocumentParser
+    wraps the source text in its <contract>...<clauses><clause> XML
+    envelope (which happens for .txt and .pdf input). Before the fix the
+    adapter ran the regex on raw XML and produced one giant blob."""
+    from src.api.revisions.routes import _ParserAdapter
+    from src.services.document_parser import DocumentParser
+
+    src = tmp_path / "old.txt"
+    src.write_text(
+        "1.1 Предмет договора\nПоставка зерна урожая 2025 года.\n"
+        "2.1 Базис поставки\nПоставка в адрес Покупателя или Грузополучателя.\n"
+        "2.3 Условия оплаты\nПокупатель оплачивает в течение 30 банковских дней.\n",
+        encoding="utf-8",
+    )
+    adapter = _ParserAdapter(DocumentParser())
+    xml_content = adapter.parse(str(src))
+
+    clauses = adapter.extract_clauses(xml_content)
+    numbers = [c.get("number") for c in clauses if c.get("number")]
+    # At least three numbered clauses must come out (1.1, 2.1, 2.3) — not
+    # a single XML-blob row.
+    assert len(numbers) >= 3, f"expected ≥3 numbered clauses, got: {clauses}"
+    assert "1.1" in numbers
+    assert "2.1" in numbers
+
+
 # --- xlsx exporter --------------------------------------------------------
 
 def test_xlsx_exporter_layout(tmp_path: Path, heuristic_report: RevisionDiffReport) -> None:

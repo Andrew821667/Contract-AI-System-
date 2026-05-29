@@ -50,10 +50,16 @@ from src.services.revision_xlsx_exporter import export_report as xlsx_export_rep
 class _ParserAdapter:
     """Adapt DocumentParser to the interface RevisionComparator expects.
 
-    Comparator wants `extract_clauses(content) -> list[{number, title, text}]`,
-    while DocumentParser exposes `_extract_sections_from_text` returning
-    `[{title, type, paragraphs}]`. We pull the leading "1.2.3" out of the
-    title to fill `number`, and flatten paragraphs into a single text.
+    Comparator wants `extract_clauses(content) -> list[{number, title, text}]`.
+
+    DocumentParser.parse() returns XML (it wraps every supported format —
+    txt, pdf, docx — in a `<contract>...<clauses><clause>...` envelope),
+    so we parse that XML and pull clause titles + paragraphs directly.
+    A leading "1.2.3" in the title becomes `number`.
+
+    If the content is *not* XML (defensive fallback — e.g. some caller
+    passes raw text in the future), we fall back to
+    `_extract_sections_from_text` which scans for numbered headings.
     """
 
     _NUMBER_RE = re.compile(r"^(\d+(?:\.\d+)*)")
@@ -64,8 +70,27 @@ class _ParserAdapter:
     def parse(self, path: str) -> str:
         return self._inner.parse(path)
 
+    # Wider heading regex than DocumentParser._is_section_heading_text:
+    # matches both "1. Предмет договора" and "1.1 Предмет договора" /
+    # "2.3 Оплата" (multi-level numbering common in contracts).
+    _HEADING_RE = re.compile(r"^(\d+(?:\.\d+)*)\.?\s+(.+)$")
+
     def extract_clauses(self, content: str) -> list[dict[str, Any]]:
-        sections = self._inner._extract_sections_from_text(content)
+        sections = self._sections_from_xml(content)
+        if sections is None:
+            sections = self._inner._extract_sections_from_text(content)
+
+        # If the parser produced a single "Преамбула" blob (its heading
+        # regex doesn't catch multi-level numbering like "1.1", "2.3"),
+        # rescan the flattened paragraphs ourselves with a wider regex.
+        if len(sections) <= 1:
+            flat: list[str] = []
+            for s in sections:
+                flat.extend(s.get("paragraphs", []) or [])
+            rescanned = self._sections_from_lines(flat)
+            if len(rescanned) > len(sections):
+                sections = rescanned
+
         out: list[dict[str, Any]] = []
         for s in sections:
             title = (s.get("title") or "").strip()
@@ -76,6 +101,66 @@ class _ParserAdapter:
                 continue
             out.append({"number": number, "title": title, "text": text})
         return out
+
+    @classmethod
+    def _sections_from_lines(cls, lines: list[str]) -> list[dict[str, Any]]:
+        """Walk a flat list of lines and start a new section whenever a
+        line matches the wider numbered-heading regex."""
+        sections: list[dict[str, Any]] = []
+        current: dict[str, Any] | None = None
+        for raw in lines:
+            line = (raw or "").strip()
+            if not line:
+                continue
+            m = cls._HEADING_RE.match(line)
+            if m:
+                if current is not None:
+                    sections.append(current)
+                current = {"title": line, "type": "general", "paragraphs": []}
+            else:
+                if current is None:
+                    current = {"title": "Преамбула", "type": "preamble", "paragraphs": []}
+                current["paragraphs"].append(line)
+        if current is not None:
+            sections.append(current)
+        return sections
+
+    @staticmethod
+    def _sections_from_xml(content: str) -> list[dict[str, Any]] | None:
+        """Return clause sections parsed from the parser's XML envelope.
+
+        Returns None if `content` doesn't look like the parser's XML output.
+        """
+        head = content.lstrip()[:200]
+        if not head.startswith("<?xml") and "<contract" not in head:
+            return None
+
+        # Local import — lxml is already a project dep via DocumentParser.
+        try:
+            from lxml import etree
+        except ImportError:
+            return None
+
+        try:
+            root = etree.fromstring(content.encode("utf-8"))
+        except (etree.XMLSyntaxError, ValueError):
+            return None
+
+        sections: list[dict[str, Any]] = []
+        for clause in root.iterfind(".//clauses/clause"):
+            title_el = clause.find("title")
+            title = (title_el.text or "").strip() if title_el is not None else ""
+            paragraphs = [
+                (p.text or "").strip()
+                for p in clause.iterfind(".//paragraph")
+                if (p.text or "").strip()
+            ]
+            sections.append({
+                "title": title,
+                "type": clause.get("type", "general"),
+                "paragraphs": paragraphs,
+            })
+        return sections
 
 
 router = APIRouter()
