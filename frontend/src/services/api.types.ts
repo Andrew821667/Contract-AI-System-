@@ -1351,3 +1351,60 @@ export interface ProposeEdgeRequest {
   evidence?: string;
   confidence?: number;
 }
+
+// --- Revisions: side-by-side comparison (lawyer-style report) ---
+// Mirrors apps/revisions/* on the backend. The same shape is rendered
+// in the UI table and is the exact source for the xlsx / PDF exports.
+
+export type RevisionPerspective = 'supplier' | 'buyer' | 'neutral';
+export type RevisionAssessment = 'plus' | 'minus' | 'neutral' | 'mixed';
+export type RevisionRiskLevel = 'low' | 'medium' | 'high';
+
+export interface RevisionListItem {
+  id: number;
+  version_number: number;
+  source: string;
+  description: string | null;
+  is_current: boolean;
+  file_name: string;
+  uploaded_at: string | null;
+}
+
+export interface CompareRevisionsRequest {
+  old_revision_id: number;
+  new_revision_id: number;
+  perspective: RevisionPerspective;
+  title?: string;
+}
+
+export interface RevisionDiffRow {
+  number: number;
+  clause_pair_label: string;
+  block: string;
+  condition: string;
+  old_text: string;
+  new_text: string;
+  change_summary: string;
+  assessment: RevisionAssessment;
+  risk_level: RevisionRiskLevel;
+  complex_impact: string;
+  recommendation: string;
+  source: string;
+}
+
+export interface RevisionDiffSummary {
+  title: string;
+  prepared_at: string;
+  documents_compared: string;
+  overall_verdict: string;
+  key_pros: string[];
+  key_risks: string[];
+  pre_signature_edits: string[];
+  source_files: Record<string, string>;
+}
+
+export interface RevisionCompareReport {
+  perspective: RevisionPerspective;
+  rows: RevisionDiffRow[];
+  summary: RevisionDiffSummary;
+}

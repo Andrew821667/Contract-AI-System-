@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
@@ -412,7 +413,19 @@ function ContractCard({
         <span>
           {c.created_at ? new Date(c.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
         </span>
-        <span className="text-primary-600 font-semibold">Открыть →</span>
+        <div className="flex items-center gap-3">
+          <Link
+            href={`/revisions/compare?contractId=${c.id}`}
+            // The card itself has onClick → /contracts/{id}; stopPropagation so
+            // clicking this link doesn't *also* fire the card navigation.
+            onClick={(e) => e.stopPropagation()}
+            className="text-gray-600 font-medium hover:text-primary-600"
+            title="Открыть юридическое сравнение редакций этого договора"
+          >
+            Сравнить редакции
+          </Link>
+          <span className="text-primary-600 font-semibold">Открыть →</span>
+        </div>
       </div>
     </Card>
   )

@@ -62,6 +62,7 @@ from src.api.analytics.routes import router as analytics_router
 from src.api.ml import router as ml_router
 from src.api.bridge import router as bridge_router
 from src.api.rag_admin import router as rag_admin_router
+from src.api.revisions import router as revisions_router
 
 
 @asynccontextmanager
@@ -305,6 +306,7 @@ app.include_router(rag_admin_router, prefix="/api/v1/rag", tags=["RAG Admin"])
 app.include_router(analytics_router, prefix="/api/v1/analytics", tags=["Analytics"])
 app.include_router(ml_router, prefix="/api/v1/ml", tags=["ML & AI"])
 app.include_router(bridge_router, prefix="/api/v1/bridge", tags=["Bridge Integration"])
+app.include_router(revisions_router, prefix="/api/v1/revisions", tags=["Revisions"])
 
 # API v2 — AI-collaborative OS
 from src.api.v2.router import v2_router
