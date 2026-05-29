@@ -49,6 +49,11 @@ export default function RevisionsComparePage() {
 function RevisionsComparePageInner() {
   const searchParams = useSearchParams()
   const initialContractId = searchParams?.get('contractId') ?? ''
+  // ?old= and ?new= let callers (e.g. /contracts/[id] inline button)
+  // pre-select specific revisions, skipping the auto-pick of the two
+  // most-recent below.
+  const initialOldId = searchParams?.get('old') ?? ''
+  const initialNewId = searchParams?.get('new') ?? ''
 
   const [contracts, setContracts] = useState<ContractOption[]>([])
   const [contractsLoading, setContractsLoading] = useState(false)
@@ -104,9 +109,13 @@ function RevisionsComparePageInner() {
       .then((data) => {
         if (cancelled) return
         setRevisions(data)
-        // Auto-pick the two most recent so the user can hit «Сравнить» without
-        // extra clicks — this is by far the most common case.
-        if (data.length >= 2) {
+        // Honour explicit ?old= / ?new= from the caller first; otherwise
+        // auto-pick the two most recent so the user can hit «Сравнить»
+        // without extra clicks — this is by far the most common case.
+        const ids = new Set(data.map((r) => String(r.id)))
+        if (initialOldId && ids.has(initialOldId)) setOldRevisionId(initialOldId)
+        if (initialNewId && ids.has(initialNewId)) setNewRevisionId(initialNewId)
+        if (!initialOldId && !initialNewId && data.length >= 2) {
           const sorted = [...data].sort((a, b) => a.version_number - b.version_number)
           setOldRevisionId(String(sorted[sorted.length - 2].id))
           setNewRevisionId(String(sorted[sorted.length - 1].id))
