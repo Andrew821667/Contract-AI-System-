@@ -9,9 +9,32 @@ const inter = Inter({
   preload: false,
 })
 
+const siteUrl = new URL(process.env.NEXT_PUBLIC_CONTRACT_SITE_URL || 'https://contract.ai-verdict.ru')
+
 export const metadata: Metadata = {
-  title: 'Contract AI System',
+  metadataBase: siteUrl,
+  title: {
+    default: 'Contract AI System',
+    template: '%s | Contract AI System',
+  },
   description: 'Интеллектуальная система для автоматизации работы с договорами',
+  applicationName: 'Contract AI System',
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+    },
+  },
+  openGraph: {
+    type: 'website',
+    locale: 'ru_RU',
+    url: '/',
+    siteName: 'Contract AI System',
+    title: 'Contract AI System',
+    description: 'Интеллектуальная система для автоматизации работы с договорами',
+  },
 }
 
 export default function RootLayout({
