@@ -67,10 +67,13 @@ TITLE_TO_NORMCODE = [
     (re.compile(r'административн\w+\s+правонаруш', re.I), 'КоАП РФ'),
 ]
 
-# Markdown inline-ссылка на документ КП: [текст](/document/cons_doc_LAW_<id>/<hash>/)
+# Markdown inline-ссылка на документ КП. Форматы в тексте К+:
+#   [текст](/document/cons_doc_LAW_<id>/<hash>/)
+#   [текст](/document/cons_doc_LAW_<id>/<hash>/#dst100017)   ← с якорем!
+#   [текст](//www.consultant.ru/document/cons_doc_LAW_<id>/) ← без хэша
 _DOC_LINK_RE = re.compile(
     r'\[[^\]]+\]\((?:https?:)?(?://www\.consultant\.ru)?'
-    r'/document/cons_doc_LAW_(\d+)/[a-f0-9]{16,}/?\)'
+    r'/document/cons_doc_LAW_(\d+)(?:/[a-f0-9]{16,})?/?(?:#[^)]*)?\)'
 )
 
 
