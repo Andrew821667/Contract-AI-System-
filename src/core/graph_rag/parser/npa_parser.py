@@ -256,12 +256,24 @@ class NPAGraphParser(BaseDocumentGraphParser):
         in_note = False
 
         for line in lines:
-            # Примечание
+            # Является ли строка структурным заголовком (Раздел/Глава/§/Статья).
+            # Нужно, чтобы примечание (см. ниже) корректно ЗАВЕРШАЛОСЬ при
+            # появлении нового структурного элемента, а не проглатывало весь
+            # остаток документа.
+            is_structural = bool(
+                RE_NPA_TITLE.match(line)
+                or RE_NPA_CHAPTER.match(line)
+                or RE_NPA_PARAGRAPH_SECTION.match(line)
+                or RE_NPA_ARTICLE.match(line)
+            )
+
+            # Примечание: начинается с "Примечание"/"Прим." и тянется до
+            # следующего структурного заголовка. Структурную строку НЕ глотаем —
+            # она пройдёт ниже и сбросит in_note через _flush_note.
             m_note = RE_NPA_NOTE.match(line)
-            if m_note or in_note:
+            if (m_note or in_note) and not is_structural:
                 in_note = True
                 note_lines.append(line)
-                # Примечание заканчивается пустой строкой или новым структурным элементом
                 continue
 
             # Раздел
