@@ -115,12 +115,71 @@ class NPAGraphParser(BaseDocumentGraphParser):
             result = self.parse_text(text, title=file_name)
             result.source_format = 'txt'
             return result
+        elif ext == '.md' or ext == '.markdown':
+            return self._parse_md(file_path)
         elif ext == '.pdf':
             return self._parse_pdf(file_path)
         elif ext == '.docx':
             return self._parse_docx(file_path)
         else:
             raise ValueError(f"Unsupported format for NPA: {ext}")
+
+    def _parse_md(self, file_path: str) -> ParseResult:
+        """Распарсить .md-файл НПА из выгрузки consultant-tools.
+
+        Формат: YAML-frontmatter (--- title/source_url/category/kind/number/
+        date/edition_date ---) + тело markdown. Метаданные frontmatter
+        авторитетнее извлечённых из текста и проставляются в ParseResult.
+        """
+        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+            raw = f.read()
+
+        fm, body = self._split_frontmatter(raw)
+        title = fm.get('title') or Path(file_path).stem
+        # Многострочный title (название НПА переносится) — схлопываем
+        title = ' '.join(title.split())
+
+        result = self.parse_text(body, title=title)
+        result.source_format = 'md'
+
+        # Метаданные из frontmatter — авторитетные
+        if fm.get('document_type') or fm.get('category'):
+            result.document_type = fm.get('document_type') or fm.get('category')
+        if fm.get('date'):
+            result.document_date = fm['date']
+        if fm.get('edition_date'):
+            result.edition_date = fm['edition_date']
+        # Сохраняем КП-метаданные (source_url с cons_doc_LAW_<id>, номер) в metadata
+        for k in ('source_url', 'number', 'kind'):
+            if fm.get(k):
+                result.metadata[k] = fm[k]
+        return result
+
+    @staticmethod
+    def _split_frontmatter(raw: str) -> tuple:
+        """Разделить YAML-frontmatter и тело. Возвращает (dict, body_str).
+
+        Простой парсер key: value (без вложенности) — достаточно для нашего
+        frontmatter. Значение может занимать несколько строк (напр. title
+        с переносом до следующего ключа).
+        """
+        if not raw.startswith('---'):
+            return {}, raw
+        m = re.match(r'^---\n(.*?)\n---\n?(.*)$', raw, re.DOTALL)
+        if not m:
+            return {}, raw
+        fm_block, body = m.group(1), m.group(2)
+        fm: Dict[str, str] = {}
+        cur_key = None
+        for line in fm_block.split('\n'):
+            km = re.match(r'^([a-zA-Z_][\w]*):\s?(.*)$', line)
+            if km:
+                cur_key = km.group(1)
+                fm[cur_key] = km.group(2).strip()
+            elif cur_key is not None and line.strip():
+                # продолжение многострочного значения
+                fm[cur_key] = (fm[cur_key] + ' ' + line.strip()).strip()
+        return fm, body
 
     def parse_text(self, text: str, title: str = "Без названия") -> ParseResult:
         """Распарсить текст НПА в дерево."""
