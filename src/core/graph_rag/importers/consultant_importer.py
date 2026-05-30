@@ -73,6 +73,29 @@ _DOC_LINK_RE = re.compile(
 )
 
 
+def _load_all_models() -> None:
+    """Импортировать ВСЕ модель-модули, чтобы SQLAlchemy-registry был полным.
+
+    При изолированном запуске импортёра (не через src.main) не все модели
+    зарегистрированы, и configure_mappers падает на relationship по имени
+    (напр. Counterparty → 'Organization'). Догружаем все известные модули
+    моделей до первого запроса к БД.
+    """
+    import importlib
+    import pkgutil
+    try:
+        import src.models as _m
+        for _, name, _is_pkg in pkgutil.iter_modules(_m.__path__):
+            importlib.import_module(f"src.models.{name}")
+    except Exception as e:
+        logger.warning(f"_load_all_models: src.models — {e}")
+    for mod in ("src.core.identity_org.models", "src.core.graph_rag.models"):
+        try:
+            importlib.import_module(mod)
+        except Exception as e:
+            logger.warning(f"_load_all_models: {mod} — {e}")
+
+
 def _normcode_from_title(title: str) -> Optional[str]:
     for rx, code in TITLE_TO_NORMCODE:
         if rx.search(title):
@@ -139,6 +162,8 @@ class ConsultantImporter:
     # ── Фаза 1 ─────────────────────────────────────────────────
     def import_all(self, kinds: Optional[List[str]] = None,
                    dry_run: bool = False, limit: Optional[int] = None) -> ImportReport:
+        if not dry_run and self.pipeline is not None:
+            _load_all_models()  # полный SQLAlchemy-registry до первого запроса
         files = self.discover(kinds)
         if limit:
             files = files[:limit]
