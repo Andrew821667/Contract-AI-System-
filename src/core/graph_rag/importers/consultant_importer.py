@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from ..enums import EdgeType, EdgeClass, EdgeStatus, ExtractedBy, LayerType
+from ..models import GraphDocument, GraphEdge
 from ..parser import NPAGraphParser
 from .validator import validate_parse_result, ValidationReport
 
@@ -220,77 +221,107 @@ class ConsultantImporter:
 
     # ── Фаза 2: cross-document рёбра ───────────────────────────
     def resolve_cross_document_edges(self) -> int:
-        """Связать ссылки между разными НПА.
+        """Связать ссылки между разными НПА — по ВСЕЙ БД, не только по тек. запуску.
 
-        (А) norm_ref-entities (ГК РФ ст.330 и т.п.), сохранённые pipeline при
-            ingest, → рёбра REGULATED_BY на конкретную статью целевого НПА.
-        (Б) markdown inline-ссылки [..](/document/cons_doc_LAW_X/..) в тексте
-            нод → рёбра REFERENCES на корень целевого документа (по doc_id).
+        Карты целей (doc_id→gdoc, norm_code→gdoc) строятся из ВСЕХ активных НПА
+        в графе, поэтому ссылки только что залитых документов резолвятся на уже
+        существующие (напр. ФКЗ → ранее залитый ГК/УК). Источники — узлы текущего
+        запуска (чтобы не пересканировать весь граф). Дедуп по существующим рёбрам.
+
+        (А) norm_ref-entities (ГК РФ ст.330 …) → REGULATED_BY на статью цели.
+        (Б) inline-ссылки [..](/document/cons_doc_LAW_X/..) → REFERENCES на цель.
         """
         if self.pipeline is None:
             return 0
         repo = self.pipeline.repo
+        db = self.pipeline.db
         created = 0
 
-        # (А) norm_ref entities → REGULATED_BY на статью целевого НПА
-        for norm_code, target_gdoc in self._normcode_to_gdoc.items():
-            ents = repo.entities.find_norm_references(norm_code=norm_code)
-            for ent in ents:
+        # Карты целей из ВСЕЙ БД
+        docid_all: Dict[str, str] = {}
+        normcode_all: Dict[str, str] = {}
+        for d in (db.query(GraphDocument)
+                  .filter(GraphDocument.layer == LayerType.NPA.value,
+                          GraphDocument.status == 'active')):
+            mm = re.search(r'cons_doc_LAW_(\d+)', d.source_file or '')
+            if mm:
+                docid_all[mm.group(1)] = d.id
+            nc = _normcode_from_title(d.title)
+            if nc:
+                normcode_all.setdefault(nc, d.id)
+
+        # Источники — gdoc'и текущего запуска (если карта пуста — берём все НПА)
+        src_gdocs = set(self._docid_to_gdoc.values()) or set(docid_all.values())
+        # node_id → True для узлов источников (для фильтра (А))
+        src_node_ids = set()
+        roots_by_gdoc: Dict[str, str] = {}
+        nodes_by_gdoc: Dict[str, list] = {}
+        for gd in src_gdocs:
+            nodes = repo.nodes.get_by_document(gd)
+            nodes_by_gdoc[gd] = nodes
+            for n in nodes:
+                src_node_ids.add(n.id)
+                if n.node_type == 'document':
+                    roots_by_gdoc[gd] = n.id
+
+        # корень любого целевого документа (кэш)
+        root_cache: Dict[str, Optional[str]] = {}
+        def _root(gdoc: str) -> Optional[str]:
+            if gdoc in root_cache:
+                return root_cache[gdoc]
+            roots = [n.id for n in repo.nodes.get_by_document(gdoc)
+                     if n.node_type == 'document']
+            root_cache[gdoc] = roots[0] if roots else None
+            return root_cache[gdoc]
+
+        # Существующие рёбра (дедуп)
+        existing = set()
+        for s, t, et in db.query(GraphEdge.source_id, GraphEdge.target_id,
+                                 GraphEdge.edge_type).filter(
+                GraphEdge.edge_type.in_([EdgeType.REGULATED_BY.value,
+                                         EdgeType.REFERENCES.value])):
+            existing.add((s, t, et))
+
+        def _add_edge(src, tgt, etype, conf, evidence, rationale):
+            nonlocal created
+            if not tgt or src == tgt or (src, tgt, etype) in existing:
+                return
+            repo.edges.create(
+                actor='importer', source_id=src, target_id=tgt,
+                edge_type=etype, edge_class=EdgeClass.FACT.value,
+                status=EdgeStatus.MACHINE_EXTRACTED.value,
+                extracted_by=ExtractedBy.RULE.value,
+                confidence=conf, evidence=evidence, rationale=rationale,
+            )
+            existing.add((src, tgt, etype))
+            created += 1
+
+        # (А) norm_ref entities → REGULATED_BY (источник из текущего запуска)
+        for norm_code, target_gdoc in normcode_all.items():
+            for ent in repo.entities.find_norm_references(norm_code=norm_code):
+                if ent.node_id not in src_node_ids:
+                    continue
                 target_node = None
                 if ent.norm_article:
-                    target_node = repo.nodes.find_by_number(
-                        target_gdoc, ent.norm_article
-                    ) or repo.nodes.find_by_number(
-                        target_gdoc, f'ст. {ent.norm_article}'
-                    )
-                if not target_node:
-                    # на корень документа
-                    roots = [n for n in repo.nodes.get_by_document(target_gdoc)
-                             if n.node_type == 'document']
-                    target_node = roots[0] if roots else None
-                if not target_node or ent.node_id == target_node.id:
-                    continue
-                repo.edges.create(
-                    actor='importer',
-                    source_id=ent.node_id,
-                    target_id=target_node.id,
-                    edge_type=EdgeType.REGULATED_BY.value,
-                    edge_class=EdgeClass.FACT.value,
-                    status=EdgeStatus.MACHINE_EXTRACTED.value,
-                    extracted_by=ExtractedBy.RULE.value,
-                    confidence=float(ent.confidence or 0.8),
-                    evidence=ent.raw_text,
-                    rationale=f'norm_ref → {norm_code} ст.{ent.norm_article}',
-                )
-                created += 1
+                    target_node = (repo.nodes.find_by_number(target_gdoc, ent.norm_article)
+                                   or repo.nodes.find_by_number(target_gdoc, f'ст. {ent.norm_article}'))
+                tgt = target_node.id if target_node else _root(target_gdoc)
+                _add_edge(ent.node_id, tgt, EdgeType.REGULATED_BY.value,
+                          float(ent.confidence or 0.8), ent.raw_text,
+                          f'norm_ref → {norm_code} ст.{ent.norm_article}')
 
-        # (Б) markdown inline-ссылки в тексте нод → REFERENCES на корень target
-        for doc_id, src_gdoc in self._docid_to_gdoc.items():
-            for node in repo.nodes.get_by_document(src_gdoc):
+        # (Б) inline-ссылки cons_doc_LAW → REFERENCES (источник из текущего запуска)
+        for gd, nodes in nodes_by_gdoc.items():
+            for node in nodes:
                 if not node.text or 'cons_doc_LAW_' not in node.text:
                     continue
                 for m in _DOC_LINK_RE.finditer(node.text):
-                    tgt_doc_id = m.group(1)
-                    tgt_gdoc = self._docid_to_gdoc.get(tgt_doc_id)
-                    if not tgt_gdoc or tgt_gdoc == src_gdoc:
-                        continue  # ссылка на не загруженный НПА или сам на себя
-                    roots = [n for n in repo.nodes.get_by_document(tgt_gdoc)
-                             if n.node_type == 'document']
-                    if not roots:
+                    tgt_gdoc = docid_all.get(m.group(1))
+                    if not tgt_gdoc or tgt_gdoc == gd:
                         continue
-                    repo.edges.create(
-                        actor='importer',
-                        source_id=node.id,
-                        target_id=roots[0].id,
-                        edge_type=EdgeType.REFERENCES.value,
-                        edge_class=EdgeClass.FACT.value,
-                        status=EdgeStatus.MACHINE_EXTRACTED.value,
-                        extracted_by=ExtractedBy.RULE.value,
-                        confidence=0.95,
-                        evidence=m.group(0)[:200],
-                        rationale=f'inline-ссылка → cons_doc_LAW_{tgt_doc_id}',
-                    )
-                    created += 1
+                    _add_edge(node.id, _root(tgt_gdoc), EdgeType.REFERENCES.value,
+                              0.95, m.group(0)[:200],
+                              f'inline-ссылка → cons_doc_LAW_{m.group(1)}')
 
         logger.info(f'Фаза 2: создано cross-document рёбер: {created}')
         return created
@@ -308,6 +339,9 @@ def main():
     ap.add_argument('--kind', choices=list(SOURCES.keys()), action='append',
                     help='Какие источники грузить (можно несколько). По умолч. — все')
     ap.add_argument('--limit', type=int, help='Ограничить число файлов (тест)')
+    ap.add_argument('--relink', action='store_true',
+                    help='Только Фаза 2: пересобрать cross-document рёбра по всему '
+                         'графу (без ingest). Бэкфилл связей между уже залитыми НПА.')
     args = ap.parse_args()
 
     db = None
@@ -316,7 +350,13 @@ def main():
         db = SessionLocal()
     try:
         importer = ConsultantImporter(db=db)
-        importer.import_all(kinds=args.kind, dry_run=args.dry_run, limit=args.limit)
+        if args.relink:
+            _load_all_models()
+            n = importer.resolve_cross_document_edges()
+            importer.pipeline.repo.commit()
+            logger.info(f'RELINK: создано рёбер {n}')
+        else:
+            importer.import_all(kinds=args.kind, dry_run=args.dry_run, limit=args.limit)
     finally:
         if db is not None:
             db.close()
