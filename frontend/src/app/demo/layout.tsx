@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Демо',
-  description: 'Демо Contract AI System: как сервис помогает анализировать договоры и готовить отчеты по рискам.',
+  title: 'Бесплатный режим',
+  description: 'Бесплатный режим Contract AI System: 3 договора в месяц для проверки системы.',
   alternates: { canonical: '/demo' },
 }
 

@@ -15,9 +15,9 @@ export default function PricingPage() {
   const plans = [
     {
       name: 'Бесплатный',
-      tier: 'demo',
+      tier: 'free',
       price: { monthly: 0, annual: 0 },
-      description: 'Попробуйте все возможности системы',
+      description: 'Бесплатный режим для первых договоров',
       gradient: 'from-gray-400 to-gray-600',
       popular: false,
       features: [
@@ -176,7 +176,7 @@ export default function PricingPage() {
                 ← На главную
               </Button>
               <Button variant="primary" size="sm" href="/register">
-                Попробовать бесплатно
+                3 договора бесплатно
               </Button>
             </motion.div>
           </div>
@@ -318,11 +318,11 @@ export default function PricingPage() {
                       </Button>
                     ) : plan.price.monthly === 0 ? (
                       <Button variant="outline" className="w-full" href="/register">
-                        Попробовать
+                        Начать бесплатно
                       </Button>
                     ) : (
-                      <Button variant={plan.popular ? 'primary' : 'outline'} className="w-full" href="/register">
-                        Выбрать
+                      <Button variant={plan.popular ? 'primary' : 'outline'} className="w-full" href="/#login">
+                        Оформить
                       </Button>
                     )}
                   </div>
@@ -369,8 +369,8 @@ export default function PricingPage() {
                     )}
 
                     <div className="mt-4">
-                      <Button variant="outline" className="w-full" href="/register">
-                        Купить
+                      <Button variant="outline" className="w-full" href="/#login">
+                        Оформить
                       </Button>
                     </div>
                   </Card>

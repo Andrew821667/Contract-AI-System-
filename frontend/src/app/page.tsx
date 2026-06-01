@@ -10,7 +10,7 @@ import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 
 const freeLimits = [
-  { value: '0 ₽', label: 'стоимость демо-доступа' },
+  { value: '0 ₽', label: 'стоимость бесплатного режима' },
   { value: '3', label: 'договора бесплатно в месяц' },
   { value: '5 МБ', label: 'размер одного файла' },
 ]
@@ -179,7 +179,7 @@ export default function Home() {
               <a href="#login" className="text-stone-300 hover:text-white transition text-sm font-medium">Вход</a>
               <a href="#pricing" className="text-stone-300 hover:text-white transition text-sm font-medium">Тарифы</a>
               <Button variant="primary" size="sm" href="/register">
-                Попробовать
+                3 договора бесплатно
               </Button>
             </motion.div>
           </div>
@@ -240,7 +240,9 @@ export default function Home() {
                     <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                   </div>
                   <h2 className="text-2xl font-bold text-stone-200">Вход в систему</h2>
-                  <p className="text-stone-300 text-sm mt-1">Или <a href="/register" className="text-stone-300 font-semibold hover:underline">зарегистрируйтесь</a> бесплатно</p>
+                  <p className="text-stone-300 text-sm mt-1">
+                    Нет аккаунта? <a href="/register" className="text-stone-300 font-semibold hover:underline">Начните бесплатно</a>: 3 договора в месяц.
+                  </p>
                 </div>
 
                 <form onSubmit={handleLogin} className="space-y-4">
@@ -286,28 +288,6 @@ export default function Home() {
                   </motion.button>
                 </form>
 
-                {/* Quick login */}
-                <div className="mt-5 p-3 bg-slate-800/80 rounded-xl border border-stone-500">
-                  <p className="text-xs font-semibold text-stone-300 mb-2 text-center">Быстрый вход (демо)</p>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {[
-                      { label: 'Админ', email: 'admin@contractai.ru', pwd: 'Admin123!' },
-                      { label: 'Юрист', email: 'lawyer@contractai.ru', pwd: 'Lawyer123!' },
-                      { label: 'VIP', email: 'vip@contractai.ru', pwd: 'Vip12345!' },
-                      { label: 'Демо', email: 'demo@contractai.ru', pwd: 'Demo1234!' },
-                    ].map((u) => (
-                      <button
-                        key={u.email}
-                        type="button"
-                        onClick={() => { setEmail(u.email); setPassword(u.pwd) }}
-                        className="px-2 py-1.5 text-xs bg-primary-100 border border-primary-300 rounded-lg hover:bg-primary-200 transition text-primary-800 font-medium"
-                      >
-                        {u.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 <div className="mt-4 text-center">
                   <a
                     href="https://t.me/legal_ai_helper_new_bot"
@@ -330,7 +310,7 @@ export default function Home() {
             <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-8 items-center">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-wide text-primary-300 mb-3">
-                  Бесплатный вход
+                  Бесплатный режим
                 </p>
                 <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
                   3 договора бесплатно каждый месяц
@@ -515,7 +495,7 @@ export default function Home() {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
               <Card hover className="text-center bg-slate-600/40 border-primary-500/20">
-                <div className="text-sm text-primary-300 mb-1">Демо-доступ</div>
+                <div className="text-sm text-primary-300 mb-1">Бесплатный режим</div>
                 <div className="text-3xl font-bold text-stone-200">0 ₽</div>
                 <div className="text-sm text-stone-300">первый шаг</div>
               </Card>
@@ -590,9 +570,8 @@ export default function Home() {
               <h4 className="font-bold text-white mb-4">Продукт</h4>
               <ul className="space-y-2 text-sm text-stone-300">
                 <li><a href="/pricing" className="hover:text-white transition">Тарифы</a></li>
-                <li><a href="/register" className="hover:text-white transition">Демо</a></li>
+                <li><a href="/register" className="hover:text-white transition">3 договора бесплатно</a></li>
                 <li><a href="#login" className="hover:text-white transition">Вход</a></li>
-                <li><a href="/register" className="hover:text-white transition">Регистрация</a></li>
               </ul>
             </div>
 
