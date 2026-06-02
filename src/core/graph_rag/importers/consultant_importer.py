@@ -80,6 +80,39 @@ _DOC_LINK_RE = re.compile(
     r'/document/cons_doc_LAW_(\d+)(?:/[a-f0-9]{16,})?/?(?:#[^)]*)?\)'
 )
 
+# Реквизит подзаконного акта в ТЕКСТЕ НПА (для линкера закон→подзаконка).
+# Подзаконка цитируется простым текстом «Постановлением Правительства РФ от
+# 07.02.2011 N 55» (без гиперссылки и норм-кода), поэтому Фаза 2 (А)/(Б) её не
+# ловит. Сопоставляем по (вид, дата, номер) с заголовками залитых подзаконных
+# актов. Группы: 1=корень вида, 2=орган, 3=дата (dd.mm.yyyy), 4=номер.
+_SUBORD_REQ_RE = re.compile(
+    r'(постановлени|распоряжени|указ)\w*\s+'
+    r'(Правительств|Президент)\w*\s+(?:Российской\s+Федерации|РФ)\s+'
+    r'от\s+(\d{2}\.\d{2}\.\d{4})\s+N\s*([0-9][\w\-/.]*)',
+    re.IGNORECASE,
+)
+
+
+def _subord_kind(stem: str, organ: str) -> Optional[str]:
+    """(корень вида, орган) → document_type подзаконного акта."""
+    s, o = stem.lower(), organ.lower()
+    if s.startswith('постановлени') and o.startswith('правительств'):
+        return 'government_decree'
+    if s.startswith('распоряжени') and o.startswith('правительств'):
+        return 'government_order'
+    if s.startswith('указ') and o.startswith('президент'):
+        return 'presidential_decree'
+    return None
+
+
+# Реквизит из ЗАГОЛОВКА подзаконного акта (для построения карты целей).
+_SUBORD_TITLE_RE = re.compile(
+    r'(постановлени|распоряжени|указ)\w*\s+'
+    r'(Правительств|Президент)\w*\s+(?:Российской\s+Федерации|РФ)\s+'
+    r'от\s+(\d{2}\.\d{2}\.\d{4})\s+N\s*([0-9][\w\-/.]*)',
+    re.IGNORECASE,
+)
+
 
 def _load_all_models() -> None:
     """Импортировать ВСЕ модель-модули, чтобы SQLAlchemy-registry был полным.
@@ -247,6 +280,8 @@ class ConsultantImporter:
         # Карты целей из ВСЕЙ БД
         docid_all: Dict[str, str] = {}
         normcode_all: Dict[str, str] = {}
+        # (вид, дата, номер) → gdoc подзаконного акта (для линкера (В))
+        subord_by_req: Dict[tuple, str] = {}
         for d in (db.query(GraphDocument)
                   .filter(GraphDocument.layer == LayerType.NPA.value,
                           GraphDocument.status == 'active')):
@@ -256,6 +291,15 @@ class ConsultantImporter:
             nc = _normcode_from_title(d.title)
             if nc:
                 normcode_all.setdefault(nc, d.id)
+            # подзаконные акты → карта по реквизитам (из заголовка)
+            if (d.document_type in ('government_decree', 'government_order',
+                                    'presidential_decree') and d.title):
+                tm = _SUBORD_TITLE_RE.search(d.title)
+                if tm:
+                    kind = _subord_kind(tm.group(1), tm.group(2))
+                    if kind:
+                        key = (kind, tm.group(3), tm.group(4).rstrip('.').lower())
+                        subord_by_req.setdefault(key, d.id)
 
         # Источники — gdoc'и текущего запуска (если карта пуста — берём все НПА)
         src_gdocs = set(self._docid_to_gdoc.values()) or set(docid_all.values())
@@ -318,17 +362,32 @@ class ConsultantImporter:
                           f'norm_ref → {norm_code} ст.{ent.norm_article}')
 
         # (Б) inline-ссылки cons_doc_LAW → REFERENCES (источник из текущего запуска)
+        # (В) текстовые реквизиты подзаконки → REFERENCES на акт-цель
         for gd, nodes in nodes_by_gdoc.items():
             for node in nodes:
-                if not node.text or 'cons_doc_LAW_' not in node.text:
+                if not node.text:
                     continue
-                for m in _DOC_LINK_RE.finditer(node.text):
-                    tgt_gdoc = docid_all.get(m.group(1))
-                    if not tgt_gdoc or tgt_gdoc == gd:
-                        continue
-                    _add_edge(node.id, _root(tgt_gdoc), EdgeType.REFERENCES.value,
-                              0.95, m.group(0)[:200],
-                              f'inline-ссылка → cons_doc_LAW_{m.group(1)}')
+                if 'cons_doc_LAW_' in node.text:
+                    for m in _DOC_LINK_RE.finditer(node.text):
+                        tgt_gdoc = docid_all.get(m.group(1))
+                        if not tgt_gdoc or tgt_gdoc == gd:
+                            continue
+                        _add_edge(node.id, _root(tgt_gdoc), EdgeType.REFERENCES.value,
+                                  0.95, m.group(0)[:200],
+                                  f'inline-ссылка → cons_doc_LAW_{m.group(1)}')
+                # (В) «Постановлением Правительства РФ от ДАТА N НОМЕР» текстом
+                if subord_by_req and ('равительств' in node.text or 'резидент' in node.text):
+                    for m in _SUBORD_REQ_RE.finditer(node.text):
+                        kind = _subord_kind(m.group(1), m.group(2))
+                        if not kind:
+                            continue
+                        key = (kind, m.group(3), m.group(4).rstrip('.').lower())
+                        tgt_gdoc = subord_by_req.get(key)
+                        if not tgt_gdoc or tgt_gdoc == gd:
+                            continue
+                        _add_edge(node.id, _root(tgt_gdoc), EdgeType.REFERENCES.value,
+                                  0.9, m.group(0)[:200],
+                                  f'реквизит → {kind} от {m.group(3)} N {m.group(4)}')
 
         logger.info(f'Фаза 2: создано cross-document рёбер: {created}')
         return created
