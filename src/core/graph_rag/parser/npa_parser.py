@@ -217,8 +217,15 @@ class NPAGraphParser(BaseDocumentGraphParser):
                 edition_date = m.group(1)
                 break
 
+        # «Плоский» режим для не-статейных НПА (постановления/распоряжения
+        # Правительства, указы Президента и т.п.): в тексте нет ни одной
+        # «Статьи», структура держится на нумерованных ПУНКТАХ «1.», «2.».
+        # В этом режиме пункты верхнего уровня становятся структурными нодами
+        # (CLAUSE). Гейт по отсутствию статей — законы/кодексы не затрагиваются.
+        flat_mode = not any(RE_NPA_ARTICLE.match(ln) for ln in lines)
+
         # Парсим структуру
-        self._build_npa_tree(root, lines)
+        self._build_npa_tree(root, lines, flat_mode=flat_mode)
 
         parse_status = ParseStatus.FULLY_PARSED if root.children else ParseStatus.PARTIAL_PARSE
         errors = [] if root.children else ["No NPA structure detected"]
@@ -238,11 +245,16 @@ class NPAGraphParser(BaseDocumentGraphParser):
     # Построение дерева НПА
     # ──────────────────────────────────────────
 
-    def _build_npa_tree(self, root: ParsedNode, lines: List[str]):
+    def _build_npa_tree(self, root: ParsedNode, lines: List[str],
+                        flat_mode: bool = False):
         """
         Построение иерархического дерева НПА.
 
         Иерархия: Раздел → Глава → § → Статья → Часть → Пункт → Подпункт
+
+        flat_mode: для не-статейных НПА (постановления/указы) — пункты верхнего
+            уровня «N.» становятся структурными нодами CLAUSE под текущим
+            контейнером (вместо PART под статьёй).
         """
         current_title: Optional[ParsedNode] = None       # Раздел
         current_chapter: Optional[ParsedNode] = None      # Глава
@@ -362,8 +374,29 @@ class NPAGraphParser(BaseDocumentGraphParser):
                 current_part = None
                 continue
 
-            # Часть статьи (1. 2. 3. — одиночная цифра внутри статьи)
+            # Пункт «N.» — в плоском режиме (не-статейный НПА) это структурная
+            # единица CLAUSE верхнего уровня; иначе — Часть статьи (PART).
             m = RE_NPA_PART.match(line)
+            if m and flat_mode:
+                in_preamble = False
+                self._flush_preamble(root, preamble_lines)
+                self._flush_note(current_article or current_chapter or root, note_lines)
+                preamble_lines = []
+                in_note = False
+                note_lines = []
+
+                clause = ParsedNode(
+                    node_type=NodeType.CLAUSE,
+                    text=m.group(2),
+                    title=(m.group(2) or '')[:80],
+                    number=m.group(1),
+                )
+                parent = current_para_sec or current_chapter or current_title or root
+                parent.add_child(clause)
+                # пункт становится текущим контейнером (для текста/подпунктов)
+                current_article = clause
+                current_part = None
+                continue
             if m and current_article:
                 current_part = ParsedNode(
                     node_type=NodeType.PART,

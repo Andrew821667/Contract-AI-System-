@@ -43,6 +43,10 @@ SOURCES = {
     'kodeksy': DATA_ROOT / 'kodeksy' / 'converted-md',
     'fkz': DATA_ROOT / 'federal-laws' / 'fkz' / 'converted-md',
     'fz': DATA_ROOT / 'federal-laws' / 'fz' / 'converted-md',
+    # Подзаконные акты (постановления/распоряжения Правительства, указы
+    # Президента) — frontmatter category: government_decree|government_order|
+    # presidential_decree. Парсятся в плоском режиме (пункты-CLAUSE).
+    'decrees': DATA_ROOT / 'decrees' / 'converted-md',
 }
 
 # Заголовок НПА → нормализованный код (для матчинга norm_ref-ссылок).

@@ -68,13 +68,18 @@ class ValidationReport:
 
 
 def _count_articles(root) -> int:
-    """Сколько нод типа article в дереве ParseResult."""
+    """Сколько структурных единиц в дереве ParseResult.
+
+    Считаем статьи (article) И пункты (clause): у законов/кодексов структура —
+    статьи, у постановлений/указов — пункты верхнего уровня (плоский режим
+    парсера). И то и другое — валидная нормативная структура для E3.
+    """
     cnt = 0
     stack = [root]
     while stack:
         n = stack.pop()
         nt = n.node_type.value if hasattr(n.node_type, 'value') else n.node_type
-        if nt == 'article':
+        if nt in ('article', 'clause'):
             cnt += 1
         stack.extend(n.children)
     return cnt
