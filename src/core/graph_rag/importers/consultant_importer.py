@@ -47,6 +47,10 @@ SOURCES = {
     # Президента) — frontmatter category: government_decree|government_order|
     # presidential_decree. Парсятся в плоском режиме (пункты-CLAUSE).
     'decrees': DATA_ROOT / 'decrees' / 'converted-md',
+    # Судебная практика высших судов (Пленумы ВС, ВС, КС, обзоры) — подпапки
+    # по слугам органов: court-practice/<slug>/converted-md/*.md. category=
+    # court_practice. Парсятся в плоском режиме (пункты/абзацы).
+    'court': DATA_ROOT / 'court-practice',
 }
 
 # Заголовок НПА → нормализованный код (для матчинга norm_ref-ссылок).
@@ -197,7 +201,8 @@ class ConsultantImporter:
         for k in kinds:
             d = SOURCES.get(k)
             if d and d.exists():
-                files.extend(sorted(d.glob('*.md')))
+                # rglob — чтобы охватить подпапки по слугам (court-practice/<slug>/...)
+                files.extend(sorted(d.rglob('*.md')))
         return files
 
     # ── Фаза 1 ─────────────────────────────────────────────────
