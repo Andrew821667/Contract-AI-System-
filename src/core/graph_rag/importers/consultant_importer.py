@@ -118,6 +118,20 @@ _SUBORD_TITLE_RE = re.compile(
 )
 
 
+def _file_docid(path) -> Optional[str]:
+    """Прочитать doc_id (cons_doc_LAW_<id>) из frontmatter source_url .md-файла.
+
+    Дёшево (только начало файла) — для пропуска уже загруженных без полного парса.
+    """
+    try:
+        with open(path, 'r', encoding='utf-8', errors='replace') as f:
+            head = f.read(600)
+    except Exception:
+        return None
+    m = re.search(r'cons_doc_LAW_(\d+)', head)
+    return m.group(1) if m else None
+
+
 def _load_all_models() -> None:
     """Импортировать ВСЕ модель-модули, чтобы SQLAlchemy-registry был полным.
 
@@ -207,10 +221,24 @@ class ConsultantImporter:
 
     # ── Фаза 1 ─────────────────────────────────────────────────
     def import_all(self, kinds: Optional[List[str]] = None,
-                   dry_run: bool = False, limit: Optional[int] = None) -> ImportReport:
+                   dry_run: bool = False, limit: Optional[int] = None,
+                   no_phase2: bool = False) -> ImportReport:
         if not dry_run and self.pipeline is not None:
             _load_all_models()  # полный SQLAlchemy-registry до первого запроса
         files = self.discover(kinds)
+        # Пропуск уже загруженных (по doc_id из frontmatter source_url) — чтобы
+        # инкрементальные ночные заливки не перепарсивали тысячи готовых файлов.
+        if not dry_run and self.pipeline is not None:
+            loaded = set()
+            for (sf,) in self.pipeline.db.query(GraphDocument.source_file).filter(
+                    GraphDocument.layer == LayerType.NPA.value):
+                mm = re.search(r'cons_doc_LAW_(\d+)', sf or '')
+                if mm:
+                    loaded.add(mm.group(1))
+            if loaded:
+                before = len(files)
+                files = [f for f in files if _file_docid(f) not in loaded]
+                logger.info(f'Пропущено уже загруженных: {before - len(files)}')
         if limit:
             files = files[:limit]
         rep = ImportReport(total_files=len(files))
@@ -257,9 +285,12 @@ class ConsultantImporter:
                 self._normcode_to_gdoc[nc] = gdoc_id
 
         # ── Фаза 2 ──
-        if not dry_run and self.pipeline is not None:
+        if not dry_run and self.pipeline is not None and not no_phase2:
             rep.cross_edges_created = self.resolve_cross_document_edges()
             self.pipeline.repo.commit()
+        elif no_phase2:
+            self.pipeline.repo.commit()
+            logger.info('Фаза 2 пропущена (--no-phase2)')
 
         rep.log_summary()
         return rep
@@ -413,6 +444,9 @@ def main():
     ap.add_argument('--relink', action='store_true',
                     help='Только Фаза 2: пересобрать cross-document рёбра по всему '
                          'графу (без ingest). Бэкфилл связей между уже залитыми НПА.')
+    ap.add_argument('--no-phase2', action='store_true',
+                    help='Заливка без Фазы 2 (быстро, для инкрементальных прогонов). '
+                         'Cross-рёбра строить отдельно прямым линкером.')
     args = ap.parse_args()
 
     db = None
@@ -427,7 +461,8 @@ def main():
             importer.pipeline.repo.commit()
             logger.info(f'RELINK: создано рёбер {n}')
         else:
-            importer.import_all(kinds=args.kind, dry_run=args.dry_run, limit=args.limit)
+            importer.import_all(kinds=args.kind, dry_run=args.dry_run, limit=args.limit,
+                                no_phase2=args.no_phase2)
     finally:
         if db is not None:
             db.close()
