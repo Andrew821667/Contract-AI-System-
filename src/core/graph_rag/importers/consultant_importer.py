@@ -176,6 +176,7 @@ class ImportReport:
     total_files: int = 0
     ingested: int = 0
     skipped: int = 0
+    replaced: int = 0
     failed: int = 0
     validation_failed: int = 0
     cross_edges_created: int = 0
@@ -184,7 +185,7 @@ class ImportReport:
     def log_summary(self):
         logger.info('=' * 64)
         logger.info(f'ИТОГО: файлов={self.total_files}, ingested={self.ingested}, '
-                    f'skip={self.skipped}, fail={self.failed}, '
+                    f'skip={self.skipped}, replaced={self.replaced}, fail={self.failed}, '
                     f'валидация-fail={self.validation_failed}, '
                     f'cross-рёбра={self.cross_edges_created}')
 
@@ -220,15 +221,42 @@ class ConsultantImporter:
         return files
 
     # ── Фаза 1 ─────────────────────────────────────────────────
+    def _purge_by_source(self, source_url: str) -> bool:
+        """Полностью удалить документ и его граф по source_file (для REPLACE).
+
+        Удаляет рёбра (ссылающиеся на ноды документа), entities, ноды и сам
+        документ. Возвращает True, если что-то удалено.
+        """
+        db = self.pipeline.db
+        doc = (db.query(GraphDocument)
+               .filter(GraphDocument.source_file == source_url).first())
+        if not doc:
+            return False
+        from sqlalchemy import text as _sql
+        nid_q = db.query(GraphNode.id).filter(GraphNode.document_id == doc.id).subquery()
+        node_ids = [r[0] for r in db.query(nid_q.c.id).all()]
+        if node_ids:
+            # рёбра, где нода документа — источник или цель
+            db.query(GraphEdge).filter(GraphEdge.source_id.in_(node_ids)).delete(synchronize_session=False)
+            db.query(GraphEdge).filter(GraphEdge.target_id.in_(node_ids)).delete(synchronize_session=False)
+            # entities нод документа (таблица graph_entities, FK node_id)
+            db.execute(_sql("DELETE FROM graph_entities WHERE node_id IN (SELECT id FROM graph_nodes WHERE document_id=:d)"), {"d": doc.id})
+            db.query(GraphNode).filter(GraphNode.document_id == doc.id).delete(synchronize_session=False)
+        db.query(GraphDocument).filter(GraphDocument.id == doc.id).delete(synchronize_session=False)
+        db.flush()
+        logger.info(f'PURGE: удалён старый документ {doc.id} ({len(node_ids)} нод) для замены')
+        return True
+
     def import_all(self, kinds: Optional[List[str]] = None,
                    dry_run: bool = False, limit: Optional[int] = None,
-                   no_phase2: bool = False) -> ImportReport:
+                   no_phase2: bool = False, update: bool = False) -> ImportReport:
         if not dry_run and self.pipeline is not None:
             _load_all_models()  # полный SQLAlchemy-registry до первого запроса
         files = self.discover(kinds)
         # Пропуск уже загруженных (по doc_id из frontmatter source_url) — чтобы
         # инкрементальные ночные заливки не перепарсивали тысячи готовых файлов.
-        if not dry_run and self.pipeline is not None:
+        # В режиме update пропуск НЕ применяем (нужно перезалить существующие).
+        if not dry_run and self.pipeline is not None and not update:
             loaded = set()
             for (sf,) in self.pipeline.db.query(GraphDocument.source_file).filter(
                     GraphDocument.layer == LayerType.NPA.value):
@@ -269,6 +297,12 @@ class ConsultantImporter:
 
             # Ingest (source_file = source_url, чтобы хранить doc_id)
             source_url = (parse_result.metadata or {}).get('source_url') or str(path)
+            # Режим обновления: если документ уже есть — удалить старую версию
+            # целиком (ноды/рёбра/entities/документ) перед перезаливкой.
+            if update:
+                purged = self._purge_by_source(source_url)
+                if purged:
+                    rep.replaced += 1
             result = self.pipeline._ingest(parse_result, source_file=source_url)
             if result.extraction_warnings and 'уже загружен' in ' '.join(result.extraction_warnings):
                 rep.skipped += 1
@@ -447,6 +481,9 @@ def main():
     ap.add_argument('--no-phase2', action='store_true',
                     help='Заливка без Фазы 2 (быстро, для инкрементальных прогонов). '
                          'Cross-рёбра строить отдельно прямым линкером.')
+    ap.add_argument('--update', action='store_true',
+                    help='REPLACE-режим: существующие документы (по source_file) '
+                         'удаляются целиком и перезаливаются (обновление редакций).')
     args = ap.parse_args()
 
     db = None
@@ -462,7 +499,7 @@ def main():
             logger.info(f'RELINK: создано рёбер {n}')
         else:
             importer.import_all(kinds=args.kind, dry_run=args.dry_run, limit=args.limit,
-                                no_phase2=args.no_phase2)
+                                no_phase2=args.no_phase2, update=args.update)
     finally:
         if db is not None:
             db.close()
