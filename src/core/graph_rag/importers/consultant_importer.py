@@ -249,10 +249,15 @@ class ConsultantImporter:
 
     def import_all(self, kinds: Optional[List[str]] = None,
                    dry_run: bool = False, limit: Optional[int] = None,
-                   no_phase2: bool = False, update: bool = False) -> ImportReport:
+                   no_phase2: bool = False, update: bool = False,
+                   only_docids: Optional[set] = None) -> ImportReport:
         if not dry_run and self.pipeline is not None:
             _load_all_models()  # полный SQLAlchemy-registry до первого запроса
         files = self.discover(kinds)
+        # Точечный режим: только указанные doc_id (для edition-diff обновления).
+        if only_docids:
+            files = [f for f in files if _file_docid(f) in only_docids]
+            logger.info(f'Только указанные doc_id: {len(files)} файлов')
         # Пропуск уже загруженных (по doc_id из frontmatter source_url) — чтобы
         # инкрементальные ночные заливки не перепарсивали тысячи готовых файлов.
         # В режиме update пропуск НЕ применяем (нужно перезалить существующие).
@@ -484,6 +489,8 @@ def main():
     ap.add_argument('--update', action='store_true',
                     help='REPLACE-режим: существующие документы (по source_file) '
                          'удаляются целиком и перезаливаются (обновление редакций).')
+    ap.add_argument('--only-docids', default='',
+                    help='Через запятую: обрабатывать только эти doc_id (точечно).')
     args = ap.parse_args()
 
     db = None
@@ -498,8 +505,10 @@ def main():
             importer.pipeline.repo.commit()
             logger.info(f'RELINK: создано рёбер {n}')
         else:
+            only = set(x.strip() for x in args.only_docids.split(',') if x.strip())
             importer.import_all(kinds=args.kind, dry_run=args.dry_run, limit=args.limit,
-                                no_phase2=args.no_phase2, update=args.update)
+                                no_phase2=args.no_phase2, update=args.update,
+                                only_docids=only or None)
     finally:
         if db is not None:
             db.close()
