@@ -11,6 +11,7 @@ ChromaDB: data/chromadb (отдельная от data/chroma_enhanced)
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import List, Optional
 
@@ -49,21 +50,30 @@ def get_chroma_client():
 
 
 def get_embedding_fn():
-    """Lazy-init функции эмбеддингов (multilingual-MiniLM)."""
+    """Lazy-init функции эмбеддингов (multilingual-MiniLM).
+
+    КРИТИЧНО: грузим модель ОФЛАЙН из локального кеша. Без офлайн-режима при
+    недоступности huggingface.co (нет интернета) SentenceTransformer падает на
+    HEAD-запросе и происходит fallback на DefaultEmbeddingFunction — ДРУГУЮ
+    модель. Размерность совпадает (384), Chroma не падает, но вектор-пространство
+    иное → семантический поиск МОЛЧА деградирует (запрос и документы в разных
+    пространствах). Поэтому HF_HUB_OFFLINE=1 + НИКАКОГО fallback на DefaultEF.
+    """
     global _embedding_fn
     if _embedding_fn is None:
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
         try:
             from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
             _embedding_fn = SentenceTransformerEmbeddingFunction(
                 model_name="paraphrase-multilingual-MiniLM-L12-v2"
             )
         except Exception as e:
-            logger.warning(f"AdminRAG: SentenceTransformer недоступен ({e}), используем DefaultEF")
-            try:
-                from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
-                _embedding_fn = DefaultEmbeddingFunction()
-            except Exception as e2:
-                logger.error(f"AdminRAG: DefaultEmbeddingFunction тоже недоступен: {e2}")
+            # НЕ делаем fallback на DefaultEF — несовместим со стором. Падаем громко.
+            logger.error(f"AdminRAG: не удалось загрузить multilingual-MiniLM из кеша: {e}. "
+                         f"Семантический поиск НЕДОСТУПЕН (fallback на DefaultEF запрещён — "
+                         f"он несовместим с вектор-стором).")
+            _embedding_fn = None
     return _embedding_fn
 
 

@@ -13,7 +13,10 @@
 Чанкер идентичен src/api/rag_admin/routes.py (предложения→~800 симв, overlap
 150, min 50) + жёсткий потолок 1200 симв (длинные таблицы дробятся).
 """
-import sys, re, glob, argparse, time, statistics
+import os, sys, re, glob, argparse, time, statistics
+# Эмбеддер грузим ОФЛАЙН из кеша (HF может быть недоступен → падение/фолбэк).
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 sys.path.insert(0, "/Users/legalai/projects/Contract-AI-System-")
 
 BASE = "/Users/legalai/consultant-data"
