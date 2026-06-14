@@ -93,6 +93,28 @@ def get_collection(name: str):
         return None
 
 
+# ── Re-ranker (cross-encoder) ───────────────────────────────────────────────
+_reranker = None
+_reranker_failed = False
+
+def get_reranker():
+    """Lazy-init cross-encoder для переранжирования (офлайн из кеша, MPS если есть)."""
+    global _reranker, _reranker_failed
+    if _reranker is None and not _reranker_failed:
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+        try:
+            from sentence_transformers import CrossEncoder
+            import torch
+            dev = "mps" if torch.backends.mps.is_available() else "cpu"
+            _reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", device=dev)
+            logger.info(f"AdminRAG: реранкер загружен (device={dev})")
+        except Exception as e:
+            _reranker_failed = True
+            logger.warning(f"AdminRAG: реранкер недоступен ({e}) — поиск без переранжирования")
+    return _reranker
+
+
 # ── Retrieval ──────────────────────────────────────────────────────────────
 
 def get_legal_context(
@@ -111,33 +133,45 @@ def get_legal_context(
         collections = ["laws", "case_law"]
 
     try:
-        parts: List[str] = []
+        # 1) Кандидаты: берём заведомо больше (fetch_k), чтобы реранкер выбрал лучшее
+        fetch_k = max(n_results * 5, 15)
+        cands = []  # (doc, label, title)
         for coll_name in collections:
             coll = get_collection(coll_name)
             if coll is None:
                 continue
-
             count = coll.count()
             if count == 0:
                 continue
-
             results = coll.query(
                 query_texts=[query],
-                n_results=min(n_results, count),
+                n_results=min(fetch_k, count),
                 include=["documents", "metadatas"],
             )
-
             if not results["documents"] or not results["documents"][0]:
                 continue
-
             label = COLLECTION_LABELS.get(coll_name, coll_name)
             for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
-                title = meta.get("title", "") if meta else ""
-                header = f"[{label}]{f' — {title}' if title else ''}"
-                parts.append(f"{header}\n{doc[:600]}")
+                title = (meta or {}).get("title", "")
+                cands.append((doc, label, title))
 
-        if not parts:
+        if not cands:
             return ""
+
+        # 2) Переранжирование cross-encoder'ом (если доступен)
+        reranker = get_reranker()
+        if reranker is not None and len(cands) > 1:
+            try:
+                scores = reranker.predict([(query, c[0]) for c in cands])
+                cands = [c for _, c in sorted(zip(scores, cands), key=lambda x: -x[0])]
+            except Exception as e:
+                logger.warning(f"AdminRAG: реранкинг не выполнен ({e})")
+
+        # 3) Топ-N в контекст
+        parts = []
+        for doc, label, title in cands[:n_results]:
+            header = f"[{label}]{f' — {title}' if title else ''}"
+            parts.append(f"{header}\n{doc[:600]}")
 
         context = "\n\n".join(parts)
         if len(context) > max_chars:
