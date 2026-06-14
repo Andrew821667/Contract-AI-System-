@@ -116,7 +116,10 @@ def chunktest(cname, sample):
     print(f"размер медиана {statistics.median(sizes):.0f} max {max(sizes)} | мусор {100*junk/total:.1f}% | коротких {100*short/total:.1f}%")
     for t,c in ex: print(f"  [{t}] {c[:160]}")
 
-def run_embed(targets, limit, refresh, only_docids, model_kind="minilm"):
+def run_embed(targets, limit, refresh, only_docids, model_kind="minilm", batch=0):
+    """batch>0 — дискретный режим: обработать не более `batch` НОВЫХ документов
+    за вызов и выйти (для батч-драйвера с рестартом процесса). Возвращает число
+    добавленных — драйвер крутит вызовы, пока не станет 0."""
     from sentence_transformers import SentenceTransformer
     import torch
     dev = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -141,6 +144,7 @@ def run_embed(targets, limit, refresh, only_docids, model_kind="minilm"):
     def embed(texts):
         return model.encode([prefix + t for t in texts], batch_size=64 if model_kind=="e5" else 128,
                             convert_to_numpy=True, show_progress_bar=False).tolist()
+    total_added = 0
     for cname in targets:
         coll = get_coll(cname)
         if coll is None: print("нет коллекции", cname); continue
@@ -148,6 +152,8 @@ def run_embed(targets, limit, refresh, only_docids, model_kind="minilm"):
         print(f"=== EMBED {cname}: файлов {len(files)}, в коллекции {coll.count()} ===", flush=True)
         added=skipped=refreshed=0; t0=time.time()
         for i, f in enumerate(files, 1):
+            if batch and total_added >= batch:
+                print(f"  батч-лимит {batch} достигнут — стоп", flush=True); break
             fm, body = parse_md(f)
             if len(body) < MIN_BODY: continue
             did = docid_of(fm, f)
@@ -166,10 +172,14 @@ def run_embed(targets, limit, refresh, only_docids, model_kind="minilm"):
             for b in range(0,len(ch),256):
                 sub=ch[b:b+256]
                 coll.add(documents=sub, ids=ids[b:b+256], metadatas=metas[b:b+256], embeddings=embed(sub))
-            added+=1
+            added+=1; total_added+=1
             if i % 50 == 0:
                 print(f"  [{i}/{len(files)}] +{added} skip{skipped} refr{refreshed} чанков~{coll.count()} {time.time()-t0:.0f}s", flush=True)
         print(f"ИТОГО {cname}: добавлено {added}, обновлено {refreshed}, пропущено {skipped}, чанков {coll.count()}", flush=True)
+        if batch and total_added >= batch:
+            break
+    print(f"ADDED_TOTAL={total_added}", flush=True)
+    return total_added
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
@@ -181,10 +191,12 @@ if __name__ == "__main__":
     ap.add_argument("--only-docids", default="", help="через запятую: эмбедить только эти doc_id")
     ap.add_argument("--model", choices=["minilm","e5"], default="minilm",
                     help="e5 = multilingual-e5-large (1024-dim, коллекции *_e5)")
+    ap.add_argument("--batch", type=int, default=0,
+                    help="дискретно: обработать не более N новых док за вызов и выйти")
     a = ap.parse_args()
     targets = ["laws","case_law"] if a.collection=="all" else [a.collection]
     only = set(x.strip() for x in a.only_docids.split(",") if x.strip())
     if a.mode == "chunktest":
         for c in targets: chunktest(c, a.sample)
     else:
-        run_embed(targets, a.limit, a.refresh, only, model_kind=a.model)
+        run_embed(targets, a.limit, a.refresh, only, model_kind=a.model, batch=a.batch)
