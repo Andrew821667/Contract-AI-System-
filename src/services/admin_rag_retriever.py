@@ -115,6 +115,39 @@ def get_reranker():
     return _reranker
 
 
+# ── e5-эмбеддер запроса (multilingual-e5-large) ─────────────────────────────
+_e5_model = None
+_e5_failed = False
+
+def get_e5_model():
+    """Lazy-init e5-large для эмбеддинга ЗАПРОСА (офлайн, MPS). Префикс 'query: '."""
+    global _e5_model, _e5_failed
+    if _e5_model is None and not _e5_failed:
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
+        os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+        try:
+            from sentence_transformers import SentenceTransformer
+            import torch
+            dev = "mps" if torch.backends.mps.is_available() else "cpu"
+            _e5_model = SentenceTransformer("intfloat/multilingual-e5-large", device=dev)
+            logger.info(f"AdminRAG: e5-large загружен (device={dev})")
+        except Exception as e:
+            _e5_failed = True
+            logger.warning(f"AdminRAG: e5-large недоступен ({e}) — fallback на 384-стор")
+    return _e5_model
+
+def _e5_collection(name: str):
+    """e5-коллекция (laws_e5/case_law_e5) без chroma-EF, если наполнена."""
+    client = get_chroma_client()
+    if client is None:
+        return None
+    try:
+        coll = client.get_or_create_collection(name=name + "_e5")
+        return coll if coll.count() > 0 else None
+    except Exception:
+        return None
+
+
 # ── Retrieval ──────────────────────────────────────────────────────────────
 
 def get_legal_context(
@@ -133,21 +166,31 @@ def get_legal_context(
         collections = ["laws", "case_law"]
 
     try:
-        # 1) Кандидаты: берём заведомо больше (fetch_k), чтобы реранкер выбрал лучшее
+        # 1) Кандидаты: берём заведомо больше (fetch_k), чтобы реранкер выбрал лучшее.
+        # Предпочитаем e5-стор (laws_e5/case_law_e5, 1024-dim, сильнее для RU) если
+        # он наполнен; иначе старый 384-стор. e5 — запрос с префиксом 'query: '.
         fetch_k = max(n_results * 5, 15)
         cands = []  # (doc, label, title)
+        e5 = get_e5_model()
+        e5_active = e5 is not None and _e5_collection(collections[0]) is not None
+        qemb = None
+        if e5_active:
+            qemb = e5.encode(["query: " + query], convert_to_numpy=True)[0].tolist()
         for coll_name in collections:
-            coll = get_collection(coll_name)
-            if coll is None:
-                continue
-            count = coll.count()
-            if count == 0:
-                continue
-            results = coll.query(
-                query_texts=[query],
-                n_results=min(fetch_k, count),
-                include=["documents", "metadatas"],
-            )
+            if e5_active:
+                coll = _e5_collection(coll_name)
+                if coll is None:
+                    continue
+                results = coll.query(query_embeddings=[qemb],
+                                     n_results=min(fetch_k, coll.count()),
+                                     include=["documents", "metadatas"])
+            else:
+                coll = get_collection(coll_name)
+                if coll is None or coll.count() == 0:
+                    continue
+                results = coll.query(query_texts=[query],
+                                     n_results=min(fetch_k, coll.count()),
+                                     include=["documents", "metadatas"])
             if not results["documents"] or not results["documents"][0]:
                 continue
             label = COLLECTION_LABELS.get(coll_name, coll_name)
