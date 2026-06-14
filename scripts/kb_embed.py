@@ -116,18 +116,33 @@ def chunktest(cname, sample):
     print(f"размер медиана {statistics.median(sizes):.0f} max {max(sizes)} | мусор {100*junk/total:.1f}% | коротких {100*short/total:.1f}%")
     for t,c in ex: print(f"  [{t}] {c[:160]}")
 
-def run_embed(targets, limit, refresh, only_docids):
-    from src.services.admin_rag_retriever import get_collection
+def run_embed(targets, limit, refresh, only_docids, model_kind="minilm"):
     from sentence_transformers import SentenceTransformer
     import torch
     dev = "mps" if torch.backends.mps.is_available() else "cpu"
-    print(f"устройство: {dev}", flush=True)
-    model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2", device=dev)
+    # e5 — топовый для русского (1024-dim), требует префиксы query:/passage:.
+    # Льём в отдельные коллекции laws_e5/case_law_e5 (БЕЗ chroma-EF, эмбеддинги
+    # передаём сами), чтобы боевой 384-стор laws/case_law не трогать до переключения.
+    if model_kind == "e5":
+        model = SentenceTransformer("intfloat/multilingual-e5-large", device=dev)
+        prefix = "passage: "
+        suffix = "_e5"
+        import chromadb
+        from chromadb.config import Settings
+        client = chromadb.PersistentClient(path="/Users/legalai/projects/Contract-AI-System-/data/chromadb",
+                                           settings=Settings(anonymized_telemetry=False))
+        get_coll = lambda nm: client.get_or_create_collection(name=nm + suffix)  # без EF
+    else:
+        from src.services.admin_rag_retriever import get_collection
+        model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2", device=dev)
+        prefix = ""
+        get_coll = get_collection
+    print(f"устройство: {dev}, модель: {model_kind}", flush=True)
     def embed(texts):
-        return model.encode(texts, batch_size=128, convert_to_numpy=True,
-                            show_progress_bar=False).tolist()
+        return model.encode([prefix + t for t in texts], batch_size=64 if model_kind=="e5" else 128,
+                            convert_to_numpy=True, show_progress_bar=False).tolist()
     for cname in targets:
-        coll = get_collection(cname)
+        coll = get_coll(cname)
         if coll is None: print("нет коллекции", cname); continue
         files = collect_files(cname, limit=limit)
         print(f"=== EMBED {cname}: файлов {len(files)}, в коллекции {coll.count()} ===", flush=True)
@@ -164,10 +179,12 @@ if __name__ == "__main__":
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--refresh", action="store_true", help="удалить старые чанки документа и заэмбедить заново")
     ap.add_argument("--only-docids", default="", help="через запятую: эмбедить только эти doc_id")
+    ap.add_argument("--model", choices=["minilm","e5"], default="minilm",
+                    help="e5 = multilingual-e5-large (1024-dim, коллекции *_e5)")
     a = ap.parse_args()
     targets = ["laws","case_law"] if a.collection=="all" else [a.collection]
     only = set(x.strip() for x in a.only_docids.split(",") if x.strip())
     if a.mode == "chunktest":
         for c in targets: chunktest(c, a.sample)
     else:
-        run_embed(targets, a.limit, a.refresh, only)
+        run_embed(targets, a.limit, a.refresh, only, model_kind=a.model)
