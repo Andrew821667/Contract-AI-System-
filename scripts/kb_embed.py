@@ -142,7 +142,8 @@ def run_embed(targets, limit, refresh, only_docids, model_kind="minilm", batch=0
         get_coll = get_collection
     print(f"устройство: {dev}, модель: {model_kind}", flush=True)
     def embed(texts):
-        return model.encode([prefix + t for t in texts], batch_size=64 if model_kind=="e5" else 128,
+        # batch_size крупнее → лучше утилизация MPS-GPU (e5-large на M4)
+        return model.encode([prefix + t for t in texts], batch_size=192 if model_kind=="e5" else 128,
                             convert_to_numpy=True, show_progress_bar=False).tolist()
     total_added = 0
     for cname in targets:
