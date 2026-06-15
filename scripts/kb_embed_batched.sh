@@ -26,5 +26,5 @@ while :; do
     continue
   fi
   fails=0
-  [ "${added:-0}" -eq 0 ] 2>/dev/null && { echo "$(date) === ГОТОВО: новых нет ===" >> $LOG; break; }
+  [ "${added:-0}" -eq 0 ] 2>/dev/null && { echo "$(date) === ГОТОВО: новых нет ===" >> $LOG; touch /Users/legalai/consultant-data/embed_${MODEL}_done; break; }
 done
