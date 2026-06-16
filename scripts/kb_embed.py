@@ -126,7 +126,19 @@ def run_embed(targets, limit, refresh, only_docids, model_kind="minilm", batch=0
     # e5 — топовый для русского (1024-dim), требует префиксы query:/passage:.
     # Льём в отдельные коллекции laws_e5/case_law_e5 (БЕЗ chroma-EF, эмбеддинги
     # передаём сами), чтобы боевой 384-стор laws/case_law не трогать до переключения.
-    if model_kind == "e5":
+    prompt_doc = None  # для моделей с prompt_name (USER2)
+    if model_kind == "user2":
+        # deepvk/USER2-small — лёгкая (34M), сильная для RU, 384-dim, ctx 8192.
+        # Префиксы через prompt_name (search_document/search_query). Отдельные
+        # коллекции laws_u2/case_law_u2 (без chroma-EF, эмбеддинги передаём сами).
+        model = SentenceTransformer("deepvk/USER2-small", device=dev)
+        prefix = ""; suffix = "_u2"; prompt_doc = "search_document"
+        import chromadb
+        from chromadb.config import Settings
+        client = chromadb.PersistentClient(path="/Users/legalai/projects/Contract-AI-System-/data/chromadb",
+                                           settings=Settings(anonymized_telemetry=False))
+        get_coll = lambda nm: client.get_or_create_collection(name=nm + suffix)
+    elif model_kind == "e5":
         model = SentenceTransformer("intfloat/multilingual-e5-large", device=dev)
         prefix = "passage: "
         suffix = "_e5"
@@ -142,6 +154,9 @@ def run_embed(targets, limit, refresh, only_docids, model_kind="minilm", batch=0
         get_coll = get_collection
     print(f"устройство: {dev}, модель: {model_kind}", flush=True)
     def embed(texts):
+        if prompt_doc:
+            return model.encode(texts, prompt_name=prompt_doc, batch_size=256,
+                                convert_to_numpy=True, show_progress_bar=False).tolist()
         # batch_size крупнее → лучше утилизация MPS-GPU (e5-large на M4)
         return model.encode([prefix + t for t in texts], batch_size=192 if model_kind=="e5" else 128,
                             convert_to_numpy=True, show_progress_bar=False).tolist()
@@ -190,8 +205,8 @@ if __name__ == "__main__":
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--refresh", action="store_true", help="удалить старые чанки документа и заэмбедить заново")
     ap.add_argument("--only-docids", default="", help="через запятую: эмбедить только эти doc_id")
-    ap.add_argument("--model", choices=["minilm","e5"], default="minilm",
-                    help="e5 = multilingual-e5-large (1024-dim, коллекции *_e5)")
+    ap.add_argument("--model", choices=["minilm","e5","user2"], default="minilm",
+                    help="user2 = deepvk/USER2-small (384-dim, лёгкая, RU, коллекции *_u2)")
     ap.add_argument("--batch", type=int, default=0,
                     help="дискретно: обработать не более N новых док за вызов и выйти")
     a = ap.parse_args()

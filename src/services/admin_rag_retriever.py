@@ -115,34 +115,34 @@ def get_reranker():
     return _reranker
 
 
-# ── e5-эмбеддер запроса (multilingual-e5-large) ─────────────────────────────
-_e5_model = None
-_e5_failed = False
+# ── USER2-эмбеддер запроса (deepvk/USER2-small, лёгкий, RU) ──────────────────
+_u2_model = None
+_u2_failed = False
 
-def get_e5_model():
-    """Lazy-init e5-large для эмбеддинга ЗАПРОСА (офлайн, MPS). Префикс 'query: '."""
-    global _e5_model, _e5_failed
-    if _e5_model is None and not _e5_failed:
+def get_u2_model():
+    """Lazy-init USER2-small для эмбеддинга ЗАПРОСА (офлайн, MPS). prompt search_query."""
+    global _u2_model, _u2_failed
+    if _u2_model is None and not _u2_failed:
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
         os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
         try:
             from sentence_transformers import SentenceTransformer
             import torch
             dev = "mps" if torch.backends.mps.is_available() else "cpu"
-            _e5_model = SentenceTransformer("intfloat/multilingual-e5-large", device=dev)
-            logger.info(f"AdminRAG: e5-large загружен (device={dev})")
+            _u2_model = SentenceTransformer("deepvk/USER2-small", device=dev)
+            logger.info(f"AdminRAG: USER2-small загружен (device={dev})")
         except Exception as e:
-            _e5_failed = True
-            logger.warning(f"AdminRAG: e5-large недоступен ({e}) — fallback на 384-стор")
-    return _e5_model
+            _u2_failed = True
+            logger.warning(f"AdminRAG: USER2-small недоступен ({e}) — fallback на 384-MiniLM-стор")
+    return _u2_model
 
-def _e5_collection(name: str):
-    """e5-коллекция (laws_e5/case_law_e5) без chroma-EF, если наполнена."""
+def _u2_collection(name: str):
+    """USER2-коллекция (laws_u2/case_law_u2) без chroma-EF, если наполнена."""
     client = get_chroma_client()
     if client is None:
         return None
     try:
-        coll = client.get_or_create_collection(name=name + "_e5")
+        coll = client.get_or_create_collection(name=name + "_u2")
         return coll if coll.count() > 0 else None
     except Exception:
         return None
@@ -171,14 +171,14 @@ def get_legal_context(
         # он наполнен; иначе старый 384-стор. e5 — запрос с префиксом 'query: '.
         fetch_k = max(n_results * 5, 15)
         cands = []  # (doc, label, title)
-        e5 = get_e5_model()
-        e5_active = e5 is not None and _e5_collection(collections[0]) is not None
+        u2 = get_u2_model()
+        u2_active = u2 is not None and _u2_collection(collections[0]) is not None
         qemb = None
-        if e5_active:
-            qemb = e5.encode(["query: " + query], convert_to_numpy=True)[0].tolist()
+        if u2_active:
+            qemb = u2.encode([query], prompt_name="search_query", convert_to_numpy=True)[0].tolist()
         for coll_name in collections:
-            if e5_active:
-                coll = _e5_collection(coll_name)
+            if u2_active:
+                coll = _u2_collection(coll_name)
                 if coll is None:
                     continue
                 results = coll.query(query_embeddings=[qemb],

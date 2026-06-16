@@ -2,7 +2,7 @@
 # Watchdog (cron каждые 30 мин): если e5-векторизация НЕ завершена и драйвер не
 # работает — поднять caffeinate + батч-драйвер (резюмирует). Защита долгого
 # прогона от сна/перезагрузки мини.
-MODEL=e5; BATCH=192
+MODEL=user2; BATCH=500
 DATA=/Users/legalai/consultant-data
 KS=/Users/legalai/projects/Contract-AI-System-
 [ -f "$DATA/embed_${MODEL}_done" ] && exit 0          # уже завершено
