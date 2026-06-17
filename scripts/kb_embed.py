@@ -131,7 +131,10 @@ def run_embed(targets, limit, refresh, only_docids, model_kind="minilm", batch=0
         # deepvk/USER2-small — лёгкая (34M), сильная для RU, 384-dim, ctx 8192.
         # Префиксы через prompt_name (search_document/search_query). Отдельные
         # коллекции laws_u2/case_law_u2 (без chroma-EF, эмбеддинги передаём сами).
-        model = SentenceTransformer("deepvk/USER2-small", device=dev)
+        # CPU, а НЕ MPS: боевой uvicorn держит ~16 ГиБ MPS → embedding на MPS падает
+        # с OOM. USER2 лёгкий (34M) → на CPU надёжно (медленнее, но без конфликта).
+        model = SentenceTransformer("deepvk/USER2-small", device="cpu")
+        dev = "cpu (USER2, во избежание MPS OOM)"
         prefix = ""; suffix = "_u2"; prompt_doc = "search_document"
         import chromadb
         from chromadb.config import Settings
@@ -155,9 +158,8 @@ def run_embed(targets, limit, refresh, only_docids, model_kind="minilm", batch=0
     print(f"устройство: {dev}, модель: {model_kind}", flush=True)
     def embed(texts):
         if prompt_doc:
-            # batch_size МАЛЫЙ: USER2=RuModernBERT (ctx 8192), при больших батчах
-            # MPS OOM (живой сервис уже держит ~10 ГиБ). 32 — безопасно, модель лёгкая.
-            return model.encode(texts, prompt_name=prompt_doc, batch_size=16,
+            # USER2 на CPU (RAM вдоволь) → batch_size 64 ок, MPS OOM не грозит.
+            return model.encode(texts, prompt_name=prompt_doc, batch_size=64,
                                 convert_to_numpy=True, show_progress_bar=False).tolist()
         # batch_size крупнее → лучше утилизация MPS-GPU (e5-large на M4)
         return model.encode([prefix + t for t in texts], batch_size=192 if model_kind=="e5" else 128,
