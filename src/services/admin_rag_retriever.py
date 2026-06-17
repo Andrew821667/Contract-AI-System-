@@ -105,10 +105,11 @@ def get_reranker():
         os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
         try:
             from sentence_transformers import CrossEncoder
-            import torch
-            dev = "mps" if torch.backends.mps.is_available() else "cpu"
-            _reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", device=dev)
-            logger.info(f"AdminRAG: реранкер загружен (device={dev})")
+            # РУССКИЙ реранкер (не английский ms-marco — тот для RU ранжировал плохо).
+            # DiTy/cross-encoder-russian-msmarco — ruBERT, обучен на ru MS MARCO, лёгкий.
+            # CPU: реранк идёт по ~20 кандидатам/запрос (не bulk), а MPS занят сервисом.
+            _reranker = CrossEncoder("DiTy/cross-encoder-russian-msmarco", device="cpu", max_length=512)
+            logger.info("AdminRAG: русский реранкер DiTy загружен (cpu)")
         except Exception as e:
             _reranker_failed = True
             logger.warning(f"AdminRAG: реранкер недоступен ({e}) — поиск без переранжирования")
