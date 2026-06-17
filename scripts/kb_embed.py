@@ -157,7 +157,7 @@ def run_embed(targets, limit, refresh, only_docids, model_kind="minilm", batch=0
         if prompt_doc:
             # batch_size МАЛЫЙ: USER2=RuModernBERT (ctx 8192), при больших батчах
             # MPS OOM (живой сервис уже держит ~10 ГиБ). 32 — безопасно, модель лёгкая.
-            return model.encode(texts, prompt_name=prompt_doc, batch_size=32,
+            return model.encode(texts, prompt_name=prompt_doc, batch_size=16,
                                 convert_to_numpy=True, show_progress_bar=False).tolist()
         # batch_size крупнее → лучше утилизация MPS-GPU (e5-large на M4)
         return model.encode([prefix + t for t in texts], batch_size=192 if model_kind=="e5" else 128,
