@@ -224,12 +224,31 @@ def get_legal_context(
         CODE_BONUS = {"kodeks": 0.25, "federal_constitutional_law": 0.10}
         for i, c in enumerate(cands):
             c["score"] = 0.45 * vsc[i] + 0.45 * rsc[i] + CODE_BONUS.get(c["category"], 0.0)
-        cands.sort(key=lambda c: -c["score"])
+        order = sorted(range(len(cands)), key=lambda i: -cands[i]["score"])
 
-        # 3) Топ-N в контекст
+        # 3) ДИВЕРСИФИКАЦИЯ: качественный юр-ответ = И НОРМА (кодекс/закон), И ПРАКТИКА.
+        # Гарантируем в выдаче лучший кодекс и лучшую судебную практику (если есть
+        # среди кандидатов), остальные слоты — по score. Иначе сильная практика
+        # вытесняла профильный кодекс из топа (и наоборот).
+        picked = []
+        def grab(pred):
+            for i in order:
+                if i not in picked and pred(cands[i]):
+                    picked.append(i); return
+        if n_results >= 2:
+            grab(lambda c: c["category"] == "kodeks")
+            grab(lambda c: c["label"] == "Судебная практика")
+        for i in order:
+            if len(picked) >= n_results:
+                break
+            if i not in picked:
+                picked.append(i)
+        picked = sorted(picked[:n_results], key=lambda i: -cands[i]["score"])
+
+        # 4) В контекст
         parts = []
-        for c in cands[:n_results]:
-            t = c["title"]
+        for i in picked:
+            c = cands[i]; t = c["title"]
             header = f"[{c['label']}] — {t}" if t else f"[{c['label']}]"
             parts.append(f"{header}\n{c['doc'][:600]}")
 
