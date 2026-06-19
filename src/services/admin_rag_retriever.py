@@ -167,11 +167,10 @@ def get_legal_context(
         collections = ["laws", "case_law"]
 
     try:
-        # 1) Кандидаты: берём заведомо больше (fetch_k), чтобы реранкер выбрал лучшее.
-        # Предпочитаем e5-стор (laws_e5/case_law_e5, 1024-dim, сильнее для RU) если
-        # он наполнен; иначе старый 384-стор. e5 — запрос с префиксом 'query: '.
-        fetch_k = max(n_results * 5, 15)
-        cands = []  # (doc, label, title)
+        # 1) Кандидаты: берём заведомо больше (fetch_k) для последующего смешанного
+        # ранжирования. Предпочитаем USER2-стор (laws_u2/case_law_u2) если наполнен.
+        fetch_k = max(n_results * 8, 24)
+        cands = []  # dict: doc/label/title/category/dist
         u2 = get_u2_model()
         u2_active = u2 is not None and _u2_collection(collections[0]) is not None
         qemb = None
@@ -184,38 +183,55 @@ def get_legal_context(
                     continue
                 results = coll.query(query_embeddings=[qemb],
                                      n_results=min(fetch_k, coll.count()),
-                                     include=["documents", "metadatas"])
+                                     include=["documents", "metadatas", "distances"])
             else:
                 coll = get_collection(coll_name)
                 if coll is None or coll.count() == 0:
                     continue
                 results = coll.query(query_texts=[query],
                                      n_results=min(fetch_k, coll.count()),
-                                     include=["documents", "metadatas"])
+                                     include=["documents", "metadatas", "distances"])
             if not results["documents"] or not results["documents"][0]:
                 continue
             label = COLLECTION_LABELS.get(coll_name, coll_name)
-            for doc, meta in zip(results["documents"][0], results["metadatas"][0]):
-                title = (meta or {}).get("title", "")
-                cands.append((doc, label, title))
+            dists = (results.get("distances") or [[None]*len(results["documents"][0])])[0]
+            for doc, meta, dist in zip(results["documents"][0], results["metadatas"][0], dists):
+                cands.append({"doc": doc, "label": label,
+                              "title": (meta or {}).get("title", ""),
+                              "category": (meta or {}).get("category", ""),
+                              "dist": dist})
 
         if not cands:
             return ""
 
-        # 2) Переранжирование cross-encoder'ом (если доступен)
+        # 2) СМЕШАННОЕ ранжирование: вектор (USER2) + реранк (DiTy) + приоритет кодексам.
+        # Чистый реранк DiTy топил лаконичные статьи кодексов под многословную практику;
+        # blend сохраняет сильные векторные попадания, реранк уточняет, бонус кодексам
+        # возвращает профильную норму наверх. Веса подобраны по тесту 20 вопросов.
+        def _minmax(vals):
+            lo, hi = min(vals), max(vals)
+            return [0.5]*len(vals) if hi <= lo else [(v - lo) / (hi - lo) for v in vals]
+        # вектор: меньше distance → лучше; инвертируем
+        vsc = _minmax([-(c["dist"] if c["dist"] is not None else 0.0) for c in cands])
         reranker = get_reranker()
         if reranker is not None and len(cands) > 1:
             try:
-                scores = reranker.predict([(query, c[0]) for c in cands])
-                cands = [c for _, c in sorted(zip(scores, cands), key=lambda x: -x[0])]
+                rsc = _minmax(list(reranker.predict([(query, c["doc"]) for c in cands])))
             except Exception as e:
-                logger.warning(f"AdminRAG: реранкинг не выполнен ({e})")
+                logger.warning(f"AdminRAG: реранкинг не выполнен ({e})"); rsc = vsc
+        else:
+            rsc = vsc
+        CODE_BONUS = {"kodeks": 0.25, "federal_constitutional_law": 0.10}
+        for i, c in enumerate(cands):
+            c["score"] = 0.45 * vsc[i] + 0.45 * rsc[i] + CODE_BONUS.get(c["category"], 0.0)
+        cands.sort(key=lambda c: -c["score"])
 
         # 3) Топ-N в контекст
         parts = []
-        for doc, label, title in cands[:n_results]:
-            header = f"[{label}]{f' — {title}' if title else ''}"
-            parts.append(f"{header}\n{doc[:600]}")
+        for c in cands[:n_results]:
+            t = c["title"]
+            header = f"[{c['label']}] — {t}" if t else f"[{c['label']}]"
+            parts.append(f"{header}\n{c['doc'][:600]}")
 
         context = "\n\n".join(parts)
         if len(context) > max_chars:
