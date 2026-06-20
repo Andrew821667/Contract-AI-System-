@@ -169,7 +169,7 @@ def get_legal_context(
     try:
         # 1) Кандидаты: берём заведомо больше (fetch_k) для последующего смешанного
         # ранжирования. Предпочитаем USER2-стор (laws_u2/case_law_u2) если наполнен.
-        fetch_k = max(n_results * 8, 24)
+        fetch_k = max(n_results * 8, int(os.environ.get("RAG_FETCH_K", "24")))
         cands = []  # dict: doc/label/title/category/dist
         u2 = get_u2_model()
         u2_active = u2 is not None and _u2_collection(collections[0]) is not None
