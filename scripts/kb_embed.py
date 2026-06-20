@@ -189,9 +189,15 @@ def run_embed(targets, limit, refresh, only_docids, model_kind="minilm", batch=0
             title=fm.get("title","")[:300]; cat=fm.get("category",""); url=fm.get("source_url","")
             ids=[f"{did}:{j}" for j in range(len(ch))]
             metas=[{"doc_id":did,"title":title,"category":cat,"source_url":url,"chunk":j} for j in range(len(ch))]
+            # CONTEXTUAL CHUNK: эмбеддим «<название документа> — <чанк>», чтобы
+            # эмбеддер знал идентичность документа (иначе чанк про «поставку» не
+            # знает, что он из ГК → путается с Воздушным кодексом). Для ВЫДАЧИ
+            # хранится сырой чанк (documents=sub), эмбеддинг — с префиксом названия.
+            ctx = (title or "")[:120]
             for b in range(0,len(ch),256):
                 sub=ch[b:b+256]
-                coll.add(documents=sub, ids=ids[b:b+256], metadatas=metas[b:b+256], embeddings=embed(sub))
+                emb_in = [f"{ctx} — {c}" for c in sub] if ctx else sub
+                coll.add(documents=sub, ids=ids[b:b+256], metadatas=metas[b:b+256], embeddings=embed(emb_in))
             added+=1; total_added+=1
             if i % 50 == 0:
                 print(f"  [{i}/{len(files)}] +{added} skip{skipped} refr{refreshed} чанков~{coll.count()} {time.time()-t0:.0f}s", flush=True)
