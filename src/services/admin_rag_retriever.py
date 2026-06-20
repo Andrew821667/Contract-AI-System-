@@ -221,9 +221,14 @@ def get_legal_context(
                 logger.warning(f"AdminRAG: реранкинг не выполнен ({e})"); rsc = vsc
         else:
             rsc = vsc
-        CODE_BONUS = {"kodeks": 0.25, "federal_constitutional_law": 0.10}
+        # Веса (через env для подбора): вектор USER2 — надёжный сигнал для RU-права,
+        # реранк DiTy уточняет, но не должен доминировать (топит кодексы).
+        VEC_W = float(os.environ.get("RAG_VEC_W", "0.65"))
+        RR_W = float(os.environ.get("RAG_RERANK_W", "0.35"))
+        KOD_B = float(os.environ.get("RAG_KODEKS_BONUS", "0.20"))
+        CODE_BONUS = {"kodeks": KOD_B, "federal_constitutional_law": KOD_B * 0.4}
         for i, c in enumerate(cands):
-            c["score"] = 0.45 * vsc[i] + 0.45 * rsc[i] + CODE_BONUS.get(c["category"], 0.0)
+            c["score"] = VEC_W * vsc[i] + RR_W * rsc[i] + CODE_BONUS.get(c["category"], 0.0)
         order = sorted(range(len(cands)), key=lambda i: -cands[i]["score"])
 
         # 3) ДИВЕРСИФИКАЦИЯ: качественный юр-ответ = И НОРМА (кодекс/закон), И ПРАКТИКА.
