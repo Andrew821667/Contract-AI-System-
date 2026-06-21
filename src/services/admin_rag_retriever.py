@@ -149,6 +149,66 @@ def _u2_collection(name: str):
         return None
 
 
+# ── Лексический канал (BM25/FTS5) для гибридного поиска ─────────────────────
+_fts_conn = None
+_fts_failed = False
+_FTS_PATH = "data/chromadb/lexical_fts.db"
+import re as _re
+
+_FTS_STOP = set(
+    "для при под над без про что как где или его это эта эти при течение порядок "
+    "связанных вопросам некоторых применения рассмотрения".split()
+)
+
+def _fts_query_terms(query: str) -> str:
+    """Строим FTS5 MATCH из значимых слов запроса (префиксы — грубая компенсация
+    русской морфологии, которой нет в FTS5): "неустой"* OR "займ"* ..."""
+    ws = [w for w in _re.findall(r"[а-яёa-z]+", query.lower())
+          if len(w) >= 5 and w not in _FTS_STOP]
+    seen, terms = set(), []
+    for w in ws:
+        stem = w[: max(5, len(w) - 2)]
+        if stem in seen:
+            continue
+        seen.add(stem)
+        terms.append(f'"{stem}"*')
+    return " OR ".join(terms)
+
+def _get_fts():
+    global _fts_conn, _fts_failed
+    if _fts_conn is None and not _fts_failed:
+        try:
+            import sqlite3
+            if not Path(_FTS_PATH).exists():
+                _fts_failed = True
+                return None
+            # read-only, общий для потоков uvicorn (sqlite + FTS5 — потокобезопасно на чтение)
+            _fts_conn = sqlite3.connect(f"file:{_FTS_PATH}?mode=ro", uri=True,
+                                        check_same_thread=False)
+        except Exception as e:
+            _fts_failed = True
+            logger.warning(f"AdminRAG: FTS-индекс недоступен ({e}) — гибрид выключен")
+    return _fts_conn
+
+def _fts_search(query: str, k: int):
+    """Топ-k чанков по BM25. Возвращает [(chunk_id, text, title, category, coll)]."""
+    conn = _get_fts()
+    if conn is None:
+        return []
+    fq = _fts_query_terms(query)
+    if not fq:
+        return []
+    try:
+        rows = conn.execute(
+            "SELECT chunk_id, text, title, category, coll FROM chunks_fts "
+            "WHERE chunks_fts MATCH ? ORDER BY bm25(chunks_fts) LIMIT ?",
+            (fq, k)).fetchall()
+        return rows
+    except Exception as e:
+        logger.warning(f"AdminRAG: FTS-поиск не выполнен ({e})")
+        return []
+
+
 # ── Retrieval ──────────────────────────────────────────────────────────────
 
 def get_legal_context(
@@ -195,11 +255,35 @@ def get_legal_context(
                 continue
             label = COLLECTION_LABELS.get(coll_name, coll_name)
             dists = (results.get("distances") or [[None]*len(results["documents"][0])])[0]
-            for doc, meta, dist in zip(results["documents"][0], results["metadatas"][0], dists):
+            ids0 = (results.get("ids") or [[None]*len(results["documents"][0])])[0]
+            for cid, doc, meta, dist in zip(ids0, results["documents"][0], results["metadatas"][0], dists):
                 cands.append({"doc": doc, "label": label,
                               "title": (meta or {}).get("title", ""),
                               "category": (meta or {}).get("category", ""),
-                              "dist": dist})
+                              "dist": dist, "cid": cid})
+
+        # 1b) ГИБРИД (аддитивный): лексический канал (BM25/FTS5) только ДОБАВЛЯет в пул
+        # кандидатов, которых плотный USER2 не нашёл. Плотный канал промахивается на
+        # enforcement-формулировках, где профильная статья ГК сформулирована
+        # академически («уменьшить неустойку» vs запрос «снижение неустойки»; «по
+        # договору займа» под ворохом практики) — лексика ловит ключевые слова и
+        # подаёт нужный кодекс в пул. ВАЖНО: плотные кандидаты НЕ трогаем (раньше
+        # перезапись dist=-RRF топила семантику и давала регресс на «директоре»).
+        # Лексические добиратели входят с худшим вектор-скором, но с полным правом на
+        # реранк DiTy + бонус кодексу + диверсификацию. Флаг RAG_HYBRID (по умолч. вкл).
+        if os.environ.get("RAG_HYBRID", "1") == "1":
+            lex = _fts_search(query, k=fetch_k)
+            if lex:
+                by_cid = {c["cid"] for c in cands}
+                worst = max((c["dist"] for c in cands if c["dist"] is not None),
+                            default=1.0)
+                for cid, text, title, cat, coll in lex:
+                    if cid in by_cid:
+                        continue
+                    lbl = COLLECTION_LABELS.get("laws" if coll == "laws" else "case_law", coll)
+                    cands.append({"doc": text, "label": lbl, "title": title,
+                                  "category": cat, "dist": worst, "cid": cid})
+                    by_cid.add(cid)
 
         if not cands:
             return ""
