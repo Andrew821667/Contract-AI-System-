@@ -94,6 +94,10 @@ async def lifespan(app: FastAPI):
         try:
             core_services = bootstrap(ScopedSession)
             app.state.core_services = core_services
+            # Persist bootstrap seed (e.g. ai_action_policies): seed_defaults()
+            # лишь flush() в открытую транзакцию, а remove() без commit откатывал
+            # её → таблица политик всегда оставалась пустой (фолбэк на хардкод).
+            ScopedSession.commit()
             # Expire cached ORM objects after bootstrap seed.
             ScopedSession.expire_all()
             ScopedSession.remove()  # release startup session back to pool
