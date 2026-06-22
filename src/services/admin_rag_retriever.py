@@ -271,19 +271,34 @@ def get_legal_context(
         # перезапись dist=-RRF топила семантику и давала регресс на «директоре»).
         # Лексические добиратели входят с худшим вектор-скором, но с полным правом на
         # реранк DiTy + бонус кодексу + диверсификацию. Флаг RAG_HYBRID (по умолч. вкл).
+        # ВАЖНО — инъекция ТОЛЬКО кодексов (kodeks/ФКЗ). Диагностика на A–E показала:
+        # промахи неустойка/заём/расписка — это retrieval-промахи (нужная статья ГК
+        # вообще не попадает в плотный пул, диверсификация бессильна), и достаёт её
+        # лишь лексика. А весь шум прошлого «широкого» гибрида был от инъекции НЕ-
+        # кодексов (129-ФЗ для контрафакта, обзоры) — они вытесняли верный код.
+        # Ограничение инъекции кодексами убирает шум, оставляя спасение статьи кодекса.
+        # Вместе с grab_pref (профильный код гарантированно получает слот) это даёт
+        # чистый прирост без регресса.
         if os.environ.get("RAG_HYBRID", "1") == "1":
             lex = _fts_search(query, k=fetch_k)
             if lex:
                 by_cid = {c["cid"] for c in cands}
                 worst = max((c["dist"] for c in cands if c["dist"] is not None),
                             default=1.0)
+                # Дедуп по документу: впрыскиваем НЕ БОЛЕЕ 1 чанка на код. Иначе
+                # лексика на одно тангенциальное слово («супруг» → НК) тащит 4 чанка
+                # одного кодекса и затапливает верный код (СК), который плотный нашёл.
+                # С 1 чанком профильный код по score (grab_pref) переигрывает добор.
+                lex_titles = set()
                 for cid, text, title, cat, coll in lex:
-                    if cid in by_cid:
+                    if (cid in by_cid
+                            or cat not in ("kodeks", "federal_constitutional_law")
+                            or title in lex_titles):
                         continue
                     lbl = COLLECTION_LABELS.get("laws" if coll == "laws" else "case_law", coll)
                     cands.append({"doc": text, "label": lbl, "title": title,
                                   "category": cat, "dist": worst, "cid": cid})
-                    by_cid.add(cid)
+                    by_cid.add(cid); lex_titles.add(title)
 
         if not cands:
             return ""
@@ -324,14 +339,48 @@ def get_legal_context(
             for i in order:
                 if i not in picked and pred(cands[i]):
                     picked.append(i); return
+        def _is_proc(c):
+            # Процессуальные кодексы (ГПК/АПК/УПК/КАС) — это «как судиться», а не
+            # материальная норма, которой обычно отвечают на правовой вопрос.
+            t = (c.get("title") or "").lower()
+            return "процессуальн" in t or "административного судопроизводств" in t
+        def grab_pref(pred_pref, pred_any):
+            for i in order:
+                if i not in picked and pred_pref(cands[i]):
+                    picked.append(i); return
+            for i in order:
+                if i not in picked and pred_any(cands[i]):
+                    picked.append(i); return
         if n_results >= 2:
-            grab(lambda c: c["category"] == "kodeks")
+            # Профильный (субстантивный) кодекс важнее процессуального. На enforcement-
+            # запросах («взыскать долг», «снижение неустойки судом», «кто возмещает
+            # ущерб») плотный ранжировал ГПК и обзоры ВС выше профильной статьи ГК, и
+            # единственный слот кодекса доставался процессуальному. Берём субстантивный
+            # кодекс, если он есть в пуле; иначе любой (вкл. процессуальный — тогда тема
+            # действительно процессуальная). Процессуальные вопросы не страдают: их ГПК/
+            # АПК и так попадает в выдачу по score через добор оставшихся слотов.
+            grab_pref(lambda c: c["category"] == "kodeks" and not _is_proc(c),
+                      lambda c: c["category"] == "kodeks")
             grab(lambda c: c["label"] == "Судебная практика")
+        # Кап ≤2 слота на один документ. Некоторые объёмные документы (НК ч.2,
+        # бюджетные ФЗ) ведут себя как embedding-хабы и затапливают выдачу одним
+        # документом (на «разводе» плотный давал НК ч.2 ×4, вытесняя СК). Ограничение
+        # на дубли одного title освобождает слоты для других профильных норм/практики
+        # — generic-приём против hub-flood, без побочных эффектов для остальных тем.
+        def _tkey(i):
+            return cands[i].get("title") or cands[i]["label"]
+        tcount = {}
+        for i in picked:
+            tcount[_tkey(i)] = tcount.get(_tkey(i), 0) + 1
         for i in order:
             if len(picked) >= n_results:
                 break
-            if i not in picked:
-                picked.append(i)
+            if i in picked:
+                continue
+            k = _tkey(i)
+            if tcount.get(k, 0) >= 2:
+                continue
+            picked.append(i); tcount[k] = tcount.get(k, 0) + 1
         picked = sorted(picked[:n_results], key=lambda i: -cands[i]["score"])
 
         # 4) В контекст
