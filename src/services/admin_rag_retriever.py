@@ -216,6 +216,7 @@ def get_legal_context(
     collections: Optional[List[str]] = None,
     n_results: int = 4,
     max_chars: int = 3000,
+    aux_query: Optional[str] = None,
 ) -> str:
     """
     Поиск релевантных фрагментов из базы знаний (laws + case_law).
@@ -227,6 +228,46 @@ def get_legal_context(
         collections = ["laws", "case_law"]
 
     try:
+        # 0) Авто-рерайт за флагом RAG_REWRITE: deepseek-chat переводит разговорный
+        # запрос в канон-форму → pool-union расширяет пул кандидатов.
+        # aux_query=None (default) → активируется; явный aux_query → без изменений.
+        _do_rewrite = False
+        if aux_query is None:
+            try:
+                from config.settings import settings as _cfg
+                _do_rewrite = _cfg.rag_rewrite
+            except Exception:
+                _do_rewrite = bool(os.environ.get("RAG_REWRITE", "").strip())
+        if aux_query is None and _do_rewrite:
+            try:
+                from src.services.llm_gateway import LLMGateway as _GW
+                _SYS = (
+                    "Ты — помощник юридического поиска по российскому праву. "
+                    "Перепиши бытовой вопрос пользователя в краткий поисковый "
+                    "запрос на языке закона: укажи область права и ключевые "
+                    "правовые термины/институты (как в названиях статей кодексов). "
+                    "НЕ отвечай на вопрос. Верни ТОЛЬКО переписанный запрос одной "
+                    "строкой, без кавычек."
+                )
+                _FEWSHOT = (
+                    "Примеры (для других тем):\n"
+                    "Вопрос: сколько времени есть на возврат денег за авиабилет\n"
+                    "Запрос: возврат провозной платы при отказе пассажира от воздушной перевозки\n\n"
+                    "Вопрос: что будет если не платить транспортный налог\n"
+                    "Запрос: ответственность за неуплату транспортного налога, взыскание недоимки\n\n"
+                    f"Вопрос: {query}\nЗапрос:"
+                )
+                _rw = _GW(provider="deepseek", model="deepseek-chat").call(
+                    prompt=_FEWSHOT, system_prompt=_SYS,
+                    response_format="text", temperature=0.0, max_tokens=120,
+                )
+                _rw = (_rw if isinstance(_rw, str) else str(_rw)).strip().strip('"').split("\n")[0].strip()
+                if _rw and _rw != query:
+                    aux_query = _rw
+                    logger.debug(f"AdminRAG rewrite: «{query[:50]}» → «{_rw[:70]}»")
+            except Exception as _re:
+                logger.warning(f"AdminRAG: query rewrite failed ({_re})")
+
         # 1) Кандидаты: берём заведомо больше (fetch_k) для последующего смешанного
         # ранжирования. Предпочитаем USER2-стор (laws_u2/case_law_u2) если наполнен.
         fetch_k = max(n_results * 8, int(os.environ.get("RAG_FETCH_K", "24")))
@@ -261,6 +302,38 @@ def get_legal_context(
                               "title": (meta or {}).get("title", ""),
                               "category": (meta or {}).get("category", ""),
                               "dist": dist, "cid": cid})
+
+        # 1a') POOL-UNION (query rewriting): отдельный плотный поиск по ПЕРЕПИСАННОМУ
+        # запросу, слияние пулов кандидатов (dedup по cid). Реранк остаётся по
+        # ИСХОДНОМУ query. НЕ заменяет, а ДОБАВЛЯет — raw-попадание не теряется.
+        if aux_query and u2_active and qemb is not None:
+            _seen = {c.get("cid") for c in cands}
+            try:
+                aemb = u2.encode([aux_query], prompt_name="search_query",
+                                 convert_to_numpy=True)[0].tolist()
+                for coll_name in collections:
+                    coll = _u2_collection(coll_name)
+                    if coll is None:
+                        continue
+                    ares = coll.query(query_embeddings=[aemb],
+                                      n_results=min(fetch_k, coll.count()),
+                                      include=["documents", "metadatas", "distances"])
+                    if not ares["documents"] or not ares["documents"][0]:
+                        continue
+                    label = COLLECTION_LABELS.get(coll_name, coll_name)
+                    adists = (ares.get("distances") or [[None]*len(ares["documents"][0])])[0]
+                    aids = (ares.get("ids") or [[None]*len(ares["documents"][0])])[0]
+                    for cid, doc, meta, dist in zip(aids, ares["documents"][0],
+                                                    ares["metadatas"][0], adists):
+                        if cid in _seen:
+                            continue
+                        _seen.add(cid)
+                        cands.append({"doc": doc, "label": label,
+                                      "title": (meta or {}).get("title", ""),
+                                      "category": (meta or {}).get("category", ""),
+                                      "dist": dist, "cid": cid, "is_aux": True})
+            except Exception as _e:
+                logger.warning(f"AdminRAG: pool-union aux retrieval failed ({_e})")
 
         # 1b) ГИБРИД (аддитивный): лексический канал (BM25/FTS5) только ДОБАВЛЯет в пул
         # кандидатов, которых плотный USER2 не нашёл. Плотный канал промахивается на
@@ -326,8 +399,11 @@ def get_legal_context(
         RR_W = float(os.environ.get("RAG_RERANK_W", "0.35"))
         KOD_B = float(os.environ.get("RAG_KODEKS_BONUS", "0.20"))
         CODE_BONUS = {"kodeks": KOD_B, "federal_constitutional_law": KOD_B * 0.4}
+        # raw-кандидаты получают бонус, чтобы aux не вытеснял при случайном реранк-шуме.
+        AUX_PEN = float(os.environ.get("RAG_AUX_PENALTY", "0.05"))
         for i, c in enumerate(cands):
-            c["score"] = VEC_W * vsc[i] + RR_W * rsc[i] + CODE_BONUS.get(c["category"], 0.0)
+            raw_bonus = 0.0 if c.get("is_aux") else AUX_PEN
+            c["score"] = VEC_W * vsc[i] + RR_W * rsc[i] + CODE_BONUS.get(c["category"], 0.0) + raw_bonus
         order = sorted(range(len(cands)), key=lambda i: -cands[i]["score"])
 
         # 3) ДИВЕРСИФИКАЦИЯ: качественный юр-ответ = И НОРМА (кодекс/закон), И ПРАКТИКА.

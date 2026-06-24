@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     yandex_api_key: str = ""
     yandex_folder_id: str = ""
     deepseek_api_key: str = ""
+
+    # RAG feature flags
+    rag_rewrite: bool = False   # RAG_REWRITE=1 → query rewriting via deepseek-chat
     qwen_api_key: str = ""
 
     # Google Gemini
