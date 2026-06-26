@@ -126,8 +126,15 @@ def validate_parse_result(parse_result, body_text: str,
         rep.issues.append(ValidationIssue('E2', 'error',
             f'тело {rep.body_chars} < {MIN_BODY_CHARS} симв (вероятно TOC/пустышка)'))
 
-    # E3 — наличие статей
-    if rep.article_count < MIN_ARTICLES:
+    # E3 — наличие статей. НЕ требуем для судебной практики: она прозовая
+    # (КС/Пленумы/обзоры) и парсится плоско, статей-узлов может не быть.
+    _m = parse_result.metadata or {}
+    _cat = str(_m.get('category', '')).lower()
+    _ttl = str(parse_result.title or '').lower()
+    _is_court = ('court' in _cat or 'судебн' in _cat
+                 or 'пленум' in _ttl or 'конституционного суда' in _ttl
+                 or 'обзор судебной' in _ttl or 'верховного суда' in _ttl)
+    if not _is_court and rep.article_count < MIN_ARTICLES:
         rep.issues.append(ValidationIssue('E3', 'error',
             f'статей {rep.article_count} < {MIN_ARTICLES} (структура не распознана)'))
 
