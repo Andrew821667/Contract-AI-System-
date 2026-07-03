@@ -561,6 +561,11 @@ def get_legal_context(
             parts.append(f"{header}\n{c['doc'][:600]}")
 
         context = "\n\n".join(parts)
+        # Обрезаем БАЗУ до бюджета ДО дописывания связанных норм: иначе при
+        # прод-лимите (max_chars=2000) hop-нормы всегда отрезаются с конца.
+        # Сами нормы капованы в _graph_hop_text (2 x 700 симв).
+        if len(context) > max_chars:
+            context = context[:max_chars] + "..."
         _hop = os.environ.get("RAG_GRAPH_HOP", "").strip() in ("1", "true", "True")
         if not _hop:
             try:
@@ -572,8 +577,6 @@ def get_legal_context(
             _ex = _graph_hop_text(query, qemb)
             if _ex:
                 context = context + "\n\n" + _ex
-        if len(context) > max_chars:
-            context = context[:max_chars] + "..."
         return context
 
     except Exception as e:
