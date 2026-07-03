@@ -236,20 +236,48 @@ def _pilot_collection():
 def _clean_norm(t):
     import re as _r
     t = _r.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", t)
-    t = _r.sub(r"\(в ред\.[^)]*\)|\(см\. текст[^)]*\)|Позиции высших судов[^\n]*|Путеводител[^\n]*|КонсультантПлюс|Подготовлена редакция[^\n]*|>>>", "", t)
+    t = _r.sub(r"\(в ред\.[^)]*\)|\(см\. текст[^)]*\)|Позиции высших судов[^\n]*|Путеводител[^\n]*|Перспективы и риски[^\n]*|Вопросы судебной практики[^\n]*|КонсультантПлюс|Подготовлена редакция[^\n]*|>>>", "", t)
     return _r.sub(r"[ \t]+", " ", t).strip()
 
 
-def _graph_hop_text(query, qemb):
-    edges = _semantic_edges(); pilot = _pilot_collection()
-    if pilot is None or not edges or qemb is None:
+_ART_TEXTS = None
+def _article_texts():
+    global _ART_TEXTS
+    if _ART_TEXTS is None:
+        try:
+            import json as _json
+            _ART_TEXTS = _json.load(open("data/article_texts.json", encoding="utf-8"))
+        except Exception:
+            _ART_TEXTS = {}
+    return _ART_TEXTS
+
+def _norm_text(did, art):
+    """Чистый текст статьи: сперва article_texts (из .md), затем pilot (fallback)."""
+    t = _article_texts().get(did, {}).get(art)
+    if t:
+        return t
+    pilot = _pilot_collection()
+    if pilot is None:
+        return ""
+    try:
+        g = pilot.get(where={"$and": [{"doc_id": did}, {"article": art}]},
+                      include=["documents"])
+        if g["documents"]:
+            return _clean_norm(" ".join(g["documents"]))
+    except Exception:
+        pass
+    return ""
+
+def _graph_hop_text(query, qemb, base_ctx=""):
+    edges = _semantic_edges()
+    if not edges or qemb is None:
         return ""
     rr = get_reranker()
     if rr is None:
         return ""
     try:
         import re as _re
-        # 1) ЯКОРЬ: сильный основной поиск laws_u2 -> реранк -> номер статьи из ТЕКСТА чанка.
+        # 1а) ЯКОРЬ-A: основной поиск laws_u2 -> реранк -> номер статьи из текста чанка.
         main = get_chroma_client().get_collection("laws_u2")
         mr = main.query(query_embeddings=[qemb], n_results=12,
                         include=["documents", "metadatas"])
@@ -259,51 +287,81 @@ def _graph_hop_text(query, qemb):
         msc = list(rr.predict([(query, d[:500]) for d in docs]))
         morder = sorted(range(len(docs)), key=lambda i: -msc[i])
         minsc = float(os.environ.get("RAG_HOP_MINSCORE", "0.2"))
-        if msc[morder[0]] < minsc:
-            return ""
         _ART = _re.compile(r"(?:Стать[яи]|ст\.?)\s*(\d+(?:\.\d+)?)")
         prim = []; prim_keys = set()
-        for i in morder[:4]:
+        # слабый чанк-топ гейтит только regex-якорь; LLM-якорь работает всегда
+        for i in (morder[:4] if msc[morder[0]] >= minsc else []):
             did = (metas[i] or {}).get("doc_id")
             if not did or did not in edges:
                 continue
-            for a in _ART.findall(docs[i][:400]):
+            for a in _ART.findall(docs[i][:600]):
                 if a in edges.get(did, {}) and (did, a) not in prim_keys:
                     prim_keys.add((did, a)); prim.append((did, a))
                     break
             if len(prim) >= 2:
                 break
+        # 1б) ЯКОРЬ-B (generate-then-verify): LLM называет статью+кодекс; берём ТОЛЬКО
+        # если статья есть в графе. Такие якоря имеют приоритет и мягкий порог.
+        llm_keys = set()
+        try:
+            from src.services.llm_gateway import LLMGateway as _GW
+            _CDX = {"ГК": ["5142", "9027", "34154", "64629"], "УК": ["10699"],
+                    "ТК": ["34683"], "СК": ["8982"], "КОАП": ["34661"],
+                    "НК": ["19671"], "ЖК": ["51057"], "ГПК": ["39570"],
+                    "УПК": ["34481"], "АПК": ["37800"], "ЗК": ["33773"],
+                    "БК": ["19702"]}
+            _o = _GW(provider="deepseek", model="deepseek-chat").call(
+                prompt=(f"Вопрос: {query}\nНазови 1-2 статьи российских кодексов, напрямую "
+                        "регулирующие вопрос. Формат СТРОГО: ст.НОМЕР КОДЕКС (кодекс одним "
+                        "словом: ГК, УК, ТК, СК, КоАП, НК, ЖК, ГПК, УПК, АПК, ЗК, БК), "
+                        "через запятую. Ничего больше."),
+                system_prompt="Ты юрист-справочник. Отвечай только в заданном формате.",
+                response_format="text", temperature=0.0, max_tokens=40)
+            for _num, _cdx in _re.findall(r"ст\.?\s*(\d+(?:\.\d+)?)\s*([А-Яа-яЁё]+)",
+                                          _o if isinstance(_o, str) else str(_o)):
+                for _did in _CDX.get(_cdx.upper().replace("РФ", "").strip(), []):
+                    if _num in edges.get(_did, {}) and (_did, _num) not in prim_keys:
+                        prim_keys.add((_did, _num)); prim.append((_did, _num))
+                        llm_keys.add((_did, _num))
+                        break
+        except Exception:
+            pass
         if not prim:
             return ""
-        # 2) РЁБРА: связанные нормы того же кодекса.
-        rel_keys = []
+        # 2) КАНДИДАТЫ: якоря (если их номера НЕТ в базовом контексте) + связанные по рёбрам.
+        ctx_nums = set(_ART.findall(base_ctx or ""))
+        rel_keys = [(did, a) for did, a in prim if a not in ctx_nums]
         for did, a in prim:
             for r in edges.get(did, {}).get(a, []):
                 if (did, r) not in prim_keys and (did, r) not in rel_keys:
                     rel_keys.append((did, r))
         items = []
-        for did, r in rel_keys[:12]:
-            try:
-                g = pilot.get(where={"$and": [{"doc_id": did}, {"article": r}]},
-                              include=["documents"])
-                if g["documents"]:
-                    items.append((r, _clean_norm(" ".join(g["documents"]))))
-            except Exception:
-                pass
+        for did, r in rel_keys[:16]:
+            t = _norm_text(did, r)
+            if t:
+                items.append((did, r, t))
         if not items:
             return ""
-        # 3) АНТИ-РАЗМЫВАНИЕ: абсолютный порог реранкера (мусор ~0.0, польза >=0.4).
-        rs = list(rr.predict([(query, t[:500]) for _, t in items]))
+        # 3) ОТБОР: LLM-якоря первыми (мягкий порог — они верифицированы графом),
+        # затем остальные по реранку с обычным порогом. Всего top-3.
+        rs = list(rr.predict([(query, t[2][:500]) for t in items]))
         _absmin = float(os.environ.get("RAG_HOP_REL_MIN", "0.1"))
-        ro = [i for i in sorted(range(len(items)), key=lambda i: -rs[i])
-              if rs[i] >= _absmin][:2]
-        if not ro:
+        _amin = float(os.environ.get("RAG_HOP_ANCHOR_MIN", "0.02"))
+        order = sorted(range(len(items)), key=lambda i: -rs[i])
+        pick = [i for i in order if (items[i][0], items[i][1]) in llm_keys and rs[i] >= _amin][:2]
+        for i in order:
+            if len(pick) >= 3:
+                break
+            if i not in pick and rs[i] >= _absmin:
+                pick.append(i)
+        if not pick:
             return ""
-        out = [f"[Связанная норма] ст.{items[i][0]}\n{items[i][1][:700]}" for i in ro]
+        out = [f"[Связанная норма] ст.{items[i][1]}\n{items[i][2][:700]}" for i in pick]
         return "\n\n".join(out)
     except Exception as _e:
         logger.warning(f"AdminRAG: graph-hop failed ({_e})")
         return ""
+
 
 def get_legal_context(
     query: str,
@@ -574,7 +632,7 @@ def get_legal_context(
             except Exception:
                 _hop = False
         if _hop:
-            _ex = _graph_hop_text(query, qemb)
+            _ex = _graph_hop_text(query, qemb, context)
             if _ex:
                 context = context + "\n\n" + _ex
         return context
