@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     # RAG feature flags
     rag_rewrite: bool = False   # RAG_REWRITE=1 → query rewriting via deepseek-chat
+    rag_graph_hop: bool = False  # RAG_GRAPH_HOP=1 → multi-hop обогащение связанными нормами (граф)
     qwen_api_key: str = ""
 
     # Google Gemini

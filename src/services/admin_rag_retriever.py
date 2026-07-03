@@ -211,6 +211,100 @@ def _fts_search(query: str, k: int):
 
 # ── Retrieval ──────────────────────────────────────────────────────────────
 
+# -- Graph-hop (semantic edges, project graph-build) --
+_SEM_EDGES = None
+def _semantic_edges():
+    global _SEM_EDGES
+    if _SEM_EDGES is None:
+        try:
+            import json as _json
+            _SEM_EDGES = _json.load(open("data/semantic_edges.json", encoding="utf-8"))
+        except Exception:
+            _SEM_EDGES = {}
+    return _SEM_EDGES
+
+_PILOT_COLL = None
+def _pilot_collection():
+    global _PILOT_COLL
+    if _PILOT_COLL is None:
+        try:
+            _PILOT_COLL = get_chroma_client().get_collection("laws_pilot")
+        except Exception:
+            _PILOT_COLL = False
+    return _PILOT_COLL or None
+
+def _clean_norm(t):
+    import re as _r
+    t = _r.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", t)
+    t = _r.sub(r"\(в ред\.[^)]*\)|\(см\. текст[^)]*\)|Позиции высших судов[^\n]*|Путеводител[^\n]*|КонсультантПлюс|Подготовлена редакция[^\n]*|>>>", "", t)
+    return _r.sub(r"[ \t]+", " ", t).strip()
+
+
+def _graph_hop_text(query, qemb):
+    edges = _semantic_edges(); pilot = _pilot_collection()
+    if pilot is None or not edges or qemb is None:
+        return ""
+    rr = get_reranker()
+    if rr is None:
+        return ""
+    try:
+        import re as _re
+        # 1) ЯКОРЬ: сильный основной поиск laws_u2 -> реранк -> номер статьи из ТЕКСТА чанка.
+        main = get_chroma_client().get_collection("laws_u2")
+        mr = main.query(query_embeddings=[qemb], n_results=12,
+                        include=["documents", "metadatas"])
+        if not mr["documents"] or not mr["documents"][0]:
+            return ""
+        docs = mr["documents"][0]; metas = mr["metadatas"][0]
+        msc = list(rr.predict([(query, d[:500]) for d in docs]))
+        morder = sorted(range(len(docs)), key=lambda i: -msc[i])
+        minsc = float(os.environ.get("RAG_HOP_MINSCORE", "0.2"))
+        if msc[morder[0]] < minsc:
+            return ""
+        _ART = _re.compile(r"(?:Стать[яи]|ст\.?)\s*(\d+(?:\.\d+)?)")
+        prim = []; prim_keys = set()
+        for i in morder[:4]:
+            did = (metas[i] or {}).get("doc_id")
+            if not did or did not in edges:
+                continue
+            for a in _ART.findall(docs[i][:400]):
+                if a in edges.get(did, {}) and (did, a) not in prim_keys:
+                    prim_keys.add((did, a)); prim.append((did, a))
+                    break
+            if len(prim) >= 2:
+                break
+        if not prim:
+            return ""
+        # 2) РЁБРА: связанные нормы того же кодекса.
+        rel_keys = []
+        for did, a in prim:
+            for r in edges.get(did, {}).get(a, []):
+                if (did, r) not in prim_keys and (did, r) not in rel_keys:
+                    rel_keys.append((did, r))
+        items = []
+        for did, r in rel_keys[:12]:
+            try:
+                g = pilot.get(where={"$and": [{"doc_id": did}, {"article": r}]},
+                              include=["documents"])
+                if g["documents"]:
+                    items.append((r, _clean_norm(" ".join(g["documents"]))))
+            except Exception:
+                pass
+        if not items:
+            return ""
+        # 3) АНТИ-РАЗМЫВАНИЕ: абсолютный порог реранкера (мусор ~0.0, польза >=0.4).
+        rs = list(rr.predict([(query, t[:500]) for _, t in items]))
+        _absmin = float(os.environ.get("RAG_HOP_REL_MIN", "0.1"))
+        ro = [i for i in sorted(range(len(items)), key=lambda i: -rs[i])
+              if rs[i] >= _absmin][:2]
+        if not ro:
+            return ""
+        out = [f"[Связанная норма] ст.{items[i][0]}\n{items[i][1][:700]}" for i in ro]
+        return "\n\n".join(out)
+    except Exception as _e:
+        logger.warning(f"AdminRAG: graph-hop failed ({_e})")
+        return ""
+
 def get_legal_context(
     query: str,
     collections: Optional[List[str]] = None,
@@ -467,6 +561,17 @@ def get_legal_context(
             parts.append(f"{header}\n{c['doc'][:600]}")
 
         context = "\n\n".join(parts)
+        _hop = os.environ.get("RAG_GRAPH_HOP", "").strip() in ("1", "true", "True")
+        if not _hop:
+            try:
+                from config.settings import settings as _gs
+                _hop = bool(getattr(_gs, "rag_graph_hop", False))
+            except Exception:
+                _hop = False
+        if _hop:
+            _ex = _graph_hop_text(query, qemb)
+            if _ex:
+                context = context + "\n\n" + _ex
         if len(context) > max_chars:
             context = context[:max_chars] + "..."
         return context
