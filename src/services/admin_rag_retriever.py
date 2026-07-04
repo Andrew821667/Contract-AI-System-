@@ -320,9 +320,10 @@ def _graph_hop_text(query, qemb, base_ctx=""):
             for _num, _cdx in _re.findall(r"ст\.?\s*(\d+(?:\.\d+)?)\s*([А-Яа-яЁё]+)",
                                           _o if isinstance(_o, str) else str(_o)):
                 for _did in _CDX.get(_cdx.upper().replace("РФ", "").strip(), []):
-                    if _num in edges.get(_did, {}) and (_did, _num) not in prim_keys:
-                        prim_keys.add((_did, _num)); prim.append((_did, _num))
+                    if _num in edges.get(_did, {}):
                         llm_keys.add((_did, _num))
+                        if (_did, _num) not in prim_keys:
+                            prim_keys.add((_did, _num)); prim.append((_did, _num))
                         break
         except Exception:
             pass
@@ -346,7 +347,7 @@ def _graph_hop_text(query, qemb, base_ctx=""):
         # затем остальные по реранку с обычным порогом. Всего top-3.
         rs = list(rr.predict([(query, t[2][:500]) for t in items]))
         _absmin = float(os.environ.get("RAG_HOP_REL_MIN", "0.1"))
-        _amin = float(os.environ.get("RAG_HOP_ANCHOR_MIN", "0.02"))
+        _amin = float(os.environ.get("RAG_HOP_ANCHOR_MIN", "0.0"))
         order = sorted(range(len(items)), key=lambda i: -rs[i])
         pick = [i for i in order if (items[i][0], items[i][1]) in llm_keys and rs[i] >= _amin][:2]
         for i in order:
