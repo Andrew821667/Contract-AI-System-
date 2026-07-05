@@ -5,6 +5,7 @@
 #   2) добор новых документов (skip-existing)
 #   3) ingest: новые (skip) + изменённые (--update --only-docids)
 #   4) embed: новые (resume) + изменённые (--refresh --only-docids)
+#   4b) fts-build: пересборка лексического FTS гибрида из ChromaDB
 #   5) relink → статус
 CT=/Users/legalai/projects/OpenClaw_consultant-tools
 KS=/Users/legalai/projects/Contract-AI-System-
@@ -54,6 +55,11 @@ fi
 status running "эмбеддинг"
 $PYK scripts/kb_embed.py --mode embed --collection all >> $LOG 2>&1 || fail "embed новых"
 [ -n "$CHANGED" ] && $PYK scripts/kb_embed.py --mode embed --collection all --refresh --only-docids "$CHANGED" >> $LOG 2>&1
+
+# 4b. пересборка лексического FTS-индекса гибрида (RAG_HYBRID) из ChromaDB —
+#     kb_embed его НЕ трогает; без этого шага лексический канал слепнет к новым докам.
+status running "пересборка FTS (гибрид)"
+$PYK scripts/kb_fts_build.py >> $LOG 2>&1 || echo "warn: fts_build" >> $LOG
 
 # 5. relink + статус
 status running "пересборка связей"
