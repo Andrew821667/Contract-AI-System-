@@ -391,33 +391,52 @@ def get_legal_context(
                 _do_rewrite = _cfg.rag_rewrite
             except Exception:
                 _do_rewrite = bool(os.environ.get("RAG_REWRITE", "").strip())
+        # Два варианта рерайта ОДНИМ вызовом: (1) доктрина/термины кодексов —
+        # исторический вариант; (2) титул профильного ФЗ + термины его заголовка.
+        # Замер 2026-07-11: вариант «титул ФЗ» ВМЕСТО доктрины чинит ФЗ-темы
+        # (held-out 77→87%), но роняет кодексные (парные 93→91%) — поэтому оба
+        # варианта идут в pool-union КАК ДВА aux-запроса (пул только растёт,
+        # эмбеддинг локальный/дешёвый, LLM-вызов один).
+        _aux_list = [aux_query] if aux_query else []
         if aux_query is None and _do_rewrite:
             try:
                 from src.services.llm_gateway import LLMGateway as _GW
                 _SYS = (
                     "Ты — помощник юридического поиска по российскому праву. "
-                    "Перепиши бытовой вопрос пользователя в краткий поисковый "
-                    "запрос на языке закона: укажи область права и ключевые "
-                    "правовые термины/институты (как в названиях статей кодексов). "
-                    "НЕ отвечай на вопрос. Верни ТОЛЬКО переписанный запрос одной "
-                    "строкой, без кавычек."
+                    "Перепиши бытовой вопрос пользователя в поисковые запросы на "
+                    "языке закона. Верни РОВНО ДВЕ строки без нумерации и кавычек:\n"
+                    "строка 1 — область права и ключевые правовые термины/институты "
+                    "(как в названиях статей кодексов);\n"
+                    "строка 2 — если тема регулируется профильным федеральным "
+                    "законом: его официальное краткое название (как в заголовке "
+                    "закона) плюс ключевые термины заголовка; если профильного ФЗ "
+                    "нет — та же тема другими словами.\n"
+                    "НЕ отвечай на вопрос."
                 )
                 _FEWSHOT = (
                     "Примеры (для других тем):\n"
                     "Вопрос: сколько времени есть на возврат денег за авиабилет\n"
-                    "Запрос: возврат провозной платы при отказе пассажира от воздушной перевозки\n\n"
-                    "Вопрос: что будет если не платить транспортный налог\n"
-                    "Запрос: ответственность за неуплату транспортного налога, взыскание недоимки\n\n"
+                    "Запрос:\nвозврат провозной платы при отказе пассажира от воздушной перевозки\n"
+                    "Воздушный кодекс, договор воздушной перевозки пассажира\n\n"
+                    "Вопрос: мне постоянно звонят с рекламой хотя я не соглашался\n"
+                    "Запрос:\nраспространение рекламы по сетям электросвязи, согласие абонента\n"
+                    "федеральный закон о рекламе, требования к распространению рекламы\n\n"
                     f"Вопрос: {query}\nЗапрос:"
                 )
                 _rw = _GW(provider="deepseek", model="deepseek-chat").call(
                     prompt=_FEWSHOT, system_prompt=_SYS,
-                    response_format="text", temperature=0.0, max_tokens=120,
+                    response_format="text", temperature=0.0, max_tokens=160,
                 )
-                _rw = (_rw if isinstance(_rw, str) else str(_rw)).strip().strip('"').split("\n")[0].strip()
-                if _rw and _rw != query:
-                    aux_query = _rw
-                    logger.debug(f"AdminRAG rewrite: «{query[:50]}» → «{_rw[:70]}»")
+                _rw = (_rw if isinstance(_rw, str) else str(_rw)).strip().strip('"')
+                for _line in _rw.splitlines():
+                    _line = _line.strip().strip('"').lstrip("-•1234567890.) ").strip()
+                    if _line and _line != query and _line not in _aux_list:
+                        _aux_list.append(_line)
+                    if len(_aux_list) >= 2:
+                        break
+                if _aux_list:
+                    aux_query = _aux_list[0]  # для обратной совместимости логики ниже
+                    logger.debug(f"AdminRAG rewrite: «{query[:50]}» → {_aux_list}")
             except Exception as _re:
                 logger.warning(f"AdminRAG: query rewrite failed ({_re})")
 
@@ -456,35 +475,37 @@ def get_legal_context(
                               "category": (meta or {}).get("category", ""),
                               "dist": dist, "cid": cid})
 
-        # 1a') POOL-UNION (query rewriting): отдельный плотный поиск по ПЕРЕПИСАННОМУ
-        # запросу, слияние пулов кандидатов (dedup по cid). Реранк остаётся по
-        # ИСХОДНОМУ query. НЕ заменяет, а ДОБАВЛЯет — raw-попадание не теряется.
-        if aux_query and u2_active and qemb is not None:
+        # 1a') POOL-UNION (query rewriting): отдельный плотный поиск по КАЖДОМУ
+        # варианту рерайта, слияние пулов кандидатов (dedup по cid). Реранк
+        # остаётся по ИСХОДНОМУ query. НЕ заменяет, а ДОБАВЛЯет — raw-попадание
+        # не теряется.
+        if _aux_list and u2_active and qemb is not None:
             _seen = {c.get("cid") for c in cands}
             try:
-                aemb = u2.encode([aux_query], prompt_name="search_query",
-                                 convert_to_numpy=True)[0].tolist()
-                for coll_name in collections:
-                    coll = _u2_collection(coll_name)
-                    if coll is None:
-                        continue
-                    ares = coll.query(query_embeddings=[aemb],
-                                      n_results=min(fetch_k, coll.count()),
-                                      include=["documents", "metadatas", "distances"])
-                    if not ares["documents"] or not ares["documents"][0]:
-                        continue
-                    label = COLLECTION_LABELS.get(coll_name, coll_name)
-                    adists = (ares.get("distances") or [[None]*len(ares["documents"][0])])[0]
-                    aids = (ares.get("ids") or [[None]*len(ares["documents"][0])])[0]
-                    for cid, doc, meta, dist in zip(aids, ares["documents"][0],
-                                                    ares["metadatas"][0], adists):
-                        if cid in _seen:
+                for _aq in _aux_list:
+                    aemb = u2.encode([_aq], prompt_name="search_query",
+                                     convert_to_numpy=True)[0].tolist()
+                    for coll_name in collections:
+                        coll = _u2_collection(coll_name)
+                        if coll is None:
                             continue
-                        _seen.add(cid)
-                        cands.append({"doc": doc, "label": label,
-                                      "title": (meta or {}).get("title", ""),
-                                      "category": (meta or {}).get("category", ""),
-                                      "dist": dist, "cid": cid, "is_aux": True})
+                        ares = coll.query(query_embeddings=[aemb],
+                                          n_results=min(fetch_k, coll.count()),
+                                          include=["documents", "metadatas", "distances"])
+                        if not ares["documents"] or not ares["documents"][0]:
+                            continue
+                        label = COLLECTION_LABELS.get(coll_name, coll_name)
+                        adists = (ares.get("distances") or [[None]*len(ares["documents"][0])])[0]
+                        aids = (ares.get("ids") or [[None]*len(ares["documents"][0])])[0]
+                        for cid, doc, meta, dist in zip(aids, ares["documents"][0],
+                                                        ares["metadatas"][0], adists):
+                            if cid in _seen:
+                                continue
+                            _seen.add(cid)
+                            cands.append({"doc": doc, "label": label,
+                                          "title": (meta or {}).get("title", ""),
+                                          "category": (meta or {}).get("category", ""),
+                                          "dist": dist, "cid": cid, "is_aux": True})
             except Exception as _e:
                 logger.warning(f"AdminRAG: pool-union aux retrieval failed ({_e})")
 
