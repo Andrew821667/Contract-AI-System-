@@ -591,6 +591,15 @@ def get_legal_context(
             raw_bonus = 0.0 if c.get("is_aux") else AUX_PEN
             c["score"] = VEC_W * vsc[i] + RR_W * rsc[i] + CODE_BONUS.get(c["category"], 0.0) + raw_bonus
         order = sorted(range(len(cands)), key=lambda i: -cands[i]["score"])
+        # Диагностика ранжирования: RAG_DEBUG_POOL=1 → топ-15 пула с компонентами
+        # скора в debug-лог (для разбора «закон в пуле, но не в top-3»).
+        if os.environ.get("RAG_DEBUG_POOL", "") == "1":
+            for _r, i in enumerate(order[:15], 1):
+                c = cands[i]
+                logger.debug(
+                    f"POOL#{_r} s={c['score']:.3f} v={vsc[i]:.2f} r={rsc[i]:.2f} "
+                    f"cat={c['category'] or '-'} aux={int(bool(c.get('is_aux')))} "
+                    f"| {(c['title'] or c['label'])[:70]}")
 
         # 3) ДИВЕРСИФИКАЦИЯ: качественный юр-ответ = И НОРМА (кодекс/закон), И ПРАКТИКА.
         # Гарантируем в выдаче лучший кодекс и лучшую судебную практику (если есть
