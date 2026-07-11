@@ -560,9 +560,21 @@ def get_legal_context(
         # вектор: меньше distance → лучше; инвертируем
         vsc = _minmax([-(c["dist"] if c["dist"] is not None else 0.0) for c in cands])
         reranker = get_reranker()
+        # Реранк-запрос: для КОРОТКИХ — исходный query (июньский выбор, безопасно).
+        # Для ДЛИННЫХ «жизненных» историй сырой текст (шум/эмоции) хоронит
+        # профильную норму в реранке (DiTy(длинный рассказ, статья) ≈ 0), хотя
+        # aux-канал её в пул принёс — замер 2026-07-11: рерайт-варианты идеальны,
+        # а top-3 без закона. Поэтому при длине ≥ RAG_RERANK_LONG_CHARS реранкаем
+        # по дистиллированному доктрина-варианту рерайта (короткие запросы этот
+        # код не затрагивает вообще).
+        _rq = query
+        _long_thr = int(os.environ.get("RAG_RERANK_LONG_CHARS", "160"))
+        if len(query) >= _long_thr and _aux_list:
+            _rq = _aux_list[0]
+            logger.debug(f"AdminRAG: длинный запрос ({len(query)} симв) — реранк по «{_rq[:60]}»")
         if reranker is not None and len(cands) > 1:
             try:
-                rsc = _minmax(list(reranker.predict([(query, c["doc"]) for c in cands])))
+                rsc = _minmax(list(reranker.predict([(_rq, c["doc"]) for c in cands])))
             except Exception as e:
                 logger.warning(f"AdminRAG: реранкинг не выполнен ({e})"); rsc = vsc
         else:
