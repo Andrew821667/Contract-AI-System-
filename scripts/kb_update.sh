@@ -51,10 +51,19 @@ if [ -n "$CHANGED" ]; then
        --kind kodeksy --kind fkz --kind fz --kind decrees --update --only-docids "$CHANGED" --no-phase2 >> $LOG 2>&1 || echo "warn: update changed" >> $LOG
 fi
 
-# 4. embed: новые (resume) + изменённые (refresh)
+# 4. embed: новые (resume) + изменённые (refresh).
+# ВАЖНО: два прохода. Дефолтный minilm кормит легаси-коллекции (laws/case_law),
+# а ПРОД ищет по *_u2 (USER2) — без явного --model user2 новые доки невидимы
+# семантике прода и FTS-гибриду (u2 наполнялся разовой миграцией kb_reembed_all,
+# регулярного u2-доэмбеда не было — дыра всплыла 2026-07-11: 39 новых доков
+# попали только в minilm).
 status running "эмбеддинг"
 $PYK scripts/kb_embed.py --mode embed --collection all >> $LOG 2>&1 || fail "embed новых"
-[ -n "$CHANGED" ] && $PYK scripts/kb_embed.py --mode embed --collection all --refresh --only-docids "$CHANGED" >> $LOG 2>&1
+$PYK scripts/kb_embed.py --mode embed --collection all --model user2 >> $LOG 2>&1 || fail "embed новых (user2)"
+if [ -n "$CHANGED" ]; then
+  $PYK scripts/kb_embed.py --mode embed --collection all --refresh --only-docids "$CHANGED" >> $LOG 2>&1
+  $PYK scripts/kb_embed.py --mode embed --collection all --model user2 --refresh --only-docids "$CHANGED" >> $LOG 2>&1
+fi
 
 # 4b. пересборка лексического FTS-индекса гибрида (RAG_HYBRID) из ChromaDB —
 #     kb_embed его НЕ трогает; без этого шага лексический канал слепнет к новым докам.
