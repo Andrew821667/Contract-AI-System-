@@ -17,8 +17,8 @@ module.exports = {
           300: '#d6c5a5',
           400: '#c4ad82',
           500: '#b09368',  // Warm tan
-          600: '#967b52',  // Soft brown — buttons, logo
-          700: '#7d6744',
+          600: '#7d6744',  // Accessible brown for buttons and logo
+          700: '#675536',
           800: '#5c4c33',
           900: '#3d3323',
           950: '#241e15',
@@ -113,8 +113,8 @@ module.exports = {
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
         'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
-        'gradient-primary': 'linear-gradient(135deg, #967b52 0%, #b09368 100%)',
-        'gradient-secondary': 'linear-gradient(135deg, #7d6744 0%, #967b52 100%)',
+        'gradient-primary': 'linear-gradient(135deg, #7d6744 0%, #b09368 100%)',
+        'gradient-secondary': 'linear-gradient(135deg, #675536 0%, #7d6744 100%)',
         'gradient-success': 'linear-gradient(135deg, #15803d 0%, #22c55e 100%)',
         'gradient-dark': 'linear-gradient(135deg, #1f2937 0%, #111827 100%)',
       },

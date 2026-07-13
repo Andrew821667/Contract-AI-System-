@@ -5,7 +5,7 @@ import HomeClient from './HomeClient'
 const siteUrl = (process.env.NEXT_PUBLIC_CONTRACT_SITE_URL || 'https://contract.ai-verdict.ru').replace(/\/$/, '')
 
 export const metadata: Metadata = {
-  title: 'Анализ договоров с ИИ',
+  title: { absolute: 'Анализ и проверка договоров с ИИ | Contract AI' },
   description:
     'Contract AI System анализирует договоры, выделяет юридические риски и помогает готовить правки. Бесплатно — до 3 договоров в месяц.',
   alternates: { canonical: '/' },
