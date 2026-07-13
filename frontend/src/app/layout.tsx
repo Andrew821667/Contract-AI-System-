@@ -19,6 +19,9 @@ export const metadata: Metadata = {
   },
   description: 'Интеллектуальная система для автоматизации работы с договорами',
   applicationName: 'Contract AI System',
+  authors: [{ name: 'AI Verdict', url: 'https://ai-verdict.ru' }],
+  creator: 'AI Verdict',
+  publisher: 'AI Verdict',
   robots: {
     index: true,
     follow: true,
@@ -34,6 +37,13 @@ export const metadata: Metadata = {
     siteName: 'Contract AI System',
     title: 'Contract AI System',
     description: 'Интеллектуальная система для автоматизации работы с договорами',
+    images: [{ url: '/opengraph-image', width: 1200, height: 630, alt: 'Contract AI System — анализ договоров с ИИ' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Contract AI System',
+    description: 'Интеллектуальная система для анализа и автоматизации работы с договорами',
+    images: ['/twitter-image'],
   },
 }
 

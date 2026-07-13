@@ -2,8 +2,24 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
-  title: 'Условия использования | Contract AI System',
+  title: 'Условия использования',
   description: 'Условия использования Contract AI System: бесплатный режим, ограничения, ответственность и правила работы с договорами.',
+  alternates: { canonical: '/terms' },
+  openGraph: {
+    type: 'article',
+    locale: 'ru_RU',
+    siteName: 'Contract AI System',
+    url: '/terms',
+    title: 'Условия использования | Contract AI System',
+    description: 'Бесплатный режим, ограничения ответственности и правила работы с договорами.',
+    images: [{ url: '/opengraph-image', width: 1200, height: 630, alt: 'Contract AI System' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Условия использования | Contract AI System',
+    description: 'Бесплатный режим, ограничения ответственности и правила работы с договорами.',
+    images: ['/twitter-image'],
+  },
 }
 
 const sections = [
@@ -75,7 +91,7 @@ export default function TermsPage() {
             ))}
           </div>
           <div className="mt-10 pt-6 border-t border-slate-700 text-sm text-stone-400">
-            Актуальная редакция: 13 мая 2026 года.
+            Актуальная редакция: 13 июля 2026 года.
           </div>
         </article>
       </div>

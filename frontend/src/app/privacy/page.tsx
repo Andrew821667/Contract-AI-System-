@@ -2,8 +2,24 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
-  title: 'Политика конфиденциальности | Contract AI System',
+  title: 'Политика конфиденциальности',
   description: 'Политика конфиденциальности Contract AI System: обработка данных, документы пользователей и меры защиты.',
+  alternates: { canonical: '/privacy' },
+  openGraph: {
+    type: 'article',
+    locale: 'ru_RU',
+    siteName: 'Contract AI System',
+    url: '/privacy',
+    title: 'Политика конфиденциальности | Contract AI System',
+    description: 'Обработка данных, загружаемых документов и меры защиты в Contract AI System.',
+    images: [{ url: '/opengraph-image', width: 1200, height: 630, alt: 'Contract AI System' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Политика конфиденциальности | Contract AI System',
+    description: 'Обработка данных, загружаемых документов и меры защиты.',
+    images: ['/twitter-image'],
+  },
 }
 
 const sections = [
@@ -74,7 +90,7 @@ export default function PrivacyPage() {
             ))}
           </div>
           <div className="mt-10 pt-6 border-t border-slate-700 text-sm text-stone-400">
-            Актуальная редакция: 13 мая 2026 года.
+            Актуальная редакция: 13 июля 2026 года.
           </div>
         </article>
       </div>
