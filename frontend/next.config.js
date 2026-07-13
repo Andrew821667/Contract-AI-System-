@@ -29,6 +29,38 @@ const nextConfig = {
     ]
   },
 
+  // Private application routes must stay out of search while remaining crawlable
+  // so bots can observe the X-Robots-Tag directive.
+  async headers() {
+    const privateRoutes = [
+      '/auth/:path*',
+      '/login',
+      '/register',
+      '/dashboard/:path*',
+      '/contracts/:path*',
+      '/clauses/:path*',
+      '/conditions/:path*',
+      '/ai/:path*',
+      '/negotiations/:path*',
+      '/workflow/:path*',
+      '/admin/:path*',
+      '/organization/:path*',
+      '/counterparties/:path*',
+      '/revisions/:path*',
+      '/streamlit-admin/:path*',
+    ]
+
+    return privateRoutes.map((source) => ({
+      source,
+      headers: [
+        {
+          key: 'X-Robots-Tag',
+          value: 'noindex, nofollow, noarchive',
+        },
+      ],
+    }))
+  },
+
   // Environment variables
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || '',
