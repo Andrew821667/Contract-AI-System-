@@ -34,6 +34,7 @@ def _auth_headers(client, email="pay_user@example.com", password="PayPass123!"):
     """Register + login, return Bearer headers."""
     client.post("/api/v1/auth/register", json={
         "email": email, "name": "Pay User", "password": password,
+        "legal_consent_accepted": True,
     })
     resp = client.post(
         "/api/v1/auth/login",

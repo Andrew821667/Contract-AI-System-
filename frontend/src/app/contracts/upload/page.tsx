@@ -33,6 +33,11 @@ export default function ContractUploadPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [legalAccepted, setLegalAccepted] = useState(false)
+
+  useEffect(() => {
+    setLegalAccepted(localStorage.getItem('contract_ai_legal_consent_v1') === 'accepted')
+  }, [])
 
   // Тип и связь
   const [docKind, setDocKind] = useState<DocKind>('contract')
@@ -70,6 +75,10 @@ export default function ContractUploadPage() {
       toast.error('Пожалуйста, загрузите файл')
       return
     }
+    if (!legalAccepted) {
+      toast.error('Нужно принять пользовательское соглашение и политику конфиденциальности')
+      return
+    }
     if (customRequiresFill) {
       toast.error('Для custom-связи укажите название или промпт')
       return
@@ -83,6 +92,7 @@ export default function ContractUploadPage() {
     setUploadProgress(20)
 
     try {
+      await api.acceptLegalConsent()
       const opts: ContractUploadOptions = {
         document_type: docKind === 'derivative' ? 'derivative' : 'contract',
         counterparty_id: counterparty?.id || undefined,
@@ -322,13 +332,34 @@ export default function ContractUploadPage() {
                   </motion.div>
                 )}
 
+                <label className="mt-6 flex items-start gap-3 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={legalAccepted}
+                    onChange={(event) => setLegalAccepted(event.target.checked)}
+                    disabled={uploading}
+                    className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span>
+                    Принимаю{' '}
+                    <a href="/terms" className="text-primary-600 underline hover:text-primary-700">
+                      пользовательское соглашение
+                    </a>
+                    {' '}и{' '}
+                    <a href="/privacy" className="text-primary-600 underline hover:text-primary-700">
+                      политику конфиденциальности
+                    </a>
+                    , включая обработку загружаемых документов для анализа.
+                  </span>
+                </label>
+
                 <div className="mt-6">
                   <Button
                     variant="primary"
                     className="w-full"
                     onClick={handleUpload}
                     loading={uploading}
-                    disabled={!selectedFile || customRequiresFill}
+                    disabled={!selectedFile || customRequiresFill || !legalAccepted}
                   >
                     {uploading ? 'Загрузка...' : 'Загрузить и проанализировать'}
                   </Button>

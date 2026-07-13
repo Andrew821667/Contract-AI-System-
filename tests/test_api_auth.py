@@ -11,6 +11,7 @@ class TestRegister:
             "email": "new@example.com",
             "name": "New User",
             "password": "StrongPass1!",
+            "legal_consent_accepted": True,
         })
         assert resp.status_code == 201, f"Register failed: {resp.json()}"
         data = resp.json()
@@ -21,6 +22,7 @@ class TestRegister:
             "email": "dup@example.com",
             "name": "User One",
             "password": "StrongPass1!",
+            "legal_consent_accepted": True,
         }
         resp1 = client.post("/api/v1/auth/register", json=payload)
         assert resp1.status_code == 201
@@ -34,8 +36,18 @@ class TestRegister:
             "email": "short@example.com",
             "name": "User",
             "password": "123",
+            "legal_consent_accepted": True,
         })
         assert resp.status_code == 422  # Pydantic validation
+
+    def test_register_requires_legal_consent(self, client):
+        resp = client.post("/api/v1/auth/register", json={
+            "email": "no-consent@example.com",
+            "name": "No Consent",
+            "password": "StrongPass1!",
+            "legal_consent_accepted": False,
+        })
+        assert resp.status_code == 400
 
 
 class TestLogin:

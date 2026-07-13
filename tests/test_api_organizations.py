@@ -32,7 +32,12 @@ BASE = "/api/v2/organizations"
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _register_and_login(client, email, password="OrgPass123!", name="Org User"):
-    client.post("/api/v1/auth/register", json={"email": email, "name": name, "password": password})
+    client.post("/api/v1/auth/register", json={
+        "email": email,
+        "name": name,
+        "password": password,
+        "legal_consent_accepted": True,
+    })
     resp = client.post("/api/v1/auth/login", data={"username": email, "password": password})
     token = resp.json().get("access_token", "")
     return {"Authorization": f"Bearer {token}"}

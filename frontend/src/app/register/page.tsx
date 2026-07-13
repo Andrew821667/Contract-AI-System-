@@ -14,6 +14,7 @@ interface RegisterFormData {
   email: string
   password: string
   confirmPassword: string
+  legalConsent: boolean
 }
 
 const translateRegistrationError = (err: any) => {
@@ -59,7 +60,10 @@ export default function RegisterPage() {
         email: data.email,
         name: data.name,
         password: data.password,
+        legal_consent_accepted: data.legalConsent,
       })
+
+      localStorage.setItem('contract_ai_legal_consent_v1', 'accepted')
 
       if (response.access_token && response.user) {
         // MVP: auto-login after registration
@@ -244,6 +248,32 @@ export default function RegisterPage() {
             </div>
 
             {/* Submit Button */}
+            <div>
+              <label className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white/70 p-3 text-sm text-gray-700">
+                <input
+                  {...register('legalConsent', {
+                    validate: value => value === true || 'Нужно принять документы сервиса'
+                  })}
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span>
+                  Принимаю{' '}
+                  <a href="/terms" className="text-primary-600 underline hover:text-primary-700">
+                    пользовательское соглашение
+                  </a>
+                  {' '}и{' '}
+                  <a href="/privacy" className="text-primary-600 underline hover:text-primary-700">
+                    политику конфиденциальности
+                  </a>
+                  .
+                </span>
+              </label>
+              {errors.legalConsent && (
+                <p className="text-danger-600 text-sm mt-1">{errors.legalConsent.message}</p>
+              )}
+            </div>
+
             <Button
               type="submit"
               variant="primary"

@@ -43,6 +43,7 @@ export interface RegisterRequest {
   email: string;
   name: string;
   password: string;
+  legal_consent_accepted: boolean;
 }
 
 export interface DemoActivateRequest {

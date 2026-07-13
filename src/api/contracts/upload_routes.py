@@ -19,6 +19,7 @@ from src.models import Contract, ContractParty, ContractRelation, Counterparty
 from src.models.auth_models import User
 from src.models.contract_relations_models import RELATION_TYPES
 from src.services.quota_service import contract_limit_message, get_contract_quota
+from src.services.legal_consent import user_has_legal_consent
 from src.utils.file_validator import (
     FileValidationError,
     sanitize_filename,
@@ -69,6 +70,11 @@ async def upload_contract(
     **Returns:** Contract ID, статус, привязки и (опционально) parent_candidates.
     """
     VALID_DOCUMENT_TYPES = {"contract", "derivative", "disagreement", "tracked_changes"}
+    if not user_has_legal_consent(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Примите пользовательское соглашение и политику конфиденциальности перед загрузкой документа",
+        )
     if document_type not in VALID_DOCUMENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

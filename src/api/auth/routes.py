@@ -23,6 +23,10 @@ from loguru import logger
 
 from src.models import get_db, User
 from src.services.auth_service import AuthService
+from src.services.legal_consent import (
+    LEGAL_CONSENT_VERSION,
+    record_user_legal_consent,
+)
 from src.services.quota_service import get_contract_quota
 from src.services.telegram_service import notify_new_user
 
@@ -124,6 +128,7 @@ class UserRegisterRequest(BaseModel):
     email: EmailStr
     name: str = Field(..., min_length=2, max_length=255)
     password: str = Field(..., min_length=8)
+    legal_consent_accepted: bool = False
     # SECURITY: role and subscription_tier are NOT accepted from client
     # New users always get junior_lawyer/demo. Only admin can change roles.
 
@@ -251,6 +256,12 @@ async def register(
     _check_csrf(request)
     auth_service = AuthService(db)
 
+    if not request_data.legal_consent_accepted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Нужно принять пользовательское соглашение и политику конфиденциальности",
+        )
+
     user, error = auth_service.register_user(
         email=request_data.email,
         name=request_data.name,
@@ -272,6 +283,11 @@ async def register(
     # Log registration from IP
     ip_address = get_client_ip(request)
     user_agent = request.headers.get("User-Agent")
+    record_user_legal_consent(
+        user,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
 
     auth_service.log_action(
         user_id=user.id,
@@ -333,6 +349,32 @@ async def register(
     response = JSONResponse(status_code=status.HTTP_201_CREATED, content=login_data)
     _set_refresh_cookie(response, refresh_token)
     return response
+
+
+@router.post("/legal-consent")
+async def accept_legal_consent(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _check_csrf(request)
+    ip_address = get_client_ip(request)
+    record_user_legal_consent(
+        current_user,
+        ip_address=ip_address,
+        user_agent=request.headers.get("User-Agent"),
+    )
+    auth_service = AuthService(db)
+    auth_service.log_action(
+        user_id=current_user.id,
+        action="legal_consent_accepted",
+        status="success",
+        ip_address=ip_address,
+        details={"version": LEGAL_CONSENT_VERSION},
+    )
+    db.add(current_user)
+    db.commit()
+    return {"accepted": True, "version": LEGAL_CONSENT_VERSION}
 
 
 @router.get("/quota")
