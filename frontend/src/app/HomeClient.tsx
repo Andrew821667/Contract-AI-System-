@@ -517,7 +517,7 @@ export default function Home() {
                   Готовы попробовать?
                 </h2>
                 <p className="text-xl text-stone-300 mb-8 max-w-2xl mx-auto">
-                  3 договора бесплатно в месяц. Без кредитной карты. Результат за 30 секунд.
+                  3 договора бесплатно в месяц. Без кредитной карты. Время анализа зависит от объёма документа.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
                   <Button variant="primary" size="lg" href="/register">
