@@ -36,7 +36,7 @@ export default function Home() {
     try {
       const response = await api.login({ username: email, password })
       toast.success(`Добро пожаловать, ${response.user.name}!`, {
-        style: { borderRadius: '12px', background: '#967b52', color: '#fff' },
+        style: { borderRadius: '12px', background: '#7d6744', color: '#fff' },
       })
       router.push('/dashboard')
     } catch (error: any) {
@@ -162,7 +162,8 @@ export default function Home() {
               className="flex items-center space-x-4"
             >
               <a href="#login" className="text-stone-300 hover:text-white transition text-sm font-medium">Вход</a>
-              <a href="#pricing" className="text-stone-300 hover:text-white transition text-sm font-medium">Тарифы</a>
+              <a href="/demo" className="hidden text-stone-300 hover:text-white transition text-sm font-medium md:inline">Демо</a>
+              <a href="#pricing" className="hidden text-stone-300 hover:text-white transition text-sm font-medium sm:inline">Тарифы</a>
               <Button variant="primary" size="sm" href="/register">
                 3 договора бесплатно
               </Button>
@@ -171,6 +172,7 @@ export default function Home() {
         </div>
       </nav>
 
+      <main>
       {/* Hero Section с формой входа */}
       <section className="relative overflow-hidden py-16 px-4">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -181,15 +183,11 @@ export default function Home() {
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             {/* Левая часть — текст */}
-            <motion.div
-              initial={{ opacity: 0, x: -30 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6 }}
-            >
+            <div>
               <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
-                <span className="text-white">Умная работа</span>
+                <span className="text-white">Анализ и проверка</span>{' '}
                 <br />
-                <span className="bg-gradient-to-r from-primary-300 to-primary-500 bg-clip-text text-transparent">с договорами</span>
+                <span className="bg-gradient-to-r from-primary-300 to-primary-500 bg-clip-text text-transparent">договоров с ИИ</span>
               </h1>
               <p className="text-lg md:text-xl text-stone-300 mb-8 leading-relaxed">
                 AI-система для анализа, генерации и управления юридическими договорами.
@@ -210,7 +208,7 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-            </motion.div>
+            </div>
 
             {/* Правая часть — форма входа */}
             <motion.div
@@ -496,9 +494,14 @@ export default function Home() {
               </Card>
             </div>
 
-            <Button variant="primary" size="lg" onClick={() => router.push('/pricing')}>
-              Форматы и условия запуска
-            </Button>
+            <div className="flex flex-col justify-center gap-3 sm:flex-row">
+              <Button variant="primary" size="lg" onClick={() => router.push('/pricing')}>
+                Форматы и условия запуска
+              </Button>
+              <Button variant="outline" size="lg" href="/demo">
+                Как работает бесплатный режим
+              </Button>
+            </div>
           </motion.div>
         </div>
       </section>
@@ -534,6 +537,7 @@ export default function Home() {
           </motion.div>
         </div>
       </section>
+      </main>
 
       {/* Footer */}
       <footer className="bg-slate-800/95 backdrop-blur-lg border-t border-primary-600/30 py-12 px-4">
@@ -552,16 +556,17 @@ export default function Home() {
             </div>
 
             <div>
-              <h4 className="font-bold text-white mb-4">Продукт</h4>
+              <p className="font-bold text-white mb-4">Продукт</p>
               <ul className="space-y-2 text-sm text-stone-300">
                 <li><a href="/pricing" className="hover:text-white transition">Тарифы</a></li>
+                <li><a href="/demo" className="hover:text-white transition">Бесплатный режим</a></li>
                 <li><a href="/register" className="hover:text-white transition">3 договора бесплатно</a></li>
                 <li><a href="#login" className="hover:text-white transition">Вход</a></li>
               </ul>
             </div>
 
             <div>
-              <h4 className="font-bold text-white mb-4">Контакты</h4>
+              <p className="font-bold text-white mb-4">Контакты</p>
               <ul className="space-y-2 text-sm text-stone-300">
                 <li><a href="https://t.me/legal_ai_helper_new_bot" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">Telegram-бот</a></li>
                 <li><a href="/pricing" className="hover:text-white transition">Для бизнеса</a></li>
@@ -569,7 +574,7 @@ export default function Home() {
             </div>
 
             <div>
-              <h4 className="font-bold text-white mb-4">Правовая информация</h4>
+              <p className="font-bold text-white mb-4">Правовая информация</p>
               <ul className="space-y-2 text-sm text-stone-300">
                 <li><a href="/privacy" className="hover:text-white transition">Политика конфиденциальности</a></li>
                 <li><a href="/terms" className="hover:text-white transition">Условия использования</a></li>
