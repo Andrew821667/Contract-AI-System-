@@ -7,6 +7,7 @@
 #   4) embed: новые (resume) + изменённые (--refresh --only-docids)
 #   4b) fts-build: пересборка лексического FTS гибрида из ChromaDB
 #   5) relink → статус
+#   6) рестарт бэкенда (KeepAlive) → новые/вычищенные доки в живой in-memory индекс
 CT=/Users/legalai/projects/OpenClaw_consultant-tools
 KS=/Users/legalai/projects/Contract-AI-System-
 DATA=/Users/legalai/consultant-data
@@ -79,6 +80,28 @@ $PYK scripts/kb_fts_build.py >> $LOG 2>&1 || echo "warn: fts_build" >> $LOG
 # 5. relink + статус
 status running "пересборка связей"
 $PYK scripts/kb_relink.py "$DB" >> $LOG 2>&1 || echo "warn: relink" >> $LOG
+
+# 6. рестарт бэкенда: KeepAlive-LaunchDaemon грузит ChromaDB-HNSW в память ПРИ
+#    СТАРТЕ — новые (ингест) и вычищенные (дедуп 2b) доки не видны ЖИВОМУ индексу
+#    до рестарта. Убиваем uvicorn (legalai владеет процессом) → launchd поднимает
+#    заново (~30с). Non-fatal: обновление уже на диске, рестарт лишь делает его
+#    живым. Без этого шага недельное обновление применялось только ручным рестартом.
+status running "рестарт бэкенда"
+BPID=$(pgrep -f "uvicorn src.main:app" | head -1)
+if [ -n "$BPID" ]; then
+  kill "$BPID" 2>/dev/null
+  RESTARTED=0
+  for _ in $(seq 1 30); do
+    sleep 2
+    if curl -s -m 3 http://127.0.0.1:8000/health 2>/dev/null | grep -q healthy; then
+      echo "$(date) backend respawned (was pid $BPID)" >> $LOG; RESTARTED=1; break
+    fi
+  done
+  [ "$RESTARTED" = 1 ] || echo "warn: backend не поднялся за 60с после рестарта" >> $LOG
+else
+  echo "warn: uvicorn не найден — рестарт пропущен" >> $LOG
+fi
+
 NCH=$( [ -s "$MANIFEST" ] && wc -l < "$MANIFEST" | tr -d ' ' || echo 0 )
 DOCS=$($PYK -c "import sqlite3;print(sqlite3.connect('$DB',timeout=30).execute('select count(*) from graph_documents').fetchone()[0])" 2>/dev/null)
 echo "=== $(date) KB UPDATE DONE (docs=$DOCS, changed=$NCH) ===" >> $LOG
