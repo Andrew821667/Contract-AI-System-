@@ -1,4 +1,11 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
+
+export const metadata: Metadata = {
+  title: 'Бесплатная проверка договора с ИИ',
+  description: 'Как проверить собственный договор в Contract AI: регистрация, загрузка файла, анализ рисков и бесплатный лимит до 3 договоров в месяц.',
+  alternates: { canonical: '/demo' },
+}
 
 export default function DemoPage() {
   return (
