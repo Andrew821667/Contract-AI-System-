@@ -8,6 +8,9 @@ import api from '@/services/api'
 import toast from 'react-hot-toast'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
+import BrandLockup from '@/components/BrandLockup'
+import BrandMark from '@/components/BrandMark'
+import { contractFaq } from '@/content/contractSeo'
 
 const freeLimits = [
   { value: '0 ₽', label: 'стоимость бесплатного режима' },
@@ -36,7 +39,7 @@ export default function Home() {
     try {
       const response = await api.login({ username: email, password })
       toast.success(`Добро пожаловать, ${response.user.name}!`, {
-        style: { borderRadius: '12px', background: '#7d6744', color: '#fff' },
+        style: { borderRadius: '12px', background: '#d97706', color: '#fff' },
       })
       router.push('/dashboard')
     } catch (error: any) {
@@ -140,9 +143,10 @@ export default function Home() {
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900">
+    <div className="brand-surface min-h-screen text-slate-100">
+      <div className="brand-grid fixed inset-0 pointer-events-none" aria-hidden="true" />
       {/* Навигация */}
-      <nav className="bg-slate-800/95 backdrop-blur-lg shadow-lg border-b border-primary-600/30 sticky top-0 z-50">
+      <nav className="bg-slate-950/85 backdrop-blur-xl shadow-lg border-b border-cyan-300/15 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <motion.div
@@ -150,10 +154,7 @@ export default function Home() {
               animate={{ opacity: 1, x: 0 }}
               className="flex items-center space-x-3"
             >
-              <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl shadow-sm flex items-center justify-center">
-                <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-              </div>
-              <span className="text-xl font-bold text-white">Contract AI</span>
+              <BrandLockup compact />
             </motion.div>
 
             <motion.div
@@ -161,11 +162,12 @@ export default function Home() {
               animate={{ opacity: 1, x: 0 }}
               className="flex items-center space-x-4"
             >
-              <a href="#login" className="text-stone-300 hover:text-white transition text-sm font-medium">Вход</a>
+              <a href="#login" className="hidden text-stone-300 hover:text-white transition text-sm font-medium sm:inline">Вход</a>
               <a href="/demo" className="hidden text-stone-300 hover:text-white transition text-sm font-medium md:inline">Демо</a>
               <a href="#pricing" className="hidden text-stone-300 hover:text-white transition text-sm font-medium sm:inline">Тарифы</a>
               <Button variant="primary" size="sm" href="/register">
-                3 договора бесплатно
+                <span className="sm:hidden">Начать</span>
+                <span className="hidden sm:inline">3 договора бесплатно</span>
               </Button>
             </motion.div>
           </div>
@@ -176,8 +178,8 @@ export default function Home() {
       {/* Hero Section с формой входа */}
       <section className="relative overflow-hidden py-16 px-4">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-20 right-20 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl" />
-          <div className="absolute bottom-10 left-10 w-72 h-72 bg-primary-400/10 rounded-full blur-3xl" />
+          <div className="absolute top-20 right-20 w-96 h-96 bg-primary-500/15 rounded-full blur-3xl" />
+          <div className="absolute bottom-10 left-10 w-72 h-72 bg-brand-400/15 rounded-full blur-3xl" />
         </div>
 
         <div className="max-w-7xl mx-auto relative z-10">
@@ -187,7 +189,7 @@ export default function Home() {
               <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
                 <span className="text-white">Анализ и проверка</span>{' '}
                 <br />
-                <span className="bg-gradient-to-r from-primary-300 to-primary-500 bg-clip-text text-transparent">договоров с ИИ</span>
+                <span className="bg-gradient-to-r from-cyan-300 via-sky-400 to-primary-400 bg-clip-text text-transparent">договоров с ИИ</span>
               </h1>
               <p className="text-lg md:text-xl text-stone-300 mb-8 leading-relaxed">
                 AI-система для анализа, генерации и управления юридическими договорами.
@@ -217,11 +219,9 @@ export default function Home() {
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
             >
-              <div className="bg-slate-700/90 backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-primary-500/30">
+              <div className="brand-panel rounded-3xl p-8">
                 <div className="text-center mb-6">
-                  <div className="w-16 h-16 mx-auto bg-gradient-to-br from-primary-500 to-primary-700 rounded-2xl shadow-lg flex items-center justify-center mb-4">
-                    <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                  </div>
+                  <BrandMark size={64} className="mx-auto mb-4 drop-shadow-[0_12px_28px_rgba(34,211,238,0.18)]" title="AI Verdict" />
                   <h2 className="text-2xl font-bold text-stone-200">Вход в систему</h2>
                   <p className="text-stone-300 text-sm mt-1">
                     Нет аккаунта? <a href="/register" className="text-stone-300 font-semibold hover:underline">Начните бесплатно</a>: 3 договора в месяц.
@@ -410,7 +410,7 @@ export default function Home() {
       </section>
 
       {/* Advantages Section */}
-      <section className="py-20 px-4 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-800">
+      <section className="py-20 px-4 bg-slate-950/45 border-y border-cyan-300/10">
         <div className="max-w-7xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -506,6 +506,27 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="px-4 py-20" aria-labelledby="faq-title">
+        <div className="mx-auto max-w-4xl">
+          <p className="mb-3 text-center text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">
+            Вопросы о проверке договоров
+          </p>
+          <h2 id="faq-title" className="mb-10 text-center text-4xl font-bold text-white md:text-5xl">
+            Частые вопросы
+          </h2>
+          <div className="grid gap-4">
+            {contractFaq.map((item) => (
+              <details key={item.question} className="brand-panel group rounded-2xl p-6">
+                <summary className="cursor-pointer list-none pr-8 text-lg font-semibold text-white marker:hidden">
+                  {item.question}
+                </summary>
+                <p className="mt-4 max-w-3xl leading-relaxed text-slate-300">{item.answer}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* CTA Section */}
       <section className="py-16 px-4">
         <div className="max-w-4xl mx-auto">
@@ -540,16 +561,11 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-slate-800/95 backdrop-blur-lg border-t border-primary-600/30 py-12 px-4">
+      <footer className="bg-slate-950/85 backdrop-blur-lg border-t border-cyan-300/15 py-12 px-4">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div>
-              <div className="flex items-center space-x-2 mb-4">
-                <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center">
-                  <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                </div>
-                <span className="font-bold text-white">Contract AI</span>
-              </div>
+              <BrandLockup compact className="mb-4" />
               <p className="text-sm text-stone-300">
                 Умная работа с договорами на основе искусственного интеллекта
               </p>

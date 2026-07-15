@@ -3,9 +3,9 @@ import type { MetadataRoute } from 'next'
 const siteUrl = (process.env.NEXT_PUBLIC_CONTRACT_SITE_URL || 'https://contract.ai-verdict.ru').replace(/\/$/, '')
 
 const publicRoutes = [
-  { route: '/', updatedAt: '2026-07-13', changeFrequency: 'weekly', priority: 1 },
-  { route: '/pricing', updatedAt: '2026-07-13', changeFrequency: 'monthly', priority: 0.9 },
-  { route: '/demo', updatedAt: '2026-07-13', changeFrequency: 'monthly', priority: 0.75 },
+  { route: '/', updatedAt: '2026-07-15', changeFrequency: 'weekly', priority: 1 },
+  { route: '/pricing', updatedAt: '2026-07-15', changeFrequency: 'monthly', priority: 0.9 },
+  { route: '/demo', updatedAt: '2026-07-15', changeFrequency: 'monthly', priority: 0.8 },
   { route: '/privacy', updatedAt: '2026-07-13', changeFrequency: 'yearly', priority: 0.3 },
   { route: '/terms', updatedAt: '2026-07-13', changeFrequency: 'yearly', priority: 0.3 },
 ] as const

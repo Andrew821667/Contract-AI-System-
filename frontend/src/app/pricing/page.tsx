@@ -6,6 +6,8 @@ import { motion } from 'framer-motion'
 import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
+import BrandLockup from '@/components/BrandLockup'
+import { pricingFaq } from '@/content/contractSeo'
 
 export default function PricingPage() {
   const router = useRouter()
@@ -150,9 +152,10 @@ export default function PricingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-100 via-gray-100 to-slate-200">
+    <div className="brand-surface min-h-screen text-slate-100">
+      <div className="brand-grid fixed inset-0 pointer-events-none" aria-hidden="true" />
       {/* Header */}
-      <nav className="bg-white/80 backdrop-blur-lg shadow-lg border-b border-white/20 sticky top-0 z-50">
+      <nav className="bg-slate-950/85 backdrop-blur-xl shadow-lg border-b border-cyan-300/15 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <motion.div
@@ -161,10 +164,7 @@ export default function PricingPage() {
               className="flex items-center space-x-3 cursor-pointer"
               onClick={() => router.push('/')}
             >
-              <div className="w-10 h-10 bg-primary-600 rounded-xl shadow-sm flex items-center justify-center">
-                <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-              </div>
-              <span className="text-xl font-bold text-slate-800">Contract AI</span>
+              <BrandLockup compact />
             </motion.div>
 
             <motion.div
@@ -172,11 +172,12 @@ export default function PricingPage() {
               animate={{ opacity: 1, x: 0 }}
               className="flex items-center space-x-3"
             >
-              <Button variant="outline" size="sm" onClick={() => router.push('/')}>
+              <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={() => router.push('/')}>
                 ← На главную
               </Button>
               <Button variant="primary" size="sm" href="/register">
-                3 договора бесплатно
+                <span className="sm:hidden">Начать</span>
+                <span className="hidden sm:inline">3 договора бесплатно</span>
               </Button>
             </motion.div>
           </div>
@@ -190,11 +191,11 @@ export default function PricingPage() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-12"
         >
-          <h1 className="text-5xl md:text-6xl font-bold text-slate-900 mb-4">
-            Тарифы и цены
+          <h1 className="text-5xl md:text-6xl font-bold text-white mb-4">
+            Тарифы на анализ договоров с ИИ
           </h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-8">
-            Кратно дешевле любого аналога на рынке. Прозрачно. Без скрытых платежей.
+          <p className="text-xl text-slate-300 max-w-2xl mx-auto mb-8">
+            Бесплатная проверка первых договоров, подписки для юристов и команд, пакеты документов и защищённый Enterprise-контур.
           </p>
 
           {/* Model Toggle */}
@@ -338,7 +339,7 @@ export default function PricingPage() {
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="text-center text-gray-600 mb-8"
+              className="text-center text-slate-300 mb-8"
             >
               Без подписки. Купите пакет — используйте в течение 12 месяцев.
               <br />Включает полный анализ (Уровень 1+2), генерацию, экспорт DOCX/PDF.
@@ -387,7 +388,7 @@ export default function PricingPage() {
           viewport={{ once: true }}
           className="max-w-4xl mx-auto mb-16"
         >
-          <h2 className="text-3xl font-bold text-slate-800 text-center mb-8">
+          <h2 className="text-3xl font-bold text-white text-center mb-8">
             Сравнение с конкурентами
           </h2>
 
@@ -426,19 +427,12 @@ export default function PricingPage() {
           viewport={{ once: true }}
           className="max-w-4xl mx-auto mb-16"
         >
-          <h2 className="text-3xl font-bold text-slate-800 text-center mb-8">
+          <h2 className="text-3xl font-bold text-white text-center mb-8">
             Частые вопросы
           </h2>
 
           <div className="space-y-4">
-            {[
-              { q: 'Чем подписка отличается от пакетов документов?', a: 'Подписка — ежемесячный доступ ко всем функциям с лимитами. Пакеты — разовая покупка определённого количества анализов без привязки к сроку (действуют 12 месяцев).' },
-              { q: 'Можно ли сменить тариф?', a: 'Да, вы можете повысить или понизить тариф в любое время из личного кабинета.' },
-              { q: 'Что будет, если лимиты закончатся?', a: 'Вы можете перейти на старший тариф или докупить пакет документов.' },
-              { q: 'Как работает Enterprise on-premise?', a: 'Мы разворачиваем систему на вашем сервере. Все данные остаются внутри вашего периметра. AI-модели работают локально через Ollama.' },
-              { q: 'Какие AI-модели используются?', a: 'DeepSeek V3/R1, YandexGPT 5, Qwen3 и другие современные модели. Также поддерживаются локальные модели через Ollama для полной конфиденциальности.' },
-              { q: 'Есть ли бесплатный период?', a: 'Да, бесплатный режим без ограничений по времени: 3 договора в месяц.' },
-            ].map((faq, idx) => (
+            {pricingFaq.map((faq, idx) => (
               <motion.div
                 key={idx}
                 initial={{ opacity: 0, x: -20 }}
@@ -447,8 +441,8 @@ export default function PricingPage() {
                 transition={{ delay: idx * 0.05 }}
               >
                 <Card hover>
-                  <h3 className="font-bold text-gray-900 mb-2">{faq.q}</h3>
-                  <p className="text-gray-600 text-sm">{faq.a}</p>
+                  <h3 className="font-bold text-gray-900 mb-2">{faq.question}</h3>
+                  <p className="text-gray-600 text-sm">{faq.answer}</p>
                 </Card>
               </motion.div>
             ))}

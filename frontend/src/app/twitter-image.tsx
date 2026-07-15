@@ -17,14 +17,14 @@ export default function Image() {
           justifyContent: 'center',
           gap: 22,
           padding: '58px',
-          background: 'linear-gradient(135deg, #0f172a, #292524)',
+          background: 'linear-gradient(135deg, #08111f, #0f1b2e)',
           color: '#fff',
           fontFamily: 'Arial',
         }}
       >
-        <div style={{ display: 'flex', fontSize: 28, color: '#f5d898' }}>Contract AI System</div>
+        <div style={{ display: 'flex', fontSize: 28, color: '#67e8f9' }}>Contract AI · by AI Verdict</div>
         <div style={{ display: 'flex', fontSize: 64, fontWeight: 700 }}>Анализ договоров с ИИ</div>
-        <div style={{ display: 'flex', fontSize: 30, color: '#d6d3d1' }}>3 договора в месяц бесплатно</div>
+        <div style={{ display: 'flex', fontSize: 30, color: '#fbbf24' }}>3 договора в месяц бесплатно</div>
       </div>
     ),
     size,

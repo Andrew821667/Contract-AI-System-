@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import { useForm } from 'react-hook-form'
 import toast from 'react-hot-toast'
 import Button from '@/components/ui/Button'
+import BrandLockup from '@/components/BrandLockup'
 import api from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -79,11 +80,12 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50/30 to-orange-50/20 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="brand-surface min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="brand-grid absolute inset-0 pointer-events-none" aria-hidden="true" />
       {/* Animated Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <motion.div
-          className="absolute top-20 right-20 w-96 h-96 bg-primary-200/30 rounded-full blur-3xl"
+          className="absolute top-20 right-20 w-96 h-96 bg-primary-400/15 rounded-full blur-3xl"
           animate={{
             scale: [1, 1.2, 1],
             x: [0, 30, 0],
@@ -92,7 +94,7 @@ export default function RegisterPage() {
           transition={{ duration: 8, repeat: Infinity }}
         />
         <motion.div
-          className="absolute bottom-20 left-20 w-96 h-96 bg-secondary-200/30 rounded-full blur-3xl"
+          className="absolute bottom-20 left-20 w-96 h-96 bg-brand-400/15 rounded-full blur-3xl"
           animate={{
             scale: [1.2, 1, 1.2],
             x: [0, -30, 0],
@@ -108,21 +110,21 @@ export default function RegisterPage() {
         animate={{ opacity: 1, y: 0 }}
         className="relative z-10 w-full max-w-md"
       >
-        <div className="glass backdrop-blur-xl rounded-3xl shadow-2xl p-8 border border-white/20">
+        <div className="brand-panel rounded-3xl p-8">
           {/* Logo */}
           <div className="text-center mb-8">
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ type: "spring", duration: 0.6 }}
-              className="w-16 h-16 bg-primary-600 rounded-2xl shadow-sm mx-auto mb-4 flex items-center justify-center"
+              className="mx-auto mb-4 w-fit"
             >
-              <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              <BrandLockup className="justify-center" />
             </motion.div>
             <h1 className="text-3xl font-bold gradient-text mb-2">
               Бесплатный доступ
             </h1>
-            <p className="text-gray-600">
+            <p className="text-slate-300">
               Создайте аккаунт: 3 договора бесплатно каждый месяц
             </p>
           </div>
@@ -138,7 +140,7 @@ export default function RegisterPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {/* Name */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-slate-200 mb-2">
                 Имя
               </label>
               <div className="relative">
@@ -149,7 +151,7 @@ export default function RegisterPage() {
                   })}
                   type="text"
                   placeholder="Иван Иванов"
-                  className="w-full pl-12 pr-4 py-3.5 bg-white/10 border-2 border-white/20 rounded-xl focus:border-primary-400 focus:bg-white/20 transition-all outline-none text-gray-800 placeholder-gray-500"
+                  className="w-full pl-12 pr-4 py-3.5 bg-slate-950/55 border-2 border-slate-600 rounded-xl focus:border-cyan-400 focus:ring-4 focus:ring-cyan-950/60 transition-all outline-none text-white placeholder-slate-500"
                 />
                 <svg className="absolute left-4 top-3.5 h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -162,7 +164,7 @@ export default function RegisterPage() {
 
             {/* Email */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-slate-200 mb-2">
                 Email
               </label>
               <div className="relative">
@@ -176,7 +178,7 @@ export default function RegisterPage() {
                   })}
                   type="email"
                   placeholder="email@example.com"
-                  className="w-full pl-12 pr-4 py-3.5 bg-white/10 border-2 border-white/20 rounded-xl focus:border-primary-400 focus:bg-white/20 transition-all outline-none text-gray-800 placeholder-gray-500"
+                  className="w-full pl-12 pr-4 py-3.5 bg-slate-950/55 border-2 border-slate-600 rounded-xl focus:border-cyan-400 focus:ring-4 focus:ring-cyan-950/60 transition-all outline-none text-white placeholder-slate-500"
                 />
                 <svg className="absolute left-4 top-3.5 h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -189,7 +191,7 @@ export default function RegisterPage() {
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-slate-200 mb-2">
                 Пароль
               </label>
               <div className="relative">
@@ -205,7 +207,7 @@ export default function RegisterPage() {
                   })}
                   type="password"
                   placeholder="••••••••"
-                  className="w-full pl-12 pr-4 py-3.5 bg-white/10 border-2 border-white/20 rounded-xl focus:border-primary-400 focus:bg-white/20 transition-all outline-none text-gray-800 placeholder-gray-500"
+                  className="w-full pl-12 pr-4 py-3.5 bg-slate-950/55 border-2 border-slate-600 rounded-xl focus:border-cyan-400 focus:ring-4 focus:ring-cyan-950/60 transition-all outline-none text-white placeholder-slate-500"
                 />
                 <svg className="absolute left-4 top-3.5 h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -215,13 +217,13 @@ export default function RegisterPage() {
                 <p className="text-danger-600 text-sm mt-1">{errors.password.message}</p>
               )}
               {!errors.password && (
-                <p className="text-gray-500 text-xs mt-1">Минимум 8 символов: заглавная буква, строчная буква и цифра</p>
+                <p className="text-slate-400 text-xs mt-1">Минимум 8 символов: заглавная буква, строчная буква и цифра</p>
               )}
             </div>
 
             {/* Confirm Password */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-slate-200 mb-2">
                 Подтверждение пароля
               </label>
               <div className="relative">
@@ -232,7 +234,7 @@ export default function RegisterPage() {
                   })}
                   type="password"
                   placeholder="••••••••"
-                  className="w-full pl-12 pr-4 py-3.5 bg-white/10 border-2 border-white/20 rounded-xl focus:border-primary-400 focus:bg-white/20 transition-all outline-none text-gray-800 placeholder-gray-500"
+                  className="w-full pl-12 pr-4 py-3.5 bg-slate-950/55 border-2 border-slate-600 rounded-xl focus:border-cyan-400 focus:ring-4 focus:ring-cyan-950/60 transition-all outline-none text-white placeholder-slate-500"
                 />
                 <svg className="absolute left-4 top-3.5 h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -257,11 +259,11 @@ export default function RegisterPage() {
 
           {/* Login Link */}
           <div className="mt-6 text-center">
-            <p className="text-gray-600">
+            <p className="text-slate-300">
               Уже есть аккаунт?{' '}
               <button
                 onClick={() => router.push('/login')}
-                className="text-primary-600 hover:text-primary-700 font-semibold"
+                className="text-primary-300 hover:text-primary-200 font-semibold"
               >
                 Войти
               </button>
@@ -272,7 +274,7 @@ export default function RegisterPage() {
           <div className="mt-4 text-center">
             <button
               onClick={() => router.push('/')}
-              className="text-gray-500 hover:text-gray-700 text-sm"
+              className="text-slate-400 hover:text-white text-sm"
             >
               ← На главную
             </button>

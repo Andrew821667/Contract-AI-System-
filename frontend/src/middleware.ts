@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 // Routes that require authentication
-const protectedRoutes = ['/dashboard', '/contracts', '/clauses', '/conditions', '/ai', '/negotiations', '/workflow', '/admin', '/organization']
+const protectedRoutes = ['/dashboard', '/contracts', '/clauses', '/conditions', '/ai', '/negotiations', '/workflow', '/admin', '/organization', '/counterparties', '/revisions']
 
 // Routes that should redirect to dashboard if already logged in.
 // Keep /register always reachable: browsers can retain a stale has_token cookie
@@ -54,6 +54,8 @@ export const config = {
     '/workflow/:path*',
     '/admin/:path*',
     '/organization/:path*',
+    '/counterparties/:path*',
+    '/revisions/:path*',
     '/auth/:path*',
     '/login',
     '/register',
