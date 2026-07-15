@@ -74,7 +74,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
       {/* Main content area — offset on desktop */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <header className="bg-white/90 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-200 dark:border-cyan-300/10 sticky top-0 z-30">
+        <header className="bg-white/95 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-400 dark:border-amber-500/20 shadow-lg shadow-slate-900/10 sticky top-0 z-30">
           <div className="px-4 sm:px-8 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-3">
               {/* Hamburger — mobile only */}

@@ -40,7 +40,7 @@ export default function PricingPage() {
       tier: 'personal',
       price: { monthly: 1790, annual: 16100 },
       description: 'Для юристов и частной практики',
-      gradient: 'from-blue-500 to-cyan-600',
+      gradient: 'from-amber-500 to-orange-700',
       popular: false,
       features: [
         { text: '50 договоров в месяц', included: true },
@@ -60,7 +60,7 @@ export default function PricingPage() {
       tier: 'team',
       price: { monthly: 4490, annual: 40400 },
       description: 'Для юридических отделов и фирм',
-      gradient: 'from-purple-500 to-pink-600',
+      gradient: 'from-amber-400 to-orange-600',
       popular: true,
       features: [
         { text: 'До 10 пользователей', included: true },
@@ -80,7 +80,7 @@ export default function PricingPage() {
       tier: 'business',
       price: { monthly: 14990, annual: 134900 },
       description: 'Для компаний и корпоративных юристов',
-      gradient: 'from-orange-500 to-red-600',
+      gradient: 'from-orange-500 to-amber-800',
       popular: false,
       features: [
         { text: 'До 50 пользователей', included: true },
@@ -155,7 +155,7 @@ export default function PricingPage() {
     <div className="brand-surface min-h-screen text-slate-900">
       <div className="brand-grid fixed inset-0 pointer-events-none" aria-hidden="true" />
       {/* Header */}
-      <nav className="bg-white/95 backdrop-blur-xl shadow-sm border-b border-slate-200 sticky top-0 z-50">
+      <nav className="bg-white/95 backdrop-blur-xl shadow-lg shadow-slate-900/10 border-b border-slate-400 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <motion.div

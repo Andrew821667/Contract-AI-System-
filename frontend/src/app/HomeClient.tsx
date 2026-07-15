@@ -146,7 +146,7 @@ export default function Home() {
     <div className="brand-surface min-h-screen text-slate-900">
       <div className="brand-grid fixed inset-0 pointer-events-none" aria-hidden="true" />
       {/* Навигация */}
-      <nav className="bg-white/95 backdrop-blur-xl shadow-sm border-b border-slate-200 sticky top-0 z-50">
+      <nav className="bg-white/95 backdrop-blur-xl shadow-lg shadow-slate-900/10 border-b border-slate-400 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <motion.div
@@ -176,7 +176,7 @@ export default function Home() {
 
       <main>
       {/* Hero Section с формой входа */}
-      <section className="relative overflow-hidden py-16 px-4">
+      <section className="brand-photo relative overflow-hidden py-16 px-4">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-20 right-20 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl" />
           <div className="absolute bottom-10 left-10 w-72 h-72 bg-slate-400/10 rounded-full blur-3xl" />

@@ -173,7 +173,7 @@ function SidebarContent({ user, onLogout, onNavigate }: {
   return (
     <>
       {/* Logo */}
-      <div className="px-6 py-5 border-b border-slate-200 dark:border-cyan-300/10">
+      <div className="px-6 py-5 border-b border-slate-300 dark:border-amber-500/20">
         <BrandLockup dark={resolvedTheme === 'dark'} />
       </div>
 
@@ -275,7 +275,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }: SidebarProp
   return (
     <>
       {/* Desktop sidebar — always visible on lg+ */}
-      <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-64 bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-cyan-300/10 flex-col z-40 shadow-xl shadow-slate-900/5 dark:shadow-slate-950/30">
+      <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-64 bg-white dark:bg-slate-950 border-r border-slate-400 dark:border-amber-500/20 flex-col z-40 shadow-xl shadow-slate-900/10 dark:shadow-slate-950/30">
         <SidebarContent user={user} onLogout={onLogout} onNavigate={() => {}} />
       </aside>
 

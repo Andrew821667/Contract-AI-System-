@@ -80,7 +80,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="brand-surface min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="brand-surface brand-photo brand-auth min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
       <div className="brand-grid absolute inset-0 pointer-events-none" aria-hidden="true" />
       {/* Animated Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
