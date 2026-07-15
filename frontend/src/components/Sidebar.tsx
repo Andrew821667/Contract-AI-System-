@@ -173,8 +173,8 @@ function SidebarContent({ user, onLogout, onNavigate }: {
   return (
     <>
       {/* Logo */}
-      <div className="px-6 py-5 border-b border-cyan-300/10">
-        <BrandLockup />
+      <div className="px-6 py-5 border-b border-slate-200 dark:border-cyan-300/10">
+        <BrandLockup dark={resolvedTheme === 'dark'} />
       </div>
 
       {/* Navigation */}
@@ -275,7 +275,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }: SidebarProp
   return (
     <>
       {/* Desktop sidebar — always visible on lg+ */}
-      <aside className="dark hidden lg:flex fixed left-0 top-0 h-screen w-64 bg-slate-950 border-r border-cyan-300/10 flex-col z-40 shadow-2xl shadow-slate-950/30">
+      <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-64 bg-white dark:bg-slate-950 border-r border-slate-200 dark:border-cyan-300/10 flex-col z-40 shadow-xl shadow-slate-900/5 dark:shadow-slate-950/30">
         <SidebarContent user={user} onLogout={onLogout} onNavigate={() => {}} />
       </aside>
 
@@ -297,7 +297,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }: SidebarProp
               animate={{ x: 0 }}
               exit={{ x: -280 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="dark lg:hidden fixed left-0 top-0 h-screen w-72 bg-slate-950 shadow-2xl flex flex-col z-50"
+              className="lg:hidden fixed left-0 top-0 h-screen w-72 bg-white dark:bg-slate-950 shadow-2xl flex flex-col z-50"
             >
               {/* Close button */}
               <button

@@ -143,10 +143,10 @@ export default function Home() {
   ]
 
   return (
-    <div className="brand-surface min-h-screen text-slate-100">
+    <div className="brand-surface min-h-screen text-slate-900">
       <div className="brand-grid fixed inset-0 pointer-events-none" aria-hidden="true" />
       {/* Навигация */}
-      <nav className="bg-slate-950/85 backdrop-blur-xl shadow-lg border-b border-cyan-300/15 sticky top-0 z-50">
+      <nav className="bg-white/95 backdrop-blur-xl shadow-sm border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <motion.div
@@ -162,9 +162,9 @@ export default function Home() {
               animate={{ opacity: 1, x: 0 }}
               className="flex items-center space-x-4"
             >
-              <a href="#login" className="hidden text-stone-300 hover:text-white transition text-sm font-medium sm:inline">Вход</a>
-              <a href="/demo" className="hidden text-stone-300 hover:text-white transition text-sm font-medium md:inline">Демо</a>
-              <a href="#pricing" className="hidden text-stone-300 hover:text-white transition text-sm font-medium sm:inline">Тарифы</a>
+              <a href="#login" className="hidden text-slate-700 hover:text-primary-700 transition text-sm font-medium sm:inline">Вход</a>
+              <a href="/demo" className="hidden text-slate-700 hover:text-primary-700 transition text-sm font-medium md:inline">Демо</a>
+              <a href="#pricing" className="hidden text-slate-700 hover:text-primary-700 transition text-sm font-medium sm:inline">Тарифы</a>
               <Button variant="primary" size="sm" href="/register">
                 <span className="sm:hidden">Начать</span>
                 <span className="hidden sm:inline">3 договора бесплатно</span>
@@ -178,8 +178,8 @@ export default function Home() {
       {/* Hero Section с формой входа */}
       <section className="relative overflow-hidden py-16 px-4">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-20 right-20 w-96 h-96 bg-primary-500/15 rounded-full blur-3xl" />
-          <div className="absolute bottom-10 left-10 w-72 h-72 bg-brand-400/15 rounded-full blur-3xl" />
+          <div className="absolute top-20 right-20 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl" />
+          <div className="absolute bottom-10 left-10 w-72 h-72 bg-slate-400/10 rounded-full blur-3xl" />
         </div>
 
         <div className="max-w-7xl mx-auto relative z-10">
@@ -187,11 +187,11 @@ export default function Home() {
             {/* Левая часть — текст */}
             <div>
               <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
-                <span className="text-white">Анализ и проверка</span>{' '}
+                <span className="text-slate-900">Анализ и проверка</span>{' '}
                 <br />
-                <span className="bg-gradient-to-r from-cyan-300 via-sky-400 to-primary-400 bg-clip-text text-transparent">договоров с ИИ</span>
+                <span className="bg-gradient-to-r from-primary-700 via-orange-500 to-primary-600 bg-clip-text text-transparent">договоров с ИИ</span>
               </h1>
-              <p className="text-lg md:text-xl text-stone-300 mb-8 leading-relaxed">
+              <p className="text-lg md:text-xl text-slate-700 mb-8 leading-relaxed">
                 AI-система для анализа, генерации и управления юридическими договорами.
                 Начните с 3 бесплатных договоров в месяц, чтобы проверить сценарий на практике.
               </p>
@@ -204,9 +204,9 @@ export default function Home() {
                   { value: 'Юрист', label: 'подтверждает выводы' },
                   { value: 'On-premise', label: 'для Enterprise' },
                 ].map((s, i) => (
-                  <div key={i} className="bg-white/15 backdrop-blur-sm rounded-xl p-3 border border-white/20">
-                    <div className="text-lg font-bold text-white">{s.value}</div>
-                    <div className="text-xs text-primary-200">{s.label}</div>
+                  <div key={i} className="bg-white/80 backdrop-blur-sm rounded-xl p-3 border border-slate-200 shadow-sm">
+                    <div className="text-lg font-bold text-slate-900">{s.value}</div>
+                    <div className="text-xs text-primary-700">{s.label}</div>
                   </div>
                 ))}
               </div>
@@ -222,31 +222,31 @@ export default function Home() {
               <div className="brand-panel rounded-3xl p-8">
                 <div className="text-center mb-6">
                   <BrandMark size={64} className="mx-auto mb-4 drop-shadow-[0_12px_28px_rgba(34,211,238,0.18)]" title="AI Verdict" />
-                  <h2 className="text-2xl font-bold text-stone-200">Вход в систему</h2>
-                  <p className="text-stone-300 text-sm mt-1">
-                    Нет аккаунта? <a href="/register" className="text-stone-300 font-semibold hover:underline">Начните бесплатно</a>: 3 договора в месяц.
+                  <h2 className="text-2xl font-bold text-slate-900">Вход в систему</h2>
+                  <p className="text-slate-600 text-sm mt-1">
+                    Нет аккаунта? <a href="/register" className="text-primary-700 font-semibold hover:underline">Начните бесплатно</a>: 3 договора в месяц.
                   </p>
                 </div>
 
                 <form onSubmit={handleLogin} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-semibold text-stone-300 mb-1.5">Email</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email</label>
                     <input
                       type="text"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-800 border-2 border-stone-500 rounded-xl text-white placeholder-stone-500 focus:border-primary-500 focus:ring-4 focus:ring-primary-900 transition-all outline-none"
+                      className="w-full px-4 py-3 bg-white border-2 border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
                       placeholder="user@example.com"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-stone-300 mb-1.5">Пароль</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Пароль</label>
                     <input
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full px-4 py-3 bg-slate-800 border-2 border-stone-500 rounded-xl text-white placeholder-stone-500 focus:border-primary-500 focus:ring-4 focus:ring-primary-900 transition-all outline-none"
+                      className="w-full px-4 py-3 bg-white border-2 border-slate-300 rounded-xl text-slate-900 placeholder-slate-400 focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none"
                       placeholder="••••••••"
                       required
                     />
@@ -276,7 +276,7 @@ export default function Home() {
                     href="https://t.me/legal_ai_helper_new_bot"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-stone-300 hover:text-stone-300 hover:underline"
+                    className="text-sm text-slate-600 hover:text-primary-700 hover:underline"
                   >
                     Забыли пароль?
                   </a>
@@ -289,16 +289,16 @@ export default function Home() {
 
       <section className="py-8 px-4">
         <div className="max-w-7xl mx-auto">
-          <Card className="bg-slate-600/40 border-2 border-primary-500/30">
+          <Card className="bg-white/80 border-2 border-primary-500/25">
             <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-8 items-center">
               <div>
-                <p className="text-sm font-semibold uppercase tracking-wide text-primary-300 mb-3">
+                <p className="text-sm font-semibold uppercase tracking-wide text-primary-700 mb-3">
                   Бесплатный режим
                 </p>
-                <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+                <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
                   3 договора бесплатно каждый месяц
                 </h2>
-                <p className="text-lg text-stone-300">
+                <p className="text-lg text-slate-700">
                   Бесплатный режим нужен для спокойной проверки сценария: загрузить документ,
                   посмотреть структуру отчета и понять, подходит ли система под ваш процесс.
                   Оплата появляется только на следующем этапе — пилоте или рабочем контуре.
@@ -306,9 +306,9 @@ export default function Home() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-4">
                 {freeLimits.map((limit) => (
-                  <div key={limit.label} className="rounded-2xl border border-primary-500/20 bg-slate-800/70 p-5">
-                    <div className="text-3xl font-bold text-white">{limit.value}</div>
-                    <div className="text-sm text-primary-300 mt-1">{limit.label}</div>
+                  <div key={limit.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="text-3xl font-bold text-slate-900">{limit.value}</div>
+                    <div className="text-sm text-primary-700 mt-1">{limit.label}</div>
                   </div>
                 ))}
               </div>
@@ -320,28 +320,28 @@ export default function Home() {
       {/* Как это работает */}
       <section className="py-12 px-4">
         <div className="max-w-7xl mx-auto">
-          <div className="relative bg-slate-600/30 backdrop-blur-xl rounded-3xl shadow-xl p-8 border border-primary-500/20">
+          <div className="relative bg-white/65 backdrop-blur-xl rounded-3xl shadow-xl p-8 border border-slate-200">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card hover className="text-center bg-slate-600/50 border-primary-500/30">
-                <div className="w-14 h-14 bg-slate-700/60 rounded-xl flex items-center justify-center mx-auto mb-3">
+              <Card hover className="text-center bg-white/85 border-slate-200">
+                <div className="w-14 h-14 bg-primary-50 rounded-xl flex items-center justify-center mx-auto mb-3">
                   <svg className="h-7 w-7 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                 </div>
-                <h3 className="font-bold text-lg mb-2 text-stone-200">Загрузите</h3>
-                <p className="text-sm text-stone-400">Договор в PDF, DOCX или XML</p>
+                <h3 className="font-bold text-lg mb-2 text-slate-900">Загрузите</h3>
+                <p className="text-sm text-slate-600">Договор в PDF, DOCX или XML</p>
               </Card>
-              <Card hover className="text-center bg-slate-600/50 border-primary-500/30">
-                <div className="w-14 h-14 bg-slate-700/60 rounded-xl flex items-center justify-center mx-auto mb-3">
+              <Card hover className="text-center bg-white/85 border-slate-200">
+                <div className="w-14 h-14 bg-primary-50 rounded-xl flex items-center justify-center mx-auto mb-3">
                   <svg className="h-7 w-7 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                 </div>
-                <h3 className="font-bold text-lg mb-2 text-stone-200">Анализ AI</h3>
-                <p className="text-sm text-stone-400">Автоматический анализ рисков</p>
+                <h3 className="font-bold text-lg mb-2 text-slate-900">Анализ AI</h3>
+                <p className="text-sm text-slate-600">Автоматический анализ рисков</p>
               </Card>
-              <Card hover className="text-center bg-slate-600/50 border-primary-500/30">
-                <div className="w-14 h-14 bg-slate-700/60 rounded-xl flex items-center justify-center mx-auto mb-3">
+              <Card hover className="text-center bg-white/85 border-slate-200">
+                <div className="w-14 h-14 bg-primary-50 rounded-xl flex items-center justify-center mx-auto mb-3">
                   <svg className="h-7 w-7 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                 </div>
-                <h3 className="font-bold text-lg mb-2 text-stone-200">Получите отчет</h3>
-                <p className="text-sm text-stone-400">С рекомендациями и рисками</p>
+                <h3 className="font-bold text-lg mb-2 text-slate-900">Получите отчет</h3>
+                <p className="text-sm text-slate-600">С рекомендациями и рисками</p>
               </Card>
             </div>
           </div>
@@ -360,11 +360,11 @@ export default function Home() {
                 viewport={{ once: true }}
                 transition={{ delay: idx * 0.1 }}
               >
-                <Card className="text-center bg-slate-600/40 border-primary-500/20">
-                  <div className="text-3xl md:text-4xl font-bold text-stone-200 mb-2">
+                <Card className="text-center bg-white/80 border-slate-200">
+                  <div className="text-3xl md:text-4xl font-bold text-slate-900 mb-2">
                     {stat.value}
                   </div>
-                  <div className="text-sm text-primary-300">{stat.label}</div>
+                  <div className="text-sm text-primary-700">{stat.label}</div>
                 </Card>
               </motion.div>
             ))}
@@ -381,10 +381,10 @@ export default function Home() {
             viewport={{ once: true }}
             className="text-center mb-12"
           >
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
+            <h2 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">
               Возможности системы
             </h2>
-            <p className="text-xl text-stone-300 max-w-3xl mx-auto">
+            <p className="text-xl text-slate-700 max-w-3xl mx-auto">
               Все инструменты для профессиональной работы с договорами
             </p>
           </motion.div>
@@ -398,10 +398,10 @@ export default function Home() {
                 viewport={{ once: true }}
                 transition={{ delay: idx * 0.1 }}
               >
-                <Card hover className="h-full bg-slate-600/40 border-primary-500/20">
-                  <div className="w-12 h-12 bg-slate-900/50 rounded-lg flex items-center justify-center mb-4">{feature.icon}</div>
-                  <h3 className="text-xl font-bold mb-2 text-stone-200">{feature.title}</h3>
-                  <p className="text-primary-300">{feature.description}</p>
+                <Card hover className="h-full bg-white/80 border-slate-200">
+                  <div className="w-12 h-12 bg-primary-50 rounded-lg flex items-center justify-center mb-4">{feature.icon}</div>
+                  <h3 className="text-xl font-bold mb-2 text-slate-900">{feature.title}</h3>
+                  <p className="text-slate-600">{feature.description}</p>
                 </Card>
               </motion.div>
             ))}
@@ -410,7 +410,7 @@ export default function Home() {
       </section>
 
       {/* Advantages Section */}
-      <section className="py-20 px-4 bg-slate-950/45 border-y border-cyan-300/10">
+      <section className="py-20 px-4 bg-white/55 border-y border-slate-200">
         <div className="max-w-7xl mx-auto">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -418,10 +418,10 @@ export default function Home() {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
+            <h2 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">
               Почему Contract AI
             </h2>
-            <p className="text-xl text-stone-300 max-w-3xl mx-auto">
+            <p className="text-xl text-slate-700 max-w-3xl mx-auto">
               8 причин выбрать нашу систему для работы с договорами
             </p>
           </motion.div>
@@ -436,12 +436,12 @@ export default function Home() {
                 transition={{ delay: idx * 0.08 }}
                 className="group"
               >
-                <div className="h-full bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300">
+                <div className="h-full bg-white/80 backdrop-blur-sm border border-slate-200 rounded-2xl p-6 hover:bg-white transition-all duration-300 shadow-sm">
                   <div className={`w-14 h-14 bg-gradient-to-br ${adv.gradient} rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
                     {adv.icon}
                   </div>
-                  <h3 className="text-lg font-bold text-white mb-2">{adv.title}</h3>
-                  <p className="text-sm text-stone-300 leading-relaxed">{adv.description}</p>
+                  <h3 className="text-lg font-bold text-slate-900 mb-2">{adv.title}</h3>
+                  <p className="text-sm text-slate-600 leading-relaxed">{adv.description}</p>
                 </div>
               </motion.div>
             ))}
@@ -453,7 +453,7 @@ export default function Home() {
             viewport={{ once: true }}
             className="mt-12 text-center"
           >
-            <p className="text-stone-300 text-sm">
+            <p className="text-slate-600 text-sm">
               AI-модели: DeepSeek V3/R1, YandexGPT 5, Qwen3 и другие.
               Переключение между провайдерами одной настройкой.
             </p>
@@ -469,28 +469,28 @@ export default function Home() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
+            <h2 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">
               Бесплатный старт и пилот
             </h2>
-            <p className="text-xl text-stone-300 mb-8 max-w-2xl mx-auto">
+            <p className="text-xl text-slate-700 mb-8 max-w-2xl mx-auto">
               3 договора бесплатно в месяц. После проверки сценария обсуждаем пилот и рабочий контур.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
-              <Card hover className="text-center bg-slate-600/40 border-primary-500/20">
-                <div className="text-sm text-primary-300 mb-1">Бесплатный режим</div>
-                <div className="text-3xl font-bold text-stone-200">0 ₽</div>
-                <div className="text-sm text-stone-300">первый шаг</div>
+              <Card hover className="text-center bg-white/80 border-slate-200">
+                <div className="text-sm text-primary-700 mb-1">Бесплатный режим</div>
+                <div className="text-3xl font-bold text-slate-900">0 ₽</div>
+                <div className="text-sm text-slate-600">первый шаг</div>
               </Card>
-              <Card hover className="text-center border-2 border-primary-500 bg-slate-600/50">
-                <div className="text-sm text-stone-200 font-semibold mb-1">Бесплатный лимит</div>
-                <div className="text-3xl font-bold text-white">3</div>
-                <div className="text-sm text-stone-300">договора в месяц</div>
+              <Card hover className="text-center border-2 border-primary-500 bg-primary-50/70">
+                <div className="text-sm text-primary-800 font-semibold mb-1">Бесплатный лимит</div>
+                <div className="text-3xl font-bold text-slate-900">3</div>
+                <div className="text-sm text-slate-600">договора в месяц</div>
               </Card>
-              <Card hover className="text-center bg-slate-600/40 border-primary-500/20">
-                <div className="text-sm text-primary-300 mb-1">Следующий этап</div>
-                <div className="text-3xl font-bold text-stone-200">Пилот</div>
-                <div className="text-sm text-stone-300">после проверки</div>
+              <Card hover className="text-center bg-white/80 border-slate-200">
+                <div className="text-sm text-primary-700 mb-1">Следующий этап</div>
+                <div className="text-3xl font-bold text-slate-900">Пилот</div>
+                <div className="text-sm text-slate-600">после проверки</div>
               </Card>
             </div>
 
@@ -508,19 +508,19 @@ export default function Home() {
 
       <section className="px-4 py-20" aria-labelledby="faq-title">
         <div className="mx-auto max-w-4xl">
-          <p className="mb-3 text-center text-sm font-semibold uppercase tracking-[0.2em] text-cyan-300">
+          <p className="mb-3 text-center text-sm font-semibold uppercase tracking-[0.2em] text-primary-700">
             Вопросы о проверке договоров
           </p>
-          <h2 id="faq-title" className="mb-10 text-center text-4xl font-bold text-white md:text-5xl">
+          <h2 id="faq-title" className="mb-10 text-center text-4xl font-bold text-slate-900 md:text-5xl">
             Частые вопросы
           </h2>
           <div className="grid gap-4">
             {contractFaq.map((item) => (
               <details key={item.question} className="brand-panel group rounded-2xl p-6">
-                <summary className="cursor-pointer list-none pr-8 text-lg font-semibold text-white marker:hidden">
+                <summary className="cursor-pointer list-none pr-8 text-lg font-semibold text-slate-900 marker:hidden">
                   {item.question}
                 </summary>
-                <p className="mt-4 max-w-3xl leading-relaxed text-slate-300">{item.answer}</p>
+                <p className="mt-4 max-w-3xl leading-relaxed text-slate-600">{item.answer}</p>
               </details>
             ))}
           </div>
@@ -535,12 +535,12 @@ export default function Home() {
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
           >
-            <Card className="text-center bg-slate-600/40 border-2 border-primary-500/30">
+            <Card className="text-center bg-white/80 border-2 border-primary-500/25">
               <div className="py-8">
-                <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+                <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
                   Готовы попробовать?
                 </h2>
-                <p className="text-xl text-stone-300 mb-8 max-w-2xl mx-auto">
+                <p className="text-xl text-slate-700 mb-8 max-w-2xl mx-auto">
                   3 договора бесплатно в месяц. Без кредитной карты. Время анализа зависит от объёма документа.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -561,44 +561,44 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-slate-950/85 backdrop-blur-lg border-t border-cyan-300/15 py-12 px-4">
+      <footer className="bg-white/80 backdrop-blur-lg border-t border-slate-200 py-12 px-4">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div>
               <BrandLockup compact className="mb-4" />
-              <p className="text-sm text-stone-300">
+              <p className="text-sm text-slate-600">
                 Умная работа с договорами на основе искусственного интеллекта
               </p>
             </div>
 
             <div>
-              <p className="font-bold text-white mb-4">Продукт</p>
-              <ul className="space-y-2 text-sm text-stone-300">
-                <li><a href="/pricing" className="hover:text-white transition">Тарифы</a></li>
-                <li><a href="/demo" className="hover:text-white transition">Бесплатный режим</a></li>
-                <li><a href="/register" className="hover:text-white transition">3 договора бесплатно</a></li>
-                <li><a href="#login" className="hover:text-white transition">Вход</a></li>
+              <p className="font-bold text-slate-900 mb-4">Продукт</p>
+              <ul className="space-y-2 text-sm text-slate-600">
+                <li><a href="/pricing" className="hover:text-primary-700 transition">Тарифы</a></li>
+                <li><a href="/demo" className="hover:text-primary-700 transition">Бесплатный режим</a></li>
+                <li><a href="/register" className="hover:text-primary-700 transition">3 договора бесплатно</a></li>
+                <li><a href="#login" className="hover:text-primary-700 transition">Вход</a></li>
               </ul>
             </div>
 
             <div>
-              <p className="font-bold text-white mb-4">Контакты</p>
-              <ul className="space-y-2 text-sm text-stone-300">
-                <li><a href="https://t.me/legal_ai_helper_new_bot" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">Telegram-бот</a></li>
-                <li><a href="/pricing" className="hover:text-white transition">Для бизнеса</a></li>
+              <p className="font-bold text-slate-900 mb-4">Контакты</p>
+              <ul className="space-y-2 text-sm text-slate-600">
+                <li><a href="https://t.me/legal_ai_helper_new_bot" target="_blank" rel="noopener noreferrer" className="hover:text-primary-700 transition">Telegram-бот</a></li>
+                <li><a href="/pricing" className="hover:text-primary-700 transition">Для бизнеса</a></li>
               </ul>
             </div>
 
             <div>
-              <p className="font-bold text-white mb-4">Правовая информация</p>
-              <ul className="space-y-2 text-sm text-stone-300">
-                <li><a href="/privacy" className="hover:text-white transition">Политика конфиденциальности</a></li>
-                <li><a href="/terms" className="hover:text-white transition">Условия использования</a></li>
+              <p className="font-bold text-slate-900 mb-4">Правовая информация</p>
+              <ul className="space-y-2 text-sm text-slate-600">
+                <li><a href="/privacy" className="hover:text-primary-700 transition">Политика конфиденциальности</a></li>
+                <li><a href="/terms" className="hover:text-primary-700 transition">Условия использования</a></li>
               </ul>
             </div>
           </div>
 
-          <div className="pt-8 border-t border-slate-700 text-center text-sm text-stone-300">
+          <div className="pt-8 border-t border-slate-200 text-center text-sm text-slate-600">
             <p>&copy; 2025–2026 Contract AI System. Все права защищены.</p>
           </div>
         </div>

@@ -94,7 +94,7 @@ export default function RegisterPage() {
           transition={{ duration: 8, repeat: Infinity }}
         />
         <motion.div
-          className="absolute bottom-20 left-20 w-96 h-96 bg-brand-400/15 rounded-full blur-3xl"
+          className="absolute bottom-20 left-20 w-96 h-96 bg-slate-400/10 rounded-full blur-3xl"
           animate={{
             scale: [1.2, 1, 1.2],
             x: [0, -30, 0],
@@ -124,7 +124,7 @@ export default function RegisterPage() {
             <h1 className="text-3xl font-bold gradient-text mb-2">
               Бесплатный доступ
             </h1>
-            <p className="text-slate-300">
+            <p className="text-slate-600">
               Создайте аккаунт: 3 договора бесплатно каждый месяц
             </p>
           </div>
@@ -140,7 +140,7 @@ export default function RegisterPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {/* Name */}
             <div>
-              <label className="block text-sm font-semibold text-slate-200 mb-2">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
                 Имя
               </label>
               <div className="relative">
@@ -151,7 +151,7 @@ export default function RegisterPage() {
                   })}
                   type="text"
                   placeholder="Иван Иванов"
-                  className="w-full pl-12 pr-4 py-3.5 bg-slate-950/55 border-2 border-slate-600 rounded-xl focus:border-cyan-400 focus:ring-4 focus:ring-cyan-950/60 transition-all outline-none text-white placeholder-slate-500"
+                  className="w-full pl-12 pr-4 py-3.5 bg-white border-2 border-slate-300 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none text-slate-900 placeholder-slate-400"
                 />
                 <svg className="absolute left-4 top-3.5 h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -164,7 +164,7 @@ export default function RegisterPage() {
 
             {/* Email */}
             <div>
-              <label className="block text-sm font-semibold text-slate-200 mb-2">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
                 Email
               </label>
               <div className="relative">
@@ -178,7 +178,7 @@ export default function RegisterPage() {
                   })}
                   type="email"
                   placeholder="email@example.com"
-                  className="w-full pl-12 pr-4 py-3.5 bg-slate-950/55 border-2 border-slate-600 rounded-xl focus:border-cyan-400 focus:ring-4 focus:ring-cyan-950/60 transition-all outline-none text-white placeholder-slate-500"
+                  className="w-full pl-12 pr-4 py-3.5 bg-white border-2 border-slate-300 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none text-slate-900 placeholder-slate-400"
                 />
                 <svg className="absolute left-4 top-3.5 h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -191,7 +191,7 @@ export default function RegisterPage() {
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-semibold text-slate-200 mb-2">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
                 Пароль
               </label>
               <div className="relative">
@@ -207,7 +207,7 @@ export default function RegisterPage() {
                   })}
                   type="password"
                   placeholder="••••••••"
-                  className="w-full pl-12 pr-4 py-3.5 bg-slate-950/55 border-2 border-slate-600 rounded-xl focus:border-cyan-400 focus:ring-4 focus:ring-cyan-950/60 transition-all outline-none text-white placeholder-slate-500"
+                  className="w-full pl-12 pr-4 py-3.5 bg-white border-2 border-slate-300 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none text-slate-900 placeholder-slate-400"
                 />
                 <svg className="absolute left-4 top-3.5 h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -217,13 +217,13 @@ export default function RegisterPage() {
                 <p className="text-danger-600 text-sm mt-1">{errors.password.message}</p>
               )}
               {!errors.password && (
-                <p className="text-slate-400 text-xs mt-1">Минимум 8 символов: заглавная буква, строчная буква и цифра</p>
+                <p className="text-slate-500 text-xs mt-1">Минимум 8 символов: заглавная буква, строчная буква и цифра</p>
               )}
             </div>
 
             {/* Confirm Password */}
             <div>
-              <label className="block text-sm font-semibold text-slate-200 mb-2">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">
                 Подтверждение пароля
               </label>
               <div className="relative">
@@ -234,7 +234,7 @@ export default function RegisterPage() {
                   })}
                   type="password"
                   placeholder="••••••••"
-                  className="w-full pl-12 pr-4 py-3.5 bg-slate-950/55 border-2 border-slate-600 rounded-xl focus:border-cyan-400 focus:ring-4 focus:ring-cyan-950/60 transition-all outline-none text-white placeholder-slate-500"
+                  className="w-full pl-12 pr-4 py-3.5 bg-white border-2 border-slate-300 rounded-xl focus:border-primary-500 focus:ring-4 focus:ring-primary-100 transition-all outline-none text-slate-900 placeholder-slate-400"
                 />
                 <svg className="absolute left-4 top-3.5 h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -259,11 +259,11 @@ export default function RegisterPage() {
 
           {/* Login Link */}
           <div className="mt-6 text-center">
-            <p className="text-slate-300">
+            <p className="text-slate-600">
               Уже есть аккаунт?{' '}
               <button
                 onClick={() => router.push('/login')}
-                className="text-primary-300 hover:text-primary-200 font-semibold"
+                className="text-primary-700 hover:text-primary-800 font-semibold"
               >
                 Войти
               </button>
@@ -274,7 +274,7 @@ export default function RegisterPage() {
           <div className="mt-4 text-center">
             <button
               onClick={() => router.push('/')}
-              className="text-slate-400 hover:text-white text-sm"
+              className="text-slate-500 hover:text-primary-700 text-sm"
             >
               ← На главную
             </button>
