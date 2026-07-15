@@ -74,7 +74,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
       {/* Main content area — offset on desktop */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <header className="bg-slate-950/80 backdrop-blur-xl border-b border-cyan-300/10 sticky top-0 z-30">
+        <header className="bg-white/90 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-200 dark:border-cyan-300/10 sticky top-0 z-30">
           <div className="px-4 sm:px-8 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-3">
               {/* Hamburger — mobile only */}
@@ -89,7 +89,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 </svg>
               </button>
               {title && (
-                <h1 className="text-xl sm:text-2xl font-bold text-white">{title}</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">{title}</h1>
               )}
             </div>
             <div className="flex items-center space-x-3">
@@ -102,7 +102,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 clearAll={notif.clearAll}
               />
               <div className="hidden sm:flex items-center space-x-3">
-                <span className="text-sm text-slate-300">
+                <span className="text-sm text-slate-600 dark:text-slate-300">
                   {user?.name}
                 </span>
                 <button

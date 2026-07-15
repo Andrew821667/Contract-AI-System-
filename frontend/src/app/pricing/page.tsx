@@ -152,10 +152,10 @@ export default function PricingPage() {
   }
 
   return (
-    <div className="brand-surface min-h-screen text-slate-100">
+    <div className="brand-surface min-h-screen text-slate-900">
       <div className="brand-grid fixed inset-0 pointer-events-none" aria-hidden="true" />
       {/* Header */}
-      <nav className="bg-slate-950/85 backdrop-blur-xl shadow-lg border-b border-cyan-300/15 sticky top-0 z-50">
+      <nav className="bg-white/95 backdrop-blur-xl shadow-sm border-b border-slate-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <motion.div
@@ -191,10 +191,10 @@ export default function PricingPage() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-12"
         >
-          <h1 className="text-5xl md:text-6xl font-bold text-white mb-4">
+          <h1 className="text-5xl md:text-6xl font-bold text-slate-900 mb-4">
             Тарифы на анализ договоров с ИИ
           </h1>
-          <p className="text-xl text-slate-300 max-w-2xl mx-auto mb-8">
+          <p className="text-xl text-slate-600 max-w-2xl mx-auto mb-8">
             Бесплатная проверка первых договоров, подписки для юристов и команд, пакеты документов и защищённый Enterprise-контур.
           </p>
 
@@ -339,7 +339,7 @@ export default function PricingPage() {
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="text-center text-slate-300 mb-8"
+              className="text-center text-slate-600 mb-8"
             >
               Без подписки. Купите пакет — используйте в течение 12 месяцев.
               <br />Включает полный анализ (Уровень 1+2), генерацию, экспорт DOCX/PDF.
@@ -388,7 +388,7 @@ export default function PricingPage() {
           viewport={{ once: true }}
           className="max-w-4xl mx-auto mb-16"
         >
-          <h2 className="text-3xl font-bold text-white text-center mb-8">
+          <h2 className="text-3xl font-bold text-slate-900 text-center mb-8">
             Сравнение с конкурентами
           </h2>
 
@@ -427,7 +427,7 @@ export default function PricingPage() {
           viewport={{ once: true }}
           className="max-w-4xl mx-auto mb-16"
         >
-          <h2 className="text-3xl font-bold text-white text-center mb-8">
+          <h2 className="text-3xl font-bold text-slate-900 text-center mb-8">
             Частые вопросы
           </h2>
 

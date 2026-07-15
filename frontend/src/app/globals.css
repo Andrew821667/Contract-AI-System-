@@ -17,12 +17,10 @@
   --shadow-color-lg: rgba(0, 0, 0, 0.15);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 241, 245, 249;
-    --background-start-rgb: 15, 23, 42;
-    --background-end-rgb: 30, 41, 59;
-  }
+.dark {
+  --foreground-rgb: 241, 245, 249;
+  --background-start-rgb: 15, 23, 42;
+  --background-end-rgb: 30, 41, 59;
 }
 
 /* Smooth scrolling */
@@ -46,26 +44,40 @@ body {
 }
 
 .brand-surface {
-  background-color: #08111f;
+  background-color: #f5f3ef;
   background-image:
-    radial-gradient(circle at 12% 8%, rgba(34, 211, 238, 0.16), transparent 30rem),
-    radial-gradient(circle at 88% 18%, rgba(245, 158, 11, 0.14), transparent 27rem),
-    linear-gradient(145deg, #08111f 0%, #0f1b2e 54%, #111827 100%);
+    radial-gradient(circle at 12% 8%, rgba(217, 119, 6, 0.11), transparent 30rem),
+    radial-gradient(circle at 88% 18%, rgba(148, 163, 184, 0.16), transparent 27rem),
+    linear-gradient(145deg, #faf9f7 0%, #f3f1ed 54%, #ece9e3 100%);
 }
 
 .brand-grid {
   background-image:
-    linear-gradient(rgba(148, 163, 184, 0.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.055) 1px, transparent 1px);
+    linear-gradient(rgba(100, 116, 139, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(100, 116, 139, 0.07) 1px, transparent 1px);
   background-size: 42px 42px;
   mask-image: linear-gradient(to bottom, black, transparent 92%);
 }
 
 .brand-panel {
-  background: rgba(15, 23, 42, 0.82);
-  border: 1px solid rgba(103, 232, 249, 0.18);
-  box-shadow: 0 28px 80px rgba(2, 6, 23, 0.34);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.12);
   backdrop-filter: blur(18px);
+}
+
+.dark .brand-surface {
+  background-color: #08111f;
+  background-image:
+    radial-gradient(circle at 12% 8%, rgba(34, 211, 238, 0.12), transparent 30rem),
+    radial-gradient(circle at 88% 18%, rgba(245, 158, 11, 0.12), transparent 27rem),
+    linear-gradient(145deg, #08111f 0%, #0f1b2e 54%, #111827 100%);
+}
+
+.dark .brand-panel {
+  background: rgba(15, 23, 42, 0.82);
+  border-color: rgba(103, 232, 249, 0.16);
+  box-shadow: 0 28px 80px rgba(2, 6, 23, 0.34);
 }
 
 /* Custom scrollbar */
@@ -112,7 +124,7 @@ body {
 
   /* Gradient text */
   .gradient-text {
-    background: linear-gradient(135deg, #67e8f9, #fbbf24);
+    background: linear-gradient(135deg, #d97706, #f97316);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

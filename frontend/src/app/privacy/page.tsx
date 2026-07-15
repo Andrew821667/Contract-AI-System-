@@ -64,25 +64,25 @@ export default function PrivacyPage() {
     <main className="brand-surface min-h-screen px-4 py-12">
       <div className="brand-grid fixed inset-0 pointer-events-none" aria-hidden="true" />
       <div className="relative max-w-4xl mx-auto">
-        <Link href="/" className="inline-flex items-center text-primary-200 hover:text-white font-semibold mb-8">
+        <Link href="/" className="inline-flex items-center text-primary-700 hover:text-primary-800 font-semibold mb-8">
           ← На главную Contract AI
         </Link>
         <article className="brand-panel rounded-2xl p-6 md:p-10">
           <p className="text-sm font-semibold uppercase tracking-wide text-primary-300 mb-3">
             Legal
           </p>
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-5">
+          <h1 className="text-4xl md:text-5xl font-bold text-slate-900 mb-5">
             Политика конфиденциальности
           </h1>
-          <p className="text-stone-300 text-lg mb-8">
+          <p className="text-slate-600 text-lg mb-8">
             Настоящая Политика описывает, как Contract AI System обрабатывает данные пользователей,
             загружаемые договоры и техническую информацию при использовании сервиса.
           </p>
           <div className="space-y-8">
             {sections.map((section) => (
               <section key={section.title}>
-                <h2 className="text-2xl font-bold text-white mb-3">{section.title}</h2>
-                <div className="space-y-3 text-stone-300 leading-relaxed">
+                <h2 className="text-2xl font-bold text-slate-900 mb-3">{section.title}</h2>
+                <div className="space-y-3 text-slate-600 leading-relaxed">
                   {section.paragraphs.map((paragraph) => (
                     <p key={paragraph}>{paragraph}</p>
                   ))}

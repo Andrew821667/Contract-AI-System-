@@ -6,7 +6,7 @@ interface BrandLockupProps {
   className?: string
 }
 
-export default function BrandLockup({ compact = false, dark = true, className = '' }: BrandLockupProps) {
+export default function BrandLockup({ compact = false, dark = false, className = '' }: BrandLockupProps) {
   return (
     <span className={`inline-flex items-center gap-3 ${className}`}>
       <BrandMark size={compact ? 36 : 42} title="AI Verdict" />
