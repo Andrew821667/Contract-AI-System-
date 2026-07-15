@@ -23,6 +23,12 @@
   --background-end-rgb: 30, 41, 59;
 }
 
+.steel {
+  --foreground-rgb: 241, 245, 249;
+  --background-start-rgb: 51, 65, 85;
+  --background-end-rgb: 38, 52, 69;
+}
+
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;
@@ -103,15 +109,58 @@ html:not(.dark) .brand-surface [class*="bg-gray-50"] {
 .dark .brand-surface {
   background-color: #08111f;
   background-image:
-    radial-gradient(circle at 12% 8%, rgba(34, 211, 238, 0.12), transparent 30rem),
-    radial-gradient(circle at 88% 18%, rgba(245, 158, 11, 0.12), transparent 27rem),
+    radial-gradient(circle at 12% 8%, rgba(217, 119, 6, 0.14), transparent 30rem),
+    radial-gradient(circle at 88% 18%, rgba(100, 116, 139, 0.12), transparent 27rem),
     linear-gradient(145deg, #08111f 0%, #0f1b2e 54%, #111827 100%);
 }
 
 .dark .brand-panel {
   background: rgba(15, 23, 42, 0.82);
-  border-color: rgba(103, 232, 249, 0.16);
+  border-color: rgba(148, 163, 184, 0.28);
   box-shadow: 0 28px 80px rgba(2, 6, 23, 0.34);
+}
+
+.steel .brand-surface {
+  background-color: #334155;
+  background-image:
+    radial-gradient(circle at 12% 8%, rgba(217, 119, 6, 0.16), transparent 30rem),
+    radial-gradient(circle at 88% 18%, rgba(148, 163, 184, 0.18), transparent 27rem),
+    linear-gradient(145deg, #415269 0%, #334155 54%, #263445 100%);
+}
+
+.steel .brand-panel {
+  background: rgba(65, 82, 105, 0.92) !important;
+  border-color: #7c8da3 !important;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.3);
+}
+
+.steel [class*="dark:bg-slate-950"] {
+  background-color: rgba(38, 52, 69, 0.96) !important;
+}
+
+.steel [class*="dark:bg-dark-900"] {
+  background-color: #263445 !important;
+}
+
+.steel [class*="dark:bg-dark-800"] {
+  background-color: #3b4d63 !important;
+}
+
+.steel [class*="dark:bg-dark-700"] {
+  background-color: #53657b !important;
+}
+
+.steel [class*="dark:border-dark-700"],
+.steel [class*="dark:border-dark-600"] {
+  border-color: #7c8da3 !important;
+}
+
+.steel ::-webkit-scrollbar-track {
+  background: #263445;
+}
+
+.steel ::-webkit-scrollbar-thumb {
+  background: #7c8da3;
 }
 
 /* Custom scrollbar */

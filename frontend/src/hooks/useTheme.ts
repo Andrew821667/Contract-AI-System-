@@ -17,7 +17,7 @@ function applyTheme(theme: Theme) {
   if (resolved === 'dark') {
     root.classList.add('dark')
   } else if (resolved === 'steel') {
-    root.classList.add('steel')
+    root.classList.add('dark', 'steel')
   }
 }
 
