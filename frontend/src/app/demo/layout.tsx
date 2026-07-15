@@ -22,5 +22,23 @@ export const metadata: Metadata = {
 }
 
 export default function DemoLayout({ children }: { children: React.ReactNode }) {
-  return children
+  const howToSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'HowTo',
+    name: 'Как бесплатно проверить договор с помощью ИИ',
+    description: 'Регистрация, загрузка договора и проверка отчета Contract AI.',
+    totalTime: 'PT10M',
+    step: [
+      { '@type': 'HowToStep', position: 1, name: 'Зарегистрируйтесь', text: 'Укажите рабочий email и создайте персональный аккаунт.' },
+      { '@type': 'HowToStep', position: 2, name: 'Загрузите договор', text: 'Загрузите PDF, DOCX или XML, который вы вправе передать на обработку.' },
+      { '@type': 'HowToStep', position: 3, name: 'Проверьте отчет', text: 'Сопоставьте найденные риски и рекомендации с позицией ответственного юриста.' },
+    ],
+  }
+
+  return (
+    <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(howToSchema) }} />
+      {children}
+    </>
+  )
 }

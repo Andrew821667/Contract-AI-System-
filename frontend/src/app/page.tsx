@@ -1,13 +1,14 @@
 import type { Metadata } from 'next'
 
 import HomeClient from './HomeClient'
+import { contractFaq } from '@/content/contractSeo'
 
 const siteUrl = (process.env.NEXT_PUBLIC_CONTRACT_SITE_URL || 'https://contract.ai-verdict.ru').replace(/\/$/, '')
 
 export const metadata: Metadata = {
   title: { absolute: 'Анализ и проверка договоров с ИИ | Contract AI' },
   description:
-    'Contract AI System анализирует договоры, выделяет юридические риски и помогает готовить правки. Бесплатно — до 3 договоров в месяц.',
+    'Нейросеть Contract AI анализирует и проверяет договоры, выделяет юридические риски и предлагает правки. Бесплатно — до 3 договоров в месяц.',
   alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
@@ -30,7 +31,7 @@ const softwareSchema = {
   '@context': 'https://schema.org',
   '@type': 'WebApplication',
   '@id': `${siteUrl}/#application`,
-  name: 'Contract AI System',
+  name: 'Contract AI by AI Verdict',
   url: siteUrl,
   applicationCategory: 'BusinessApplication',
   operatingSystem: 'Web',
@@ -57,12 +58,41 @@ const softwareSchema = {
   },
 }
 
+const websiteSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  '@id': `${siteUrl}/#website`,
+  name: 'Contract AI by AI Verdict',
+  alternateName: 'Contract AI System',
+  url: siteUrl,
+  inLanguage: 'ru-RU',
+  publisher: {
+    '@type': 'Organization',
+    '@id': 'https://ai-verdict.ru/#organization',
+    name: 'AI Verdict',
+    url: 'https://ai-verdict.ru',
+  },
+}
+
+const faqSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: contractFaq.map((item) => ({
+    '@type': 'Question',
+    name: item.question,
+    acceptedAnswer: {
+      '@type': 'Answer',
+      text: item.answer,
+    },
+  })),
+}
+
 export default function HomePage() {
   return (
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(softwareSchema) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify([softwareSchema, websiteSchema, faqSchema]) }}
       />
       <HomeClient />
     </>

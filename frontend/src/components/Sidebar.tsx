@@ -6,6 +6,7 @@ import { getUserRole, getRoleLabel, getRoleColor, getRolePermissions } from '@/u
 import { useTheme } from '@/hooks/useTheme'
 import QuotaCounter from './QuotaCounter'
 import OrgSwitcher from './OrgSwitcher'
+import BrandLockup from './BrandLockup'
 
 interface NavItem {
   label: string
@@ -172,18 +173,8 @@ function SidebarContent({ user, onLogout, onNavigate }: {
   return (
     <>
       {/* Logo */}
-      <div className="px-6 py-5 border-b border-gray-100 dark:border-dark-700">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center shadow-sm">
-            <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-lg font-bold text-stone-800 dark:text-gray-100 leading-tight">Contract AI</h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Система</p>
-          </div>
-        </div>
+      <div className="px-6 py-5 border-b border-cyan-300/10">
+        <BrandLockup />
       </div>
 
       {/* Navigation */}
@@ -201,7 +192,7 @@ function SidebarContent({ user, onLogout, onNavigate }: {
               aria-current={isActive ? 'page' : undefined}
               className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200
                 ${isActive
-                  ? 'bg-primary-50 text-primary-700 shadow-sm dark:bg-primary-900/30 dark:text-primary-300'
+                  ? 'bg-primary-500/10 text-primary-700 shadow-sm dark:bg-primary-500/15 dark:text-primary-300 ring-1 ring-primary-400/15'
                   : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-dark-700 dark:hover:text-gray-200'
                 }`}
             >
@@ -284,7 +275,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }: SidebarProp
   return (
     <>
       {/* Desktop sidebar — always visible on lg+ */}
-      <aside className="hidden lg:flex fixed left-0 top-0 h-screen w-64 bg-white dark:bg-dark-900 border-r border-gray-200 dark:border-dark-700 flex-col z-40">
+      <aside className="dark hidden lg:flex fixed left-0 top-0 h-screen w-64 bg-slate-950 border-r border-cyan-300/10 flex-col z-40 shadow-2xl shadow-slate-950/30">
         <SidebarContent user={user} onLogout={onLogout} onNavigate={() => {}} />
       </aside>
 
@@ -306,7 +297,7 @@ export default function Sidebar({ user, onLogout, isOpen, onClose }: SidebarProp
               animate={{ x: 0 }}
               exit={{ x: -280 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="lg:hidden fixed left-0 top-0 h-screen w-72 bg-white dark:bg-dark-900 shadow-2xl flex flex-col z-50"
+              className="dark lg:hidden fixed left-0 top-0 h-screen w-72 bg-slate-950 shadow-2xl flex flex-col z-50"
             >
               {/* Close button */}
               <button

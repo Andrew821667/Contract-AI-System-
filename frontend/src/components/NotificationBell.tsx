@@ -60,7 +60,7 @@ export default function NotificationBell({
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setOpen(!open)}
-        className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors"
+        className="relative p-2 text-slate-300 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
         aria-label={`Уведомления${unreadCount > 0 ? ` (${unreadCount} непрочитанных)` : ''}`}
         aria-expanded={open}
         aria-haspopup="true"

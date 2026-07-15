@@ -9,8 +9,8 @@
   --background-end-rgb: 245, 240, 232;
 
   /* Gradient colors */
-  --gradient-from: #967b52;
-  --gradient-to: #b09368;
+  --gradient-from: #22d3ee;
+  --gradient-to: #f59e0b;
 
   /* Shadow colors */
   --shadow-color: rgba(0, 0, 0, 0.1);
@@ -43,6 +43,29 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.brand-surface {
+  background-color: #08111f;
+  background-image:
+    radial-gradient(circle at 12% 8%, rgba(34, 211, 238, 0.16), transparent 30rem),
+    radial-gradient(circle at 88% 18%, rgba(245, 158, 11, 0.14), transparent 27rem),
+    linear-gradient(145deg, #08111f 0%, #0f1b2e 54%, #111827 100%);
+}
+
+.brand-grid {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.055) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, black, transparent 92%);
+}
+
+.brand-panel {
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(103, 232, 249, 0.18);
+  box-shadow: 0 28px 80px rgba(2, 6, 23, 0.34);
+  backdrop-filter: blur(18px);
 }
 
 /* Custom scrollbar */
@@ -89,7 +112,7 @@ body {
 
   /* Gradient text */
   .gradient-text {
-    background: linear-gradient(135deg, #7d6744, #b09368);
+    background: linear-gradient(135deg, #67e8f9, #fbbf24);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;

@@ -29,7 +29,7 @@ export function useTheme() {
 
   useEffect(() => {
     const stored = localStorage.getItem('theme') as Theme | null
-    const initial = stored || 'system'
+    const initial = stored || 'dark'
     setThemeState(initial)
     applyTheme(initial)
     setMounted(true)

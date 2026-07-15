@@ -14,11 +14,11 @@ const siteUrl = new URL(process.env.NEXT_PUBLIC_CONTRACT_SITE_URL || 'https://co
 export const metadata: Metadata = {
   metadataBase: siteUrl,
   title: {
-    default: 'Contract AI System',
-    template: '%s | Contract AI System',
+    default: 'Contract AI — договорная система AI Verdict',
+    template: '%s | Contract AI',
   },
-  description: 'Интеллектуальная система для автоматизации работы с договорами',
-  applicationName: 'Contract AI System',
+  description: 'Анализ, проверка, подготовка и согласование договоров с ИИ в системе AI Verdict.',
+  applicationName: 'Contract AI by AI Verdict',
   authors: [{ name: 'AI Verdict', url: 'https://ai-verdict.ru' }],
   creator: 'AI Verdict',
   publisher: 'AI Verdict',
@@ -34,15 +34,15 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'ru_RU',
     url: '/',
-    siteName: 'Contract AI System',
-    title: 'Contract AI System',
-    description: 'Интеллектуальная система для автоматизации работы с договорами',
+    siteName: 'Contract AI by AI Verdict',
+    title: 'Contract AI — договорная система AI Verdict',
+    description: 'Анализ, проверка, подготовка и согласование договоров с ИИ.',
     images: [{ url: '/opengraph-image', width: 1200, height: 630, alt: 'Contract AI System — анализ договоров с ИИ' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Contract AI System',
-    description: 'Интеллектуальная система для анализа и автоматизации работы с договорами',
+    title: 'Contract AI — договорная система AI Verdict',
+    description: 'Анализ, проверка, подготовка и согласование договоров с ИИ.',
     images: ['/twitter-image'],
   },
 }
@@ -60,7 +60,7 @@ export default function RootLayout({
             __html: `
               (function() {
                 try {
-                  var theme = localStorage.getItem('theme') || 'system';
+                  var theme = localStorage.getItem('theme') || 'dark';
                   var dark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
                   if (dark) document.documentElement.classList.add('dark');
                 } catch(e) {}

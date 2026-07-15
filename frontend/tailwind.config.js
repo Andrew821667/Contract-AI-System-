@@ -9,19 +9,31 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Modern Brand Colors - Vibrant & Professional
+        // AI Verdict accent: amber actions + cyan product frame.
         primary: {
-          50: '#faf8f5',
-          100: '#f5efe6',
-          200: '#e8dccb',
-          300: '#d6c5a5',
-          400: '#c4ad82',
-          500: '#b09368',  // Warm tan
-          600: '#7d6744',  // Accessible brown for buttons and logo
-          700: '#675536',
-          800: '#5c4c33',
-          900: '#3d3323',
-          950: '#241e15',
+          50: '#fffbeb',
+          100: '#fef3c7',
+          200: '#fde68a',
+          300: '#fcd34d',
+          400: '#fbbf24',
+          500: '#f59e0b',
+          600: '#d97706',
+          700: '#b45309',
+          800: '#92400e',
+          900: '#78350f',
+          950: '#451a03',
+        },
+        brand: {
+          50: '#ecfeff',
+          100: '#cffafe',
+          200: '#a5f3fc',
+          300: '#67e8f9',
+          400: '#22d3ee',
+          500: '#06b6d4',
+          600: '#0891b2',
+          700: '#0e7490',
+          800: '#155e75',
+          900: '#164e63',
         },
         secondary: {
           50: '#fafaf9',
@@ -113,14 +125,14 @@ module.exports = {
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
         'gradient-conic': 'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
-        'gradient-primary': 'linear-gradient(135deg, #7d6744 0%, #b09368 100%)',
-        'gradient-secondary': 'linear-gradient(135deg, #675536 0%, #7d6744 100%)',
+        'gradient-primary': 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)',
+        'gradient-secondary': 'linear-gradient(135deg, #22d3ee 0%, #2563eb 100%)',
         'gradient-success': 'linear-gradient(135deg, #15803d 0%, #22c55e 100%)',
         'gradient-dark': 'linear-gradient(135deg, #1f2937 0%, #111827 100%)',
       },
       boxShadow: {
-        'glow': '0 4px 14px rgba(150, 123, 82, 0.25)',
-        'glow-lg': '0 4px 20px rgba(150, 123, 82, 0.3)',
+        'glow': '0 4px 14px rgba(245, 158, 11, 0.25)',
+        'glow-lg': '0 4px 20px rgba(34, 211, 238, 0.24)',
         'card': '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
         'card-hover': '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
       },

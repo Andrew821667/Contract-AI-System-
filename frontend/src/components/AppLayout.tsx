@@ -46,7 +46,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-stone-50 to-stone-100 dark:from-dark-900 dark:to-dark-950">
+      <div className="brand-surface min-h-screen flex items-center justify-center">
         <motion.div
           animate={{ rotate: 360 }}
           transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
@@ -57,7 +57,8 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-stone-50 via-amber-50/30 to-orange-50/20 dark:from-dark-900 dark:via-dark-900 dark:to-dark-950">
+    <div className="brand-surface min-h-screen">
+      <div className="brand-grid fixed inset-0 pointer-events-none" aria-hidden="true" />
       {/* Skip to content link */}
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary-600 focus:text-white focus:rounded-xl">
         Перейти к содержимому
@@ -73,7 +74,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
       {/* Main content area — offset on desktop */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <header className="bg-white/80 dark:bg-dark-900/80 backdrop-blur-lg border-b border-gray-100 dark:border-dark-700 sticky top-0 z-30">
+        <header className="bg-slate-950/80 backdrop-blur-xl border-b border-cyan-300/10 sticky top-0 z-30">
           <div className="px-4 sm:px-8 py-4 flex items-center justify-between">
             <div className="flex items-center space-x-3">
               {/* Hamburger — mobile only */}
@@ -88,7 +89,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 </svg>
               </button>
               {title && (
-                <h1 className="text-xl sm:text-2xl font-bold text-stone-800 dark:text-gray-100">{title}</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-white">{title}</h1>
               )}
             </div>
             <div className="flex items-center space-x-3">
@@ -101,7 +102,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 clearAll={notif.clearAll}
               />
               <div className="hidden sm:flex items-center space-x-3">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
+                <span className="text-sm text-slate-300">
                   {user?.name}
                 </span>
                 <button
@@ -120,7 +121,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
         </header>
 
         {/* Page content */}
-        <main id="main-content" className="p-4 sm:p-8">
+        <main id="main-content" className="relative p-4 sm:p-8">
           {children}
         </main>
       </div>

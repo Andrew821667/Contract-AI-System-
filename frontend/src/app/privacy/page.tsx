@@ -61,12 +61,13 @@ const sections = [
 
 export default function PrivacyPage() {
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900 px-4 py-12">
-      <div className="max-w-4xl mx-auto">
+    <main className="brand-surface min-h-screen px-4 py-12">
+      <div className="brand-grid fixed inset-0 pointer-events-none" aria-hidden="true" />
+      <div className="relative max-w-4xl mx-auto">
         <Link href="/" className="inline-flex items-center text-primary-200 hover:text-white font-semibold mb-8">
           ← На главную Contract AI
         </Link>
-        <article className="bg-slate-800/95 rounded-2xl shadow-2xl border border-primary-500/30 p-6 md:p-10">
+        <article className="brand-panel rounded-2xl p-6 md:p-10">
           <p className="text-sm font-semibold uppercase tracking-wide text-primary-300 mb-3">
             Legal
           </p>
