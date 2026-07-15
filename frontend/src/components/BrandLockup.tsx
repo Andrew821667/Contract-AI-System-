@@ -14,7 +14,7 @@ export default function BrandLockup({ compact = false, dark = false, className =
         <span className={`block font-bold tracking-tight ${compact ? 'text-base' : 'text-lg'} ${dark ? 'text-white' : 'text-slate-900'}`}>
           Contract AI
         </span>
-        <span className={`block text-[10px] font-semibold uppercase tracking-[0.18em] ${dark ? 'text-cyan-300' : 'text-cyan-700'}`}>
+        <span className={`block text-[10px] font-semibold uppercase tracking-[0.18em] ${dark ? 'text-primary-300' : 'text-primary-700'}`}>
           by AI Verdict
         </span>
       </span>

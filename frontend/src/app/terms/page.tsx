@@ -62,7 +62,7 @@ const sections = [
 
 export default function TermsPage() {
   return (
-    <main className="brand-surface min-h-screen px-4 py-12">
+    <main className="brand-surface brand-photo brand-auth min-h-screen px-4 py-12">
       <div className="brand-grid fixed inset-0 pointer-events-none" aria-hidden="true" />
       <div className="relative max-w-4xl mx-auto">
         <Link href="/" className="inline-flex items-center text-primary-700 hover:text-primary-800 font-semibold mb-8">

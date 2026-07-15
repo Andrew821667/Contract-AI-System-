@@ -18,7 +18,7 @@ export default function Card({
 }: CardProps) {
   const hasBg = className.includes('bg-')
   const hasBorder = className.includes('border-')
-  const baseStyles = `${hasBg ? '' : 'bg-white'} rounded-2xl shadow-card p-6 ${hasBorder ? '' : 'border border-gray-100'}`
+  const baseStyles = `${hasBg ? '' : 'bg-white'} rounded-2xl shadow-card p-6 ${hasBorder ? '' : 'border border-slate-300'}`
   const hoverStyles = hover ? 'hover:shadow-card-hover cursor-pointer' : ''
   const gradientStyles = gradient ? 'bg-gradient-to-br from-white to-gray-50' : ''
 

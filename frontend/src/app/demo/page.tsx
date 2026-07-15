@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function DemoPage() {
   return (
-    <main className="brand-surface min-h-screen px-4 py-12 text-slate-900">
+    <main className="brand-surface brand-photo brand-auth min-h-screen px-4 py-12 text-slate-900">
       <div className="brand-grid fixed inset-0 pointer-events-none" aria-hidden="true" />
       <article className="brand-panel relative mx-auto w-full max-w-4xl rounded-3xl p-6 md:p-10">
         <div className="text-center">
