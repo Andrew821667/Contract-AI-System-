@@ -153,6 +153,16 @@ function SidebarContent({ user, onLogout, onNavigate }: {
   const roleLabel = getRoleLabel(role)
   const roleColor = getRoleColor(role)
   const { resolvedTheme, toggleTheme, mounted } = useTheme()
+  const themeLabel = {
+    light: 'Светлая тема',
+    steel: 'Стальная тема',
+    dark: 'Тёмная тема',
+  }[resolvedTheme]
+  const nextThemeLabel = {
+    light: 'стальную тему',
+    steel: 'тёмную тему',
+    dark: 'светлую тему',
+  }[resolvedTheme]
 
   const filteredItems = navItems.filter(item => {
     if (!item.permission) return true
@@ -174,7 +184,7 @@ function SidebarContent({ user, onLogout, onNavigate }: {
     <>
       {/* Logo */}
       <div className="px-6 py-5 border-b border-slate-300 dark:border-amber-500/20">
-        <BrandLockup dark={resolvedTheme === 'dark'} />
+        <BrandLockup dark={resolvedTheme !== 'light'} />
       </div>
 
       {/* Navigation */}
@@ -222,24 +232,24 @@ function SidebarContent({ user, onLogout, onNavigate }: {
         {mounted && (
           <button
             onClick={toggleTheme}
+            aria-label={`Переключить на ${nextThemeLabel}`}
+            title={`Переключить на ${nextThemeLabel}`}
             className="w-full flex items-center space-x-3 px-4 py-2.5 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-dark-700 rounded-xl transition-all duration-200"
           >
-            {resolvedTheme === 'dark' ? (
+            {resolvedTheme === 'light' ? (
               <svg className="w-5 h-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
               </svg>
             ) : resolvedTheme === 'steel' ? (
-              <svg className="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
               </svg>
+            ) : (
+              <svg className="w-5 h-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+              </svg>
             )}
-            <span>
-              {resolvedTheme === 'dark' ? 'Светлая тема' : resolvedTheme === 'steel' ? 'Тёмная тема' : 'Стальная тема'}
-            </span>
+            <span>{themeLabel}</span>
           </button>
         )}
       </div>
