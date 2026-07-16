@@ -14,8 +14,10 @@ export interface User {
   llm_requests_today: number;
   max_contracts_per_day?: number;
   max_contracts_per_month?: number;
-  contract_quota_period?: 'day' | 'month';
+  contract_quota_period?: 'day' | 'month' | 'demo';
   max_llm_requests_per_day?: number;
+  llm_requests_total?: number;
+  llm_quota_period?: 'day' | 'demo';
   demo_expires?: string;
 }
 
@@ -39,16 +41,39 @@ export interface ContractRecommendationDecisionResponse {
   message: string;
 }
 
-export interface RegisterRequest {
-  email: string;
-  name: string;
-  password: string;
-}
-
 export interface DemoActivateRequest {
   token: string;
   email: string;
   name: string;
+}
+
+export interface DemoAccessRequestCreate {
+  name: string;
+  email: string;
+  contact: string;
+  company?: string;
+  task: string;
+  consent: true;
+  website?: string;
+}
+
+export interface DemoAccessRequest {
+  id: string;
+  name: string;
+  email: string;
+  contact: string;
+  company?: string;
+  task: string;
+  source: string;
+  consent_at: string;
+  consent_version: string;
+  status: 'pending' | 'approved' | 'rejected';
+  decision_note?: string;
+  demo_token_id?: string;
+  demo_link?: DemoLinkResponse & { used: boolean };
+  created_at: string;
+  updated_at: string;
+  decided_at?: string;
 }
 
 export interface AuthResponse {
@@ -62,10 +87,10 @@ export interface AuthResponse {
 export interface QuotaResponse {
   contracts_used: number;
   contracts_limit: number;
-  contracts_period?: 'day' | 'month';
+  contracts_period?: 'day' | 'month' | 'demo';
   llm_used: number;
   llm_limit: number;
-  llm_period?: 'day';
+  llm_period?: 'day' | 'demo';
   subscription_tier: string;
 }
 
@@ -104,6 +129,16 @@ export interface DemoLinkResponse {
   expires_at: string;
   max_contracts: number;
   max_llm_requests: number;
+}
+
+export interface DemoRequestListResponse {
+  items: DemoAccessRequest[];
+  total: number;
+}
+
+export interface DemoRequestApprovalResponse {
+  request: DemoAccessRequest;
+  demo_link: DemoLinkResponse;
 }
 
 export interface GenerationContractTypeOption {

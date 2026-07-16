@@ -49,12 +49,9 @@ class Settings(BaseSettings):
 
     # Application
     app_env: str = "development"
+    contract_ai_public_url: str = "https://contract.ai-verdict.ru"
     log_level: str = "INFO"
     debug: bool = False  # Will be set automatically based on app_env in __init__
-
-    # Streamlit
-    streamlit_server_port: int = 8501
-    streamlit_server_address: str = "localhost"
 
     # Redis (optional)
     redis_url: str = "redis://localhost:6379/0"

@@ -2268,7 +2268,7 @@ def process_contract_batch(contract_ids: List[str]):
 5. ✅ End-to-end тест: Сложный скан → contracts_core со всеми правилами
 6. ✅ Интеграция с ContractAnalyzerAgent
 7. ✅ WebSocket для прогресса
-8. ✅ Monitoring dashboard (Streamlit)
+8. ✅ Monitoring dashboard (React)
 
 **Результат:** Полнофункциональная IDP система с AI
 

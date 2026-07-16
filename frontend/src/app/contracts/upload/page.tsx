@@ -142,6 +142,11 @@ export default function ContractUploadPage() {
 
   if (!isReady) return null
 
+  const usesExtendedContractQuota = user?.contract_quota_period === 'month' || user?.contract_quota_period === 'demo'
+  const contractQuotaUsed = usesExtendedContractQuota ? (user?.contracts_month ?? 0) : (user?.contracts_today ?? 0)
+  const contractQuotaLimit = usesExtendedContractQuota ? (user?.max_contracts_per_month ?? 3) : (user?.max_contracts_per_day ?? 3)
+  const contractQuotaRatio = contractQuotaLimit ? contractQuotaUsed / contractQuotaLimit : 0
+
   return (
     <AppLayout title="Загрузка договора">
       <div className="max-w-5xl mx-auto">
@@ -374,26 +379,26 @@ export default function ContractUploadPage() {
                 {user && (
                   <div className="mt-6 pt-6 border-t border-gray-200">
                     <h4 className="text-sm font-bold text-gray-900 mb-3">
-                      Лимит {user.contract_quota_period === 'month' ? 'на месяц' : 'на сегодня'}:
+                      Лимит {user.contract_quota_period === 'demo' ? 'на демо' : user.contract_quota_period === 'month' ? 'на месяц' : 'на сегодня'}:
                     </h4>
                     <div className="space-y-2">
                       <div>
                         <div className="flex justify-between text-xs text-gray-600 mb-1">
                           <span>Загрузок</span>
-                          <span className={(user.contract_quota_period === 'month' ? (user.contracts_month ?? 0) : user.contracts_today) >= (user.contract_quota_period === 'month' ? (user.max_contracts_per_month ?? 3) : (user.max_contracts_per_day ?? 3)) ? 'text-red-600 font-bold' : 'font-semibold'}>
-                            {user.contract_quota_period === 'month' ? (user.contracts_month ?? 0) : user.contracts_today} / {user.contract_quota_period === 'month' ? (user.max_contracts_per_month ?? 3) : (user.max_contracts_per_day ?? 3)}
+                          <span className={contractQuotaUsed >= contractQuotaLimit ? 'text-red-600 font-bold' : 'font-semibold'}>
+                            {contractQuotaUsed} / {contractQuotaLimit}
                           </span>
                         </div>
                         <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all ${
-                              ((user.contract_quota_period === 'month' ? (user.contracts_month ?? 0) : user.contracts_today) / (user.contract_quota_period === 'month' ? (user.max_contracts_per_month ?? 3) : (user.max_contracts_per_day ?? 3))) >= 1
+                              contractQuotaRatio >= 1
                                 ? 'bg-red-500'
-                                : ((user.contract_quota_period === 'month' ? (user.contracts_month ?? 0) : user.contracts_today) / (user.contract_quota_period === 'month' ? (user.max_contracts_per_month ?? 3) : (user.max_contracts_per_day ?? 3))) >= 0.8
+                                : contractQuotaRatio >= 0.8
                                 ? 'bg-amber-500'
                                 : 'bg-primary-500'
                             }`}
-                            style={{ width: `${Math.min(100, ((user.contract_quota_period === 'month' ? (user.contracts_month ?? 0) : user.contracts_today) / (user.contract_quota_period === 'month' ? (user.max_contracts_per_month ?? 3) : (user.max_contracts_per_day ?? 3))) * 100)}%` }}
+                            style={{ width: `${Math.min(100, contractQuotaRatio * 100)}%` }}
                           />
                         </div>
                       </div>

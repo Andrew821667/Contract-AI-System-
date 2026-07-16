@@ -66,7 +66,7 @@ RUN chmod +x /app/docker-entrypoint.sh
 USER appuser
 
 # Expose ports
-EXPOSE 8000 8501
+EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

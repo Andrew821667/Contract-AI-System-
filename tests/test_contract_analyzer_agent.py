@@ -376,7 +376,7 @@ def test_contract_analyzer_agent():
     print("  - Implement Disagreement Processor Agent")
     print("  - Implement Changes Analyzer Agent")
     print("  - Implement Quick Export Agent")
-    print("  - Build Streamlit UI")
+    print("  - Build admin UI")
     
     return True
 

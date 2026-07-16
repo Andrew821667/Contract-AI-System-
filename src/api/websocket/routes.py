@@ -397,7 +397,7 @@ async def websocket_notifications(
                 # Check contract quota limits.
                 contract_quota = get_contract_quota(poll_db, user)
                 if contract_quota["used"] >= contract_quota["limit"]:
-                    period_label = "месячного" if contract_quota["period"] == "month" else "дневного"
+                    period_label = "демо" if contract_quota["period"] == "demo" else "дневного"
                     notifications.append({
                         "type": "limit_reached",
                         "title": "Лимит достигнут",

@@ -8,7 +8,7 @@ const siteUrl = (process.env.NEXT_PUBLIC_CONTRACT_SITE_URL || 'https://contract.
 export const metadata: Metadata = {
   title: { absolute: 'Анализ и проверка договоров с ИИ | Contract AI' },
   description:
-    'Нейросеть Contract AI анализирует и проверяет договоры, выделяет юридические риски и предлагает правки. Бесплатно — до 3 договоров в месяц.',
+    'Нейросеть Contract AI анализирует и проверяет договоры, выделяет юридические риски и предлагает правки. Персональное демо доступно по заявке.',
   alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
@@ -16,13 +16,13 @@ export const metadata: Metadata = {
     siteName: 'Contract AI System',
     url: '/',
     title: 'Анализ договоров с ИИ | Contract AI System',
-    description: 'Проверка условий, рисков и спорных формулировок в договорах с бесплатным стартом.',
+    description: 'Проверка условий, рисков и спорных формулировок в договорах. Персональное демо по заявке.',
     images: [{ url: '/opengraph-image', width: 1200, height: 630, alt: 'Contract AI System — анализ договоров с ИИ' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Анализ договоров с ИИ | Contract AI System',
-    description: 'Проверка условий, рисков и спорных формулировок в договорах с бесплатным стартом.',
+    description: 'Проверка условий, рисков и спорных формулировок в договорах. Персональное демо по заявке.',
     images: ['/twitter-image'],
   },
 }
@@ -44,13 +44,6 @@ const softwareSchema = {
     'Сравнение версий договоров',
     'Экспорт результатов анализа',
   ],
-  offers: {
-    '@type': 'Offer',
-    name: 'Бесплатный режим',
-    price: '0',
-    priceCurrency: 'RUB',
-    description: 'До 3 договоров в месяц.',
-  },
   provider: {
     '@type': 'Organization',
     name: 'AI Verdict',

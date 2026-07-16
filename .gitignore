@@ -109,10 +109,6 @@ dump.rdb
 # OS
 Thumbs.db
 
-# Streamlit logs
-streamlit.log
-streamlit_error.log
-
 # Temporary development files
 add_*.py
 fix_*.py

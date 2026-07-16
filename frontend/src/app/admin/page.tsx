@@ -31,8 +31,9 @@ import LLMSettings from '@/components/admin/LLMSettings'
 import IntegrationSettings from '@/components/admin/IntegrationSettings'
 import GraphRAGPanel from '@/components/admin/GraphRAGPanel'
 import AgentEditModal from '@/components/admin/AgentEditModal'
+import DemoRequestsPanel from '@/components/admin/DemoRequestsPanel'
 
-type Tab = 'orgs' | 'policies' | 'tools' | 'agents' | 'templates' | 'integrations' | 'llm' | 'graph' | 'rag'
+type Tab = 'demo' | 'orgs' | 'policies' | 'tools' | 'agents' | 'templates' | 'integrations' | 'llm' | 'graph' | 'rag'
 
 const RAG_COLLECTIONS = [
   { value: 'knowledge', label: 'База знаний' },
@@ -156,6 +157,7 @@ export default function AdminPage() {
   }
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
+    { key: 'demo', label: 'Демо-заявки' },
     { key: 'llm', label: 'LLM Модели' },
     { key: 'rag', label: 'База знаний' },
     { key: 'orgs', label: 'Организации', count: orgs.length },
@@ -190,12 +192,12 @@ export default function AdminPage() {
     <AppLayout title="Администрирование">
       <div className="max-w-5xl mx-auto">
         {/* Tabs */}
-        <div className="flex gap-1 mb-6 bg-gray-100 dark:bg-dark-800 rounded-xl p-1">
+        <div className="flex gap-1 mb-6 overflow-x-auto bg-gray-100 dark:bg-dark-800 rounded-xl p-1">
           {tabs.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              className={`shrink-0 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
                 activeTab === tab.key
                   ? 'bg-white dark:bg-dark-700 text-gray-800 dark:text-gray-200 shadow-sm'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
@@ -210,6 +212,8 @@ export default function AdminPage() {
             </button>
           ))}
         </div>
+
+        {activeTab === 'demo' && <DemoRequestsPanel />}
 
         {/* LLM Settings tab */}
         {activeTab === 'llm' && <LLMSettings />}

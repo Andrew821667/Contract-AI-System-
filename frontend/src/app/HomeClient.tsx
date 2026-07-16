@@ -13,9 +13,9 @@ import BrandMark from '@/components/BrandMark'
 import { contractFaq } from '@/content/contractSeo'
 
 const freeLimits = [
-  { value: '0 ₽', label: 'стоимость бесплатного режима' },
-  { value: '3', label: 'договора бесплатно в месяц' },
-  { value: '5 МБ', label: 'размер одного файла' },
+  { value: 'По заявке', label: 'персональный доступ' },
+  { value: 'Ограниченно', label: 'объём под задачу' },
+  { value: 'Лично', label: 'ответ без авторегистрации' },
 ]
 
 export default function Home() {
@@ -87,8 +87,8 @@ export default function Home() {
   const advantages = [
     {
       icon: <svg className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
-      title: 'Бесплатный вход',
-      description: 'Бесплатный вход — 3 договора в месяц, дальше пилот и рабочий контур под задачу.',
+      title: 'Персональное демо',
+      description: 'Доступ выдаём после короткой заявки: проверяем сценарий и согласуем ограниченный тест.',
       gradient: 'from-emerald-500 to-teal-600',
     },
     {
@@ -136,8 +136,8 @@ export default function Home() {
   ]
 
   const stats = [
-    { value: '3/мес', label: 'Договора бесплатно' },
-    { value: '0 ₽', label: 'Стоимость первого шага' },
+    { value: 'По заявке', label: 'Персональное демо' },
+    { value: 'Лимит', label: 'Под конкретную задачу' },
     { value: '2 уровня', label: 'Проверки рисков' },
     { value: '24/7', label: 'Доступность системы' }
   ]
@@ -165,9 +165,9 @@ export default function Home() {
               <a href="#login" className="hidden text-slate-700 hover:text-primary-700 transition text-sm font-medium sm:inline">Вход</a>
               <a href="/demo" className="hidden text-slate-700 hover:text-primary-700 transition text-sm font-medium md:inline">Демо</a>
               <a href="#pricing" className="hidden text-slate-700 hover:text-primary-700 transition text-sm font-medium sm:inline">Тарифы</a>
-              <Button variant="primary" size="sm" href="/register">
-                <span className="sm:hidden">Начать</span>
-                <span className="hidden sm:inline">3 договора бесплатно</span>
+              <Button variant="primary" size="sm" href="/demo">
+                <span className="sm:hidden">Демо</span>
+                <span className="hidden sm:inline">Запросить демо</span>
               </Button>
             </motion.div>
           </div>
@@ -193,14 +193,14 @@ export default function Home() {
               </h1>
               <p className="text-lg md:text-xl text-slate-700 mb-8 leading-relaxed">
                 AI-система для анализа, генерации и управления юридическими договорами.
-                Начните с 3 бесплатных договоров в месяц, чтобы проверить сценарий на практике.
+                Запросите персональное демо, чтобы проверить свой договорный сценарий на практике.
               </p>
 
               {/* Мини-статистика */}
               <div className="grid grid-cols-2 gap-4">
                 {[
                   { value: '2 уровня', label: 'анализа рисков' },
-                  { value: '3/мес', label: 'бесплатно' },
+                  { value: 'По заявке', label: 'персональное демо' },
                   { value: 'Юрист', label: 'подтверждает выводы' },
                   { value: 'On-premise', label: 'для Enterprise' },
                 ].map((s, i) => (
@@ -224,7 +224,7 @@ export default function Home() {
                   <BrandMark size={64} className="mx-auto mb-4 drop-shadow-[0_12px_28px_rgba(34,211,238,0.18)]" title="AI Verdict" />
                   <h2 className="text-2xl font-bold text-slate-900">Вход в систему</h2>
                   <p className="text-slate-600 text-sm mt-1">
-                    Нет аккаунта? <a href="/register" className="text-primary-700 font-semibold hover:underline">Начните бесплатно</a>: 3 договора в месяц.
+                    Нет аккаунта? <a href="/demo" className="text-primary-700 font-semibold hover:underline">Запросите персональное демо</a>.
                   </p>
                 </div>
 
@@ -293,15 +293,15 @@ export default function Home() {
             <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-8 items-center">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-wide text-primary-700 mb-3">
-                  Бесплатный режим
+                  Персональное демо
                 </p>
                 <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
-                  3 договора бесплатно каждый месяц
+                  Ограниченный доступ под вашу задачу
                 </h2>
                 <p className="text-lg text-slate-700">
-                  Бесплатный режим нужен для спокойной проверки сценария: загрузить документ,
+                  Демо нужно для спокойной проверки сценария: загрузить документ,
                   посмотреть структуру отчета и понять, подходит ли система под ваш процесс.
-                  Оплата появляется только на следующем этапе — пилоте или рабочем контуре.
+                  Срок и объём фиксируются в персональном приглашении после короткой заявки.
                 </p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-4">
@@ -470,22 +470,22 @@ export default function Home() {
             viewport={{ once: true }}
           >
             <h2 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">
-              Бесплатный старт и пилот
+              Персональное демо и пилот
             </h2>
             <p className="text-xl text-slate-700 mb-8 max-w-2xl mx-auto">
-              3 договора бесплатно в месяц. После проверки сценария обсуждаем пилот и рабочий контур.
+              Сначала проверяем задачу и выдаём ограниченное демо. Затем обсуждаем пилот и рабочий контур.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
               <Card hover className="text-center bg-white/80 border-slate-200">
-                <div className="text-sm text-primary-700 mb-1">Бесплатный режим</div>
-                <div className="text-3xl font-bold text-slate-900">0 ₽</div>
-                <div className="text-sm text-slate-600">первый шаг</div>
+                <div className="text-sm text-primary-700 mb-1">Первый шаг</div>
+                <div className="text-3xl font-bold text-slate-900">Заявка</div>
+                <div className="text-sm text-slate-600">контакт и задача</div>
               </Card>
               <Card hover className="text-center border-2 border-primary-500 bg-primary-50/70">
-                <div className="text-sm text-primary-800 font-semibold mb-1">Бесплатный лимит</div>
-                <div className="text-3xl font-bold text-slate-900">3</div>
-                <div className="text-sm text-slate-600">договора в месяц</div>
+                <div className="text-sm text-primary-800 font-semibold mb-1">Демо-доступ</div>
+                <div className="text-3xl font-bold text-slate-900">Личный</div>
+                <div className="text-sm text-slate-600">лимит в приглашении</div>
               </Card>
               <Card hover className="text-center bg-white/80 border-slate-200">
                 <div className="text-sm text-primary-700 mb-1">Следующий этап</div>
@@ -499,7 +499,7 @@ export default function Home() {
                 Форматы и условия запуска
               </Button>
               <Button variant="outline" size="lg" href="/demo">
-                Как работает бесплатный режим
+                Запросить демо
               </Button>
             </div>
           </motion.div>
@@ -541,11 +541,11 @@ export default function Home() {
                   Готовы попробовать?
                 </h2>
                 <p className="text-xl text-slate-700 mb-8 max-w-2xl mx-auto">
-                  3 договора бесплатно в месяц. Без кредитной карты. Время анализа зависит от объёма документа.
+                  Опишите задачу и получите персональное демо с заранее понятным сроком и объёмом.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  <Button variant="primary" size="lg" href="/register">
-                    Начать бесплатно
+                  <Button variant="primary" size="lg" href="/demo">
+                    Запросить демо
                   </Button>
                   <a href="#login">
                     <Button variant="outline" size="lg">
@@ -575,8 +575,8 @@ export default function Home() {
               <p className="font-bold text-slate-900 mb-4">Продукт</p>
               <ul className="space-y-2 text-sm text-slate-600">
                 <li><a href="/pricing" className="hover:text-primary-700 transition">Тарифы</a></li>
-                <li><a href="/demo" className="hover:text-primary-700 transition">Бесплатный режим</a></li>
-                <li><a href="/register" className="hover:text-primary-700 transition">3 договора бесплатно</a></li>
+                <li><a href="/demo" className="hover:text-primary-700 transition">Персональное демо</a></li>
+                <li><a href="/pricing" className="hover:text-primary-700 transition">Форматы запуска</a></li>
                 <li><a href="#login" className="hover:text-primary-700 transition">Вход</a></li>
               </ul>
             </div>

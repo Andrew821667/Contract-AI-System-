@@ -10,10 +10,11 @@ import { toast } from 'react-hot-toast';
 // Types — re-exported from api.types.ts for backward compatibility
 export * from './api.types';
 import type {
-  User, LoginRequest, RegisterRequest, AuthResponse, AgentDefinitionUpdate,
+  User, LoginRequest, AuthResponse, AgentDefinitionUpdate,
   Contract, ContractUploadResponse, AnalysisResultResponse,
   AnalysisResultRequest, StreamAnalysisRequest,
-  QuotaResponse, DemoActivateRequest, DemoLinkResponse,
+  QuotaResponse, DemoActivateRequest, DemoAccessRequestCreate, DemoLinkResponse,
+  DemoRequestListResponse, DemoRequestApprovalResponse,
   DigitalContract, VerificationResult, HashChainResponse, DAGResponse,
   ContractRecommendationDecisionResponse, GenerationContractTypeOption,
   DashboardData, PersonalStats, GroupStats,
@@ -203,23 +204,6 @@ class APIClient {
 
   // ==================== Authentication ====================
 
-  async register(data: RegisterRequest): Promise<any> {
-    const response = await this.client.post('/api/v1/auth/register', data);
-    if (response.data?.access_token) {
-      this.setAccessToken(response.data.access_token);
-    }
-    if (typeof window !== 'undefined' && response.data?.user && response.data?.access_token) {
-      localStorage.setItem('user', JSON.stringify(response.data.user));
-      try {
-        const { useAuthStore } = require('../stores/authStore');
-        useAuthStore.getState().setAuth(response.data.user, response.data.access_token);
-      } catch {
-        // Store not available
-      }
-    }
-    return response.data;
-  }
-
   async getQuota(): Promise<QuotaResponse> {
     const response = await this.client.get<QuotaResponse>('/api/v1/auth/quota');
     return response.data;
@@ -276,6 +260,11 @@ class APIClient {
         // Store not available
       }
     }
+    return response.data;
+  }
+
+  async requestDemo(data: DemoAccessRequestCreate): Promise<{ message: string }> {
+    const response = await this.client.post<{ message: string }>('/api/v1/auth/demo-request', data);
     return response.data;
   }
 
@@ -352,6 +341,7 @@ class APIClient {
   // ==================== Admin Operations ====================
 
   async generateDemoLink(data: {
+    recipient_email: string;
     max_contracts: number;
     max_llm_requests: number;
     expires_in_hours: number;
@@ -361,6 +351,29 @@ class APIClient {
       '/api/v1/auth/admin/demo-link',
       data
     );
+    return response.data;
+  }
+
+  async listDemoRequests(status: 'pending' | 'approved' | 'rejected' | 'all' = 'pending'): Promise<DemoRequestListResponse> {
+    const response = await this.client.get<DemoRequestListResponse>('/api/v1/auth/admin/demo-requests', {
+      params: { status },
+    });
+    return response.data;
+  }
+
+  async approveDemoRequest(
+    requestId: string,
+    data: { max_contracts: number; max_llm_requests: number; expires_in_hours: number; note?: string },
+  ): Promise<DemoRequestApprovalResponse> {
+    const response = await this.client.post<DemoRequestApprovalResponse>(
+      `/api/v1/auth/admin/demo-requests/${requestId}/approve`,
+      data,
+    );
+    return response.data;
+  }
+
+  async rejectDemoRequest(requestId: string, note?: string): Promise<{ request: import('./api.types').DemoAccessRequest }> {
+    const response = await this.client.post(`/api/v1/auth/admin/demo-requests/${requestId}/reject`, { note });
     return response.data;
   }
 

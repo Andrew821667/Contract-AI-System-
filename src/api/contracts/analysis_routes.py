@@ -23,6 +23,7 @@ from src.models.analyzer_models import ContractRecommendation
 from src.services.document_parser_extended import ExtendedDocumentParser
 from src.agents.contract_analyzer_agent import ContractAnalyzerAgent
 from src.services.llm_gateway import LLMGateway
+from src.services.quota_service import get_llm_quota
 from src.services.digital_service import DigitalContractService
 from src.services.clause_library_service import ClauseLibraryService
 from src.services.clause_extractor import ClauseExtractor
@@ -448,10 +449,12 @@ async def analyze_contract(
     try:
         current_user.reset_daily_limits()
 
-        if current_user.llm_requests_today >= current_user.max_llm_requests_per_day:
+        llm_quota = get_llm_quota(db, current_user)
+        if llm_quota["used"] >= llm_quota["limit"]:
+            period_label = "демо-доступа" if llm_quota["period"] == "demo" else "дневной"
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f'Дневной лимит LLM-запросов ({current_user.max_llm_requests_per_day}) исчерпан.'
+                detail=f'Лимит {period_label} для AI-запросов ({llm_quota["limit"]}) исчерпан.'
             )
 
         # Lock contract row to prevent concurrent double-start (C3)
@@ -494,20 +497,25 @@ async def analyze_contract(
 
         # Mark contract as analyzing immediately (prevents concurrent double-start)
         # and atomically increment LLM counter within the same transaction (C1).
-        # max_llm_requests_per_day is a @property (not a DB column) — resolve to literal.
-        llm_limit = current_user.max_llm_requests_per_day
+        llm_limit = llm_quota["limit"]
         contract.status = 'analyzing'
+        llm_update = sql_update(User).where(User.id == current_user.id)
+        if llm_quota["period"] == "demo":
+            llm_update = llm_update.where(User.llm_requests_total < llm_limit)
+        else:
+            llm_update = llm_update.where(User.llm_requests_today < llm_limit)
         llm_result = db.execute(
-            sql_update(User)
-            .where(User.id == current_user.id)
-            .where(User.llm_requests_today < llm_limit)
-            .values(llm_requests_today=User.llm_requests_today + 1)
+            llm_update.values(
+                llm_requests_today=User.llm_requests_today + 1,
+                llm_requests_total=User.llm_requests_total + 1,
+            )
         )
         if llm_result.rowcount == 0:
             db.rollback()
+            period_label = "демо-доступа" if llm_quota["period"] == "demo" else "дневной"
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f'Дневной лимит LLM-запросов ({llm_limit}) исчерпан.'
+                detail=f'Лимит {period_label} для AI-запросов ({llm_limit}) исчерпан.'
             )
         db.commit()  # Releases with_for_update lock; status='analyzing' visible to concurrent requests
 

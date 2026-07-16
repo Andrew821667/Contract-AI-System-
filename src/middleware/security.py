@@ -85,6 +85,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.endpoint_limits = {
             '/api/v1/auth/login': 10 * multiplier,
             '/api/v1/auth/register': 5 * multiplier,
+            '/api/v1/auth/demo-request': 3 * multiplier,
             '/api/v1/auth/demo-activate': 10 * multiplier,
         }
 

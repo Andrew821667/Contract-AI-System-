@@ -501,7 +501,9 @@ class AuthService:
         max_llm_requests: int = 10,
         expires_in_hours: int = 24,
         campaign: Optional[str] = None,
-        source: str = "admin_panel"
+        source: str = "admin_api",
+        recipient_email: Optional[str] = None,
+        commit: bool = True,
     ) -> DemoToken:
         """
         Generate demo access token
@@ -513,6 +515,8 @@ class AuthService:
             expires_in_hours: Token expiration in hours
             campaign: Marketing campaign name
             source: Token source
+            recipient_email: Email allowed to activate this token
+            commit: Commit immediately or leave transaction to caller
 
         Returns:
             DemoToken object
@@ -521,6 +525,7 @@ class AuthService:
 
         demo_token = DemoToken(
             token=token,
+            recipient_email=recipient_email.strip().lower() if recipient_email else None,
             max_contracts=max_contracts,
             max_llm_requests=max_llm_requests,
             expires_in_hours=expires_in_hours,
@@ -531,6 +536,7 @@ class AuthService:
         )
 
         self.db.add(demo_token)
+        self.db.flush()
 
         # Log action
         self.log_action(
@@ -546,7 +552,8 @@ class AuthService:
             }
         )
 
-        self.db.commit()
+        if commit:
+            self.db.commit()
 
         return demo_token
 
@@ -580,14 +587,18 @@ class AuthService:
         if not demo_token.can_use():
             return None, "Demo token has expired or has been used"
 
+        normalized_email = email.strip().lower()
+        if demo_token.recipient_email and normalized_email != demo_token.recipient_email.lower():
+            return None, "Эта демо-ссылка предназначена для другого email"
+
         # Check if email already registered
-        existing = self.db.query(User).filter(User.email == email).first()
+        existing = self.db.query(User).filter(func.lower(User.email) == normalized_email).first()
         if existing:
             return None, "Email already registered. Please login instead."
 
         # Create demo user
         user = User(
-            email=email,
+            email=normalized_email,
             name=name,
             role='demo',
             subscription_tier='demo',
@@ -597,7 +608,8 @@ class AuthService:
             email_verified=True,  # Skip verification for demo
             active=True,
             contracts_today=0,
-            llm_requests_today=0
+            llm_requests_today=0,
+            llm_requests_total=0,
         )
 
         self.db.add(user)

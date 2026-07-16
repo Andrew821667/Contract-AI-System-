@@ -65,6 +65,7 @@ services:
       - DB_PORT=5432
       - DB_USER=contract_user
       - APP_ENV=${APP_ENV:-development}
+      - CONTRACT_AI_PUBLIC_URL=${CONTRACT_AI_PUBLIC_URL:-https://contract.ai-verdict.ru}
       - SECRET_KEY=${SECRET_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
@@ -107,49 +108,6 @@ services:
         limits:
           cpus: '2.0'
           memory: 2G
-    networks:
-      - contract-ai-network
-    restart: always
-
-  # Streamlit Admin UI
-  streamlit:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: contract-ai-streamlit
-    command: ["streamlit", "run", "admin/Главная.py", "--server.port=8502", "--server.address=0.0.0.0", "--server.baseUrlPath=streamlit-admin", "--server.enableXsrfProtection=true", "--server.enableCORS=false"]
-    environment:
-      - DATABASE_URL=postgresql://contract_user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/contract_ai
-      - REDIS_URL=redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}@redis:6379/0
-      - APP_ENV=${APP_ENV:-development}
-      - SECRET_KEY=${SECRET_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - DEFAULT_LLM_PROVIDER=${DEFAULT_LLM_PROVIDER:-deepseek}
-      - SEED_ADMIN_PASSWORD=${SEED_ADMIN_PASSWORD:-}
-      - SEED_LAWYER_PASSWORD=${SEED_LAWYER_PASSWORD:-}
-      - SEED_VIP_PASSWORD=${SEED_VIP_PASSWORD:-}
-      - SEED_DEMO_PASSWORD=${SEED_DEMO_PASSWORD:-}
-    volumes:
-      - ./data:/app/data
-      - ./chroma_data:/app/chroma_data
-      - ./logs:/app/logs
-    healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8502/healthz', timeout=5)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
-    depends_on:
-      postgres:
-        condition: service_healthy
-      backend:
-        condition: service_healthy
     networks:
       - contract-ai-network
     restart: always
@@ -202,7 +160,6 @@ services:
     depends_on:
       - frontend
       - backend
-      - streamlit
     networks:
       - contract-ai-network
     restart: always

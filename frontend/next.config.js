@@ -1,7 +1,6 @@
 /** @type {import('next').NextConfig} */
 
 const backendUrl = process.env.BACKEND_URL || 'http://localhost:8000'
-const streamlitUrl = process.env.STREAMLIT_URL || 'http://127.0.0.1:8501'
 
 const nextConfig = {
   reactStrictMode: true,
@@ -14,10 +13,6 @@ const nextConfig = {
   // API proxy
   async rewrites() {
     return [
-      {
-        source: '/streamlit-admin/:path*',
-        destination: `${streamlitUrl}/:path*`,
-      },
       {
         source: '/health',
         destination: `${backendUrl}/health`,
@@ -47,7 +42,6 @@ const nextConfig = {
       '/organization/:path*',
       '/counterparties/:path*',
       '/revisions/:path*',
-      '/streamlit-admin/:path*',
     ]
 
     return privateRoutes.map((source) => ({
@@ -69,7 +63,7 @@ const nextConfig = {
 
   // Optimize images
   images: {
-    domains: ['contract-ai.example.com'],
+    domains: ['contract.ai-verdict.ru'],
   },
 }
 

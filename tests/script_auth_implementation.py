@@ -41,7 +41,6 @@ python_files = [
     "src/models/auth_models.py",
     "src/services/auth_service.py",
     "src/api/auth/routes.py",
-    "src/pages/admin_panel.py",
     "src/middleware/security.py"
 ]
 
@@ -69,8 +68,7 @@ required_deps = [
     "python-jose",
     "qrcode",
     "fastapi",
-    "sqlalchemy",
-    "streamlit"
+    "sqlalchemy"
 ]
 
 try:
@@ -218,29 +216,21 @@ for file_path, description in frontend_files:
         test_result(f"Frontend: {description}", False, "File not found")
         errors.append(f"Missing frontend file: {file_path}")
 
-# Test 8: Check admin panel components
+# Test 8: Check React admin panel
 print("\n8. Testing Admin Panel Components...")
 print("-" * 70)
 
-admin_components = [
-    "show_user_management_tab",
-    "show_demo_links_tab",
-    "show_analytics_tab",
-    "show_audit_logs_tab"
+admin_files = [
+    "frontend/src/app/admin/page.tsx",
+    "frontend/src/components/admin/DemoRequestsPanel.tsx",
 ]
 
-try:
-    with open("src/pages/admin_panel.py", "r") as f:
-        content = f.read()
-        for component in admin_components:
-            if f"def {component}" in content:
-                test_result(f"Admin: {component}", True)
-            else:
-                test_result(f"Admin: {component}", False, "Function not found")
-                errors.append(f"Missing admin function: {component}")
-except FileNotFoundError:
-    test_result("admin_panel.py", False, "File not found")
-    errors.append("admin_panel.py not found")
+for file_path in admin_files:
+    if Path(file_path).exists():
+        test_result(f"Admin: {file_path}", True)
+    else:
+        test_result(f"Admin: {file_path}", False, "File not found")
+        errors.append(f"Missing admin file: {file_path}")
 
 # Final summary
 print("\n" + "=" * 70)

@@ -9,22 +9,23 @@ Provides REST API endpoints for:
 - Analytics
 """
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Header, Request, Cookie
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Header, Request, Cookie, Query
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, List, Dict, Any
-from datetime import datetime
+from typing import Optional, List, Dict, Any, Literal
+from datetime import datetime, timedelta, timezone
 import hmac
 import os
 import secrets
 from sqlalchemy.orm import Session
 from loguru import logger
 
-from src.models import get_db, User
+from src.models import DemoAccessRequest, get_db, User
 from src.services.auth_service import AuthService
-from src.services.quota_service import get_contract_quota
-from src.services.telegram_service import notify_new_user
+from src.services.quota_service import get_contract_quota, get_llm_quota
+from src.services.telegram_service import notify_demo_request
+from config.settings import settings
 
 
 # Cookie settings for refresh token
@@ -140,7 +141,8 @@ class DemoTokenGenerateRequest(BaseModel):
     max_llm_requests: int = Field(default=10, ge=1, le=100)
     expires_in_hours: int = Field(default=24, ge=1, le=168)
     campaign: Optional[str] = None
-    source: str = "admin_panel"
+    source: str = "admin_api"
+    recipient_email: EmailStr
 
 
 class DemoActivateRequest(BaseModel):
@@ -148,6 +150,28 @@ class DemoActivateRequest(BaseModel):
     token: str
     email: EmailStr
     name: str = Field(..., min_length=2, max_length=255)
+
+
+class DemoAccessRequestCreate(BaseModel):
+    """Public request for a personal demo invitation."""
+    name: str = Field(..., min_length=2, max_length=255)
+    email: EmailStr
+    contact: str = Field(..., min_length=3, max_length=255)
+    company: Optional[str] = Field(None, max_length=255)
+    task: str = Field(..., min_length=20, max_length=4000)
+    consent: Literal[True]
+    website: str = Field(default="", max_length=255)
+
+
+class DemoRequestApprove(BaseModel):
+    max_contracts: int = Field(default=3, ge=1, le=10)
+    max_llm_requests: int = Field(default=10, ge=1, le=100)
+    expires_in_hours: int = Field(default=72, ge=1, le=168)
+    note: Optional[str] = Field(None, max_length=2000)
+
+
+class DemoRequestReject(BaseModel):
+    note: Optional[str] = Field(None, max_length=2000)
 
 
 class VerifyEmailRequest(BaseModel):
@@ -205,133 +229,102 @@ def get_client_ip(request: Request) -> Optional[str]:
 router = APIRouter(tags=["authentication"])
 
 
+def _demo_request_payload(item: DemoAccessRequest) -> Dict[str, Any]:
+    payload = {
+        "id": item.id,
+        "name": item.name,
+        "email": item.email,
+        "contact": item.contact,
+        "company": item.company,
+        "task": item.task,
+        "source": item.source,
+        "consent_at": item.consent_at.isoformat() if item.consent_at else None,
+        "consent_version": item.consent_version,
+        "status": item.status,
+        "decision_note": item.decision_note,
+        "demo_token_id": item.demo_token_id,
+        "created_at": item.created_at.isoformat() if item.created_at else None,
+        "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+        "decided_at": item.decided_at.isoformat() if item.decided_at else None,
+    }
+    if item.demo_token:
+        payload["demo_link"] = {
+            "url": _demo_url(item.demo_token.token),
+            "expires_at": item.demo_token.expires_at.isoformat(),
+            "max_contracts": item.demo_token.max_contracts,
+            "max_llm_requests": item.demo_token.max_llm_requests,
+            "used": item.demo_token.used,
+        }
+    return payload
+
+
+def _demo_url(token: str) -> str:
+    return f"{settings.contract_ai_public_url.rstrip('/')}/demo?token={token}"
+
+
 # ==================== Public Endpoints ====================
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(
     request_data: UserRegisterRequest,
     request: Request,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
 ):
-    """
-    Register new user
-
-    Creates a new user account with DEMO role by default.
-    Sends email verification link (if email service configured).
-
-    **Flow:**
-    1. Validates email uniqueness
-    2. Hashes password (bcrypt)
-    3. Creates user with specified role
-    4. Sends verification email
-    5. Returns JWT tokens
-
-    **Rate Limit:** 5 requests per minute per IP
-
-    **Example:**
-    ```json
-    {
-        "email": "user@example.com",
-        "name": "John Doe",
-        "password": "SecurePass123"
-    }
-    ```
-
-    **Returns:**
-    ```json
-    {
-        "user_id": "uuid",
-        "email": "user@example.com",
-        "access_token": "jwt_token",
-        "message": "Registration successful. Please verify your email."
-    }
-    ```
-    """
+    """Reject legacy public registration; access is invitation-only."""
     _check_csrf(request)
-    auth_service = AuthService(db)
-
-    user, error = auth_service.register_user(
-        email=request_data.email,
-        name=request_data.name,
-        password=request_data.password,
-        role="demo",                   # SECURITY: hardcoded; new users start as demo
-        subscription_tier="demo",      # SECURITY: hardcoded, never from client
-        send_verification=False        # MVP: skip email verification, auto-login
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Самостоятельная регистрация закрыта. Запросите персональный демо-доступ или войдите по приглашению.",
     )
 
-    if error:
-        # SECURITY: uniform response to prevent account enumeration.
-        if "already" in (error or "").lower() or "exist" in (error or "").lower():
-            return JSONResponse(
-                status_code=status.HTTP_200_OK,
-                content={"message": "Если указанный email свободен, на него будет отправлено письмо для подтверждения."}
-            )
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
 
-    # Log registration from IP
-    ip_address = get_client_ip(request)
-    user_agent = request.headers.get("User-Agent")
+@router.post("/demo-request", status_code=status.HTTP_202_ACCEPTED)
+async def create_demo_request(
+    request_data: DemoAccessRequestCreate,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Accept a demo request without creating an account."""
+    _check_csrf(request)
+    response = {"message": "Заявка принята. Мы свяжемся с вами после короткой проверки задачи."}
 
-    auth_service.log_action(
-        user_id=user.id,
-        action="registration_completed",
-        status="success",
-        ip_address=ip_address
+    # Honeypot submissions receive the same response and are silently discarded.
+    if request_data.website.strip():
+        return response
+
+    email = str(request_data.email).strip().lower()
+    recent = datetime.now(timezone.utc) - timedelta(hours=24)
+    existing = db.query(DemoAccessRequest).filter(
+        DemoAccessRequest.email == email,
+        DemoAccessRequest.status == "pending",
+        DemoAccessRequest.created_at >= recent,
+    ).first()
+    if existing:
+        return response
+
+    item = DemoAccessRequest(
+        name=request_data.name.strip(),
+        email=email,
+        contact=request_data.contact.strip(),
+        company=request_data.company.strip() if request_data.company else None,
+        task=request_data.task.strip(),
+        source="website",
+        ip_address=get_client_ip(request),
+        user_agent=request.headers.get("User-Agent"),
     )
-    background_tasks.add_task(
-        notify_new_user,
-        user.id,
-        user.email,
-        user.name,
-        user.role,
-        user.subscription_tier,
-        ip_address,
-    )
-
-    # Create tokens and session (same pattern as login)
-    access_token = auth_service.create_access_token(user.id)
-    refresh_token = auth_service.create_refresh_token(user.id)
-
-    from src.models.auth_models import UserSession
-    from datetime import timedelta, timezone
-
-    import hashlib as _hl
-    session = UserSession(
-        user_id=user.id,
-        access_token_hash=_hl.sha256(access_token.encode()).hexdigest(),
-        refresh_token=refresh_token,
-        ip_address=ip_address,
-        user_agent=user_agent,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=auth_service.REFRESH_TOKEN_EXPIRE_DAYS)
-    )
-    db.add(session)
+    db.add(item)
     db.commit()
-    contract_quota = get_contract_quota(db, user)
+    db.refresh(item)
 
-    login_data = {
-        "user": {
-            "id": user.id,
-            "email": user.email,
-            "name": user.name,
-            "role": user.role,
-            "subscription_tier": user.subscription_tier,
-            "is_demo": True,
-            "contracts_today": 0,
-            "llm_requests_today": 0,
-            "max_contracts_per_day": user.max_contracts_per_day,
-            "contracts_month": contract_quota["used"],
-            "max_contracts_per_month": contract_quota["limit"],
-            "contract_quota_period": contract_quota["period"],
-            "max_llm_requests_per_day": user.max_llm_requests_per_day,
-        },
-        "access_token": access_token,
-        "token_type": "Bearer",
-        "expires_in": auth_service.ACCESS_TOKEN_EXPIRE_MINUTES * 60
-    }
-
-    response = JSONResponse(status_code=status.HTTP_201_CREATED, content=login_data)
-    _set_refresh_cookie(response, refresh_token)
+    background_tasks.add_task(
+        notify_demo_request,
+        item.id,
+        item.email,
+        item.name,
+        item.contact,
+        item.company,
+        item.task,
+    )
     return response
 
 
@@ -349,19 +342,15 @@ async def get_quota(
     current_user.reset_daily_limits()
     db.commit()
     contract_quota = get_contract_quota(db, current_user)
-
-    tier_limits = User.TIER_LIMITS.get(
-        current_user.subscription_tier,
-        User.TIER_LIMITS['demo']
-    )
+    llm_quota = get_llm_quota(db, current_user)
 
     return {
         "contracts_used": contract_quota["used"],
         "contracts_limit": contract_quota["limit"],
         "contracts_period": contract_quota["period"],
-        "llm_used": current_user.llm_requests_today or 0,
-        "llm_limit": tier_limits['max_llm_requests_per_day'],
-        "llm_period": "day",
+        "llm_used": llm_quota["used"],
+        "llm_limit": llm_quota["limit"],
+        "llm_period": llm_quota["period"],
         "subscription_tier": current_user.subscription_tier,
     }
 
@@ -533,7 +522,7 @@ async def activate_demo(
 
     **Example Link:**
     ```
-    https://contract-ai.example.com/demo?token=abc123xyz
+    https://contract.ai-verdict.ru/demo?token=abc123xyz
     ```
 
     **Request:**
@@ -562,6 +551,7 @@ async def activate_demo(
     }
     ```
     """
+    _check_csrf(request)
     auth_service = AuthService(db)
 
     ip_address = get_client_ip(request)
@@ -735,6 +725,7 @@ async def get_current_user_info(
     ```
     """
     contract_quota = get_contract_quota(db, current_user)
+    llm_quota = get_llm_quota(db, current_user)
     return {
         "id": current_user.id,
         "email": current_user.email,
@@ -753,8 +744,10 @@ async def get_current_user_info(
         "contracts_month": contract_quota["used"],
         "max_contracts_per_month": contract_quota["limit"],
         "contract_quota_period": contract_quota["period"],
-        "llm_requests_today": current_user.llm_requests_today,
-        "max_llm_requests_per_day": current_user.max_llm_requests_per_day,
+        "llm_requests_today": llm_quota["used"],
+        "llm_requests_total": current_user.llm_requests_total,
+        "max_llm_requests_per_day": llm_quota["limit"],
+        "llm_quota_period": llm_quota["period"],
         "demo_expires": current_user.demo_expires.isoformat() if current_user.demo_expires else None
     }
 
@@ -808,6 +801,89 @@ async def change_password(
 
 # ==================== Admin Endpoints ====================
 
+@router.get("/admin/demo-requests", dependencies=[Depends(require_admin)])
+async def list_demo_requests(
+    request_status: str = Query(default="pending", alias="status", pattern="^(pending|approved|rejected|all)$"),
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    query = db.query(DemoAccessRequest)
+    if request_status != "all":
+        query = query.filter(DemoAccessRequest.status == request_status)
+    items = query.order_by(DemoAccessRequest.created_at.desc()).limit(200).all()
+    return {"items": [_demo_request_payload(item) for item in items], "total": len(items)}
+
+
+@router.post("/admin/demo-requests/{request_id}/approve", dependencies=[Depends(require_admin)])
+async def approve_demo_request(
+    request_id: str,
+    request_data: DemoRequestApprove,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    item = db.query(DemoAccessRequest).filter(
+        DemoAccessRequest.id == request_id
+    ).with_for_update().first()
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заявка не найдена")
+    if item.status != "pending":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Решение по заявке уже принято")
+    if db.query(User).filter(User.email == item.email).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Пользователь с таким email уже существует")
+
+    auth_service = AuthService(db)
+    demo_token = auth_service.generate_demo_token(
+        created_by_user_id=current_user.id,
+        max_contracts=request_data.max_contracts,
+        max_llm_requests=request_data.max_llm_requests,
+        expires_in_hours=request_data.expires_in_hours,
+        source="demo_request",
+        recipient_email=item.email,
+        commit=False,
+    )
+    item.status = "approved"
+    item.decision_note = request_data.note
+    item.demo_token_id = demo_token.id
+    item.decided_by = current_user.id
+    item.decided_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(item)
+
+    return {
+        "request": _demo_request_payload(item),
+        "demo_link": {
+            "token": demo_token.token,
+            "url": _demo_url(demo_token.token),
+            "expires_at": demo_token.expires_at.isoformat(),
+            "max_contracts": demo_token.max_contracts,
+            "max_llm_requests": demo_token.max_llm_requests,
+        },
+    }
+
+
+@router.post("/admin/demo-requests/{request_id}/reject", dependencies=[Depends(require_admin)])
+async def reject_demo_request(
+    request_id: str,
+    request_data: DemoRequestReject,
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    item = db.query(DemoAccessRequest).filter(
+        DemoAccessRequest.id == request_id
+    ).with_for_update().first()
+    if not item:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Заявка не найдена")
+    if item.status != "pending":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Решение по заявке уже принято")
+
+    item.status = "rejected"
+    item.decision_note = request_data.note
+    item.decided_by = current_user.id
+    item.decided_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(item)
+    return {"request": _demo_request_payload(item)}
+
 @router.post("/admin/demo-link", dependencies=[Depends(require_admin)])
 async def generate_demo_link(
     request_data: DemoTokenGenerateRequest,
@@ -839,7 +915,7 @@ async def generate_demo_link(
     ```json
     {
         "token": "abc123xyz...",
-        "url": "https://contract-ai.example.com/demo?token=abc123xyz",
+        "url": "https://contract.ai-verdict.ru/demo?token=abc123xyz",
         "expires_at": "2025-01-16T10:00:00",
         "max_contracts": 3,
         "max_llm_requests": 10
@@ -854,11 +930,11 @@ async def generate_demo_link(
         max_llm_requests=request_data.max_llm_requests,
         expires_in_hours=request_data.expires_in_hours,
         campaign=request_data.campaign,
-        source=request_data.source
+        source=request_data.source,
+        recipient_email=str(request_data.recipient_email).lower() if request_data.recipient_email else None,
     )
 
-    # Generate URL (you can customize domain here)
-    demo_url = f"https://contract-ai.example.com/demo?token={demo_token.token}"
+    demo_url = _demo_url(demo_token.token)
 
     return {
         "token": demo_token.token,
