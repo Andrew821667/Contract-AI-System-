@@ -34,6 +34,8 @@ from src.services.admin_rag_retriever import (
 
 router = APIRouter(prefix="/rag", tags=["RAG Admin"])
 
+RAG_MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 МБ — лимит на загрузку документа в БЗ
+
 # Stats cache (60s TTL) — stats query scans all collections, cache per request
 _stats_cache: Optional[tuple] = None  # (StatsResponse, expires_at: float)
 _STATS_TTL = 60.0
@@ -168,12 +170,24 @@ async def get_stats(current_user: User = Depends(get_current_user)):
     for name in COLLECTIONS:
         try:
             coll = _get_collection(name)
-            all_items = coll.get(include=["metadatas"])
-            doc_ids = {m.get("doc_id") for m in all_items["metadatas"] if m.get("doc_id")}
+            # chunk_count — дёшево через count(); метаданные для подсчёта
+            # уникальных doc_id тянем СТРАНИЦАМИ, а не всю коллекцию разом
+            # (раньше coll.get() грузил сотни тысяч метадатных строк в память).
+            chunk_count = coll.count()
+            doc_ids: set = set()
+            _PAGE = 10000
+            _off = 0
+            while _off < chunk_count:
+                batch = coll.get(include=["metadatas"], limit=_PAGE, offset=_off)
+                metas = batch.get("metadatas") or []
+                if not metas:
+                    break
+                doc_ids.update(m.get("doc_id") for m in metas if m.get("doc_id"))
+                _off += _PAGE
             result.append(CollectionStat(
                 name=name,
                 label=COLLECTION_LABELS.get(name, name),
-                chunk_count=len(all_items["ids"]),
+                chunk_count=chunk_count,
                 doc_count=len(doc_ids),
             ))
         except HTTPException:
@@ -241,7 +255,16 @@ async def upload_document(
     """
     _check_upload_rate_limit(str(current_user.id))
 
-    content = await file.read()
+    # Ограниченное чтение: раньше `await file.read()` тянул весь файл в память без
+    # лимита (memory-DoS — гигабайтный файл ронял воркер). Читаем максимум
+    # RAG_MAX_FILE_SIZE+1 байт и отбиваем превышение (в отличие от contracts/upload
+    # тут лимита не было вовсе).
+    content = await file.read(RAG_MAX_FILE_SIZE + 1)
+    if len(content) > RAG_MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Файл слишком большой (>{RAG_MAX_FILE_SIZE // (1024 * 1024)} MB)",
+        )
     if not content:
         raise HTTPException(status_code=400, detail="Файл пустой")
 

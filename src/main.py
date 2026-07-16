@@ -122,7 +122,29 @@ async def lifespan(app: FastAPI):
 
     cleanup_task = asyncio.create_task(_ws_cleanup_loop())
 
+    # Опциональный in-process планировщик (по умолчанию ВЫКЛ). Раньше стартовал
+    # только из Streamlit-админки → в API-only деплое переиндексация БЗ и очистка
+    # сессий не выполнялись (M9). Включать на ОДНОМ выделенном инстансе
+    # (ENABLE_API_SCHEDULER=1), чтобы не плодить N планировщиков в N воркерах.
+    app.state.scheduler = None
+    if os.getenv("ENABLE_API_SCHEDULER", "false").lower() in ("1", "true", "yes"):
+        try:
+            from src.services.scheduler_service import SchedulerService
+            from src.models.database import SessionLocal
+            _sched = SchedulerService(db_session_factory=SessionLocal)
+            _sched.start()
+            app.state.scheduler = _sched
+            logger.info("✅ In-process scheduler started (ENABLE_API_SCHEDULER=1)")
+        except Exception as e:
+            logger.warning(f"⚠️ Scheduler start failed: {e}")
+
     yield
+
+    if getattr(app.state, "scheduler", None) is not None:
+        try:
+            app.state.scheduler.stop()
+        except Exception:
+            pass
 
     # Shutdown
     cleanup_task.cancel()

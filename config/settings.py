@@ -142,12 +142,19 @@ class Settings(BaseSettings):
                 "  SECRET_KEY=<generated-key>"
             )
 
-        # Auto-generate SECRET_KEY in dev if not set (with loud warning)
+        # Auto-generate SECRET_KEY in dev if not set (with loud warning).
+        # ВАЖНО: ключ ДЕТЕРМИНИРОВАННЫЙ (sha256 от пути проекта), а не random.
+        # Раньше каждый gunicorn-воркер генерил СВОЙ random-ключ (+ гонка записи
+        # .env) → JWT валиден только на «своём» воркере → плавающие 401. Детермин.
+        # ключ одинаков во всех воркерах без координации и переживает рестарты.
         if self.secret_key in ["", "your-secret-key-here", "changeme", "secret"]:
             if self.app_env in ("development", "testing"):
-                import secrets as _secrets
+                import hashlib as _hashlib
                 import warnings
-                generated_key = _secrets.token_urlsafe(32)
+                _proj = os.path.dirname(os.path.dirname(__file__))
+                generated_key = _hashlib.sha256(
+                    f"contract-ai-dev-secret::{_proj}".encode()
+                ).hexdigest()
                 self.secret_key = generated_key
                 # Persist to .env so the same key survives restarts
                 env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
