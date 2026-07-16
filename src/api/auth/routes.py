@@ -21,7 +21,9 @@ import secrets
 from sqlalchemy.orm import Session
 from loguru import logger
 
+import asyncio
 from src.models import DemoAccessRequest, get_db, User
+from src.models.database import SessionLocal
 from src.services.auth_service import AuthService
 from src.services.legal_consent import (
     LEGAL_CONSENT_VERSION,
@@ -509,17 +511,28 @@ async def login(
     """
     if request:
         _check_csrf(request)
-    auth_service = AuthService(db)
 
     ip_address = get_client_ip(request) if request else None
     user_agent = request.headers.get("User-Agent") if request else None
 
-    login_data, error = auth_service.login_user(
-        email=form_data.username,
-        password=form_data.password,
-        ip_address=ip_address,
-        user_agent=user_agent
-    )
+    # bcrypt (rounds=12, ~100-300мс CPU) в синхронном login_user блокировал event
+    # loop async-хендлера → под конкуренцией логины сериализовались, упирались в
+    # таймауты и рвали соединения (M8). Выносим весь login_user в threadpool с
+    # ОТДЕЛЬНОЙ сессией (request-scoped `db` нельзя использовать в другом потоке —
+    # SQLAlchemy-сессия не потокобезопасна).
+    def _login_in_thread():
+        thread_db = SessionLocal()
+        try:
+            return AuthService(thread_db).login_user(
+                email=form_data.username,
+                password=form_data.password,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        finally:
+            thread_db.close()
+
+    login_data, error = await asyncio.to_thread(_login_in_thread)
 
     if error:
         raise HTTPException(

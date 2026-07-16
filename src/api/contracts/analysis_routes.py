@@ -664,6 +664,25 @@ async def analyze_contract_stream(
     """
     import json as json_mod
 
+    # LLM-квота ДО любой работы (как в /analyze): раньше стриминг-анализ звал LLM,
+    # НЕ инкрементируя дневной счётчик → обход лимита через /analyze/stream (L12).
+    # Атомарно резервируем 1 LLM-запрос; при исчерпании — 429 обычным HTTP (внутри
+    # SSE-генератора ошибка ушла бы событием, а не статусом).
+    llm_limit = current_user.max_llm_requests_per_day
+    quota_res = db.execute(
+        sql_update(User)
+        .where(User.id == current_user.id)
+        .where(User.llm_requests_today < llm_limit)
+        .values(llm_requests_today=User.llm_requests_today + 1)
+    )
+    if quota_res.rowcount == 0:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f'Дневной лимит LLM-запросов ({llm_limit}) исчерпан.',
+        )
+    db.commit()
+
     parsed_xml = (contract.meta_info or {}).get('xml')
     if not parsed_xml:
         # Parse on the fly
