@@ -27,6 +27,7 @@ export default function DemoAccessClient() {
   const token = searchParams.get('token')?.trim() || ''
   const [form, setForm] = useState(initialForm)
   const [activation, setActivation] = useState({ name: '', email: '' })
+  const [activationConsent, setActivationConsent] = useState(false)
   const [loading, setLoading] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
@@ -56,10 +57,15 @@ export default function DemoAccessClient() {
 
   const activate = async (event: FormEvent) => {
     event.preventDefault()
+    if (!activationConsent) {
+      setError('Нужно принять пользовательское соглашение и политику конфиденциальности.')
+      return
+    }
     setLoading(true)
     setError('')
     try {
       await api.activateDemo({ token, name: activation.name, email: activation.email })
+      await api.acceptLegalConsent()
       router.push('/dashboard')
     } catch (err: any) {
       setError(err.response?.data?.detail || err.response?.data?.message || 'Ссылка недействительна или срок её действия истёк.')
@@ -114,6 +120,13 @@ export default function DemoAccessClient() {
                 <Field label="Рабочий email" required>
                   <input autoComplete="email" className="field-input" onChange={(e) => setActivation({ ...activation, email: e.target.value })} required type="email" value={activation.email} />
                 </Field>
+                <label className="flex items-start gap-3 text-sm leading-relaxed text-slate-600">
+                  <input checked={activationConsent} className="mt-1 h-4 w-4 rounded border-slate-400 text-primary-600 focus:ring-primary-500" onChange={(e) => setActivationConsent(e.target.checked)} required type="checkbox" />
+                  <span>
+                    Принимаю <Link className="font-semibold text-primary-700 hover:underline" href="/terms">пользовательское соглашение</Link>
+                    {' '}и <Link className="font-semibold text-primary-700 hover:underline" href="/privacy">политику конфиденциальности</Link>.
+                  </span>
+                </label>
                 {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
                 <SubmitButton loading={loading} label="Активировать и войти" />
               </form>

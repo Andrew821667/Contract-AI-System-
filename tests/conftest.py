@@ -18,6 +18,7 @@ try:
     from src.models.auth_models import User
     from src.main import app
     from src.services.auth_service import AuthService
+    from src.services.legal_consent import record_user_legal_consent
     _FULL_APP_AVAILABLE = True
 except ImportError:
     _FULL_APP_AVAILABLE = False
@@ -125,6 +126,11 @@ if _FULL_APP_AVAILABLE:
             send_verification=False,
         )
         assert user is not None, f"Failed to create test user: {error}"
+        record_user_legal_consent(
+            user,
+            ip_address="127.0.0.1",
+            user_agent="pytest",
+        )
         test_db.commit()
         return user
 

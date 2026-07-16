@@ -51,6 +51,18 @@ class TestUploadContract:
         resp = client.post("/api/v1/contracts/upload", headers=auth_headers)
         assert resp.status_code == 422  # Missing required file
 
+    def test_upload_requires_legal_consent(self, client, auth_headers, test_db, test_user):
+        test_user.preferences = {}
+        test_db.commit()
+        file = io.BytesIO(b"test content")
+        resp = client.post(
+            "/api/v1/contracts/upload",
+            headers=auth_headers,
+            files={"file": ("test.txt", file, "text/plain")},
+            data={"document_type": "contract"},
+        )
+        assert resp.status_code == 403
+
 
 class TestGetContract:
     """GET /api/v1/contracts/{contract_id}"""

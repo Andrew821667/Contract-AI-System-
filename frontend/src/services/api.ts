@@ -204,6 +204,14 @@ class APIClient {
 
   // ==================== Authentication ====================
 
+  async acceptLegalConsent(): Promise<{ accepted: boolean; version: string }> {
+    const response = await this.client.post('/api/v1/auth/legal-consent');
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('contract_ai_legal_consent_v1', 'accepted');
+    }
+    return response.data;
+  }
+
   async getQuota(): Promise<QuotaResponse> {
     const response = await this.client.get<QuotaResponse>('/api/v1/auth/quota');
     return response.data;

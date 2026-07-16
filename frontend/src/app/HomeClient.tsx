@@ -24,9 +24,11 @@ export default function Home() {
   // Login form state
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [legalAccepted, setLegalAccepted] = useState(false)
   const [loginLoading, setLoginLoading] = useState(false)
 
   useEffect(() => {
+    setLegalAccepted(localStorage.getItem('contract_ai_legal_consent_v1') === 'accepted')
     const token = useAuthStore.getState().accessToken
     if (token) {
       router.replace('/dashboard')
@@ -35,9 +37,14 @@ export default function Home() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!legalAccepted) {
+      toast.error('Нужно принять пользовательское соглашение и политику конфиденциальности')
+      return
+    }
     setLoginLoading(true)
     try {
       const response = await api.login({ username: email, password })
+      await api.acceptLegalConsent()
       toast.success(`Добро пожаловать, ${response.user.name}!`, {
         style: { borderRadius: '12px', background: '#d97706', color: '#fff' },
       })
@@ -251,6 +258,21 @@ export default function Home() {
                       required
                     />
                   </div>
+
+                  <label className="flex items-start gap-3 rounded-xl border border-stone-500 bg-slate-800/70 p-3 text-sm text-stone-300">
+                    <input
+                      type="checkbox"
+                      checked={legalAccepted}
+                      onChange={(event) => setLegalAccepted(event.target.checked)}
+                      className="mt-1 h-4 w-4 rounded border-stone-500 text-primary-600 focus:ring-primary-500"
+                    />
+                    <span>
+                      Принимаю{' '}
+                      <a href="/terms" className="underline hover:text-white">пользовательское соглашение</a>
+                      {' '}и{' '}
+                      <a href="/privacy" className="underline hover:text-white">политику конфиденциальности</a>.
+                    </span>
+                  </label>
 
                   <motion.button
                     whileHover={{ scale: 1.02 }}

@@ -14,6 +14,7 @@ class TestRegister:
             "email": "new@example.com",
             "name": "New User",
             "password": "StrongPass1!",
+            "legal_consent_accepted": True,
         })
         assert resp.status_code == 403
         assert "демо-доступ" in resp.json()["message"]
@@ -24,8 +25,19 @@ class TestRegister:
             "email": "short@example.com",
             "name": "User",
             "password": "123",
+            "legal_consent_accepted": True,
         })
         assert resp.status_code == 422  # Pydantic validation
+
+    def test_registration_stays_closed_without_consent(self, client, test_db):
+        resp = client.post("/api/v1/auth/register", json={
+            "email": "no-consent@example.com",
+            "name": "No Consent",
+            "password": "StrongPass1!",
+            "legal_consent_accepted": False,
+        })
+        assert resp.status_code == 403
+        assert test_db.query(User).filter(User.email == "no-consent@example.com").first() is None
 
 
 class TestDemoRequest:
