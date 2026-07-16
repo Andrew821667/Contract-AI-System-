@@ -176,7 +176,7 @@ export default function Home() {
 
       <main>
       {/* Hero Section с формой входа */}
-      <section className="brand-photo relative overflow-hidden py-16 px-4">
+      <section className="brand-photo contract-hero relative overflow-hidden py-16 px-4">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-20 right-20 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl" />
           <div className="absolute bottom-10 left-10 w-72 h-72 bg-slate-400/10 rounded-full blur-3xl" />
