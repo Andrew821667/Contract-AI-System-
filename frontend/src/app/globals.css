@@ -93,6 +93,30 @@ body {
   z-index: -1;
 }
 
+.contract-hero::before {
+  background-image: url('/images/contract-ai-hero-v1.jpg');
+  background-position: 57% center;
+}
+
+.contract-hero::after {
+  background:
+    radial-gradient(circle at 76% 22%, rgba(245, 158, 11, 0.12), transparent 32%),
+    linear-gradient(90deg, rgba(232, 238, 246, 0.86) 0%, rgba(232, 238, 246, 0.58) 48%, rgba(218, 226, 237, 0.2) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, rgba(226, 232, 240, 0.38) 100%);
+}
+
+@media (max-width: 1023px) {
+  .contract-hero::before {
+    background-position: 61% center;
+  }
+
+  .contract-hero::after {
+    background:
+      linear-gradient(180deg, rgba(232, 238, 246, 0.88) 0%, rgba(232, 238, 246, 0.48) 46%, rgba(218, 226, 237, 0.58) 100%),
+      radial-gradient(circle at 70% 50%, rgba(245, 158, 11, 0.12), transparent 36%);
+  }
+}
+
 .brand-auth::before,
 .brand-auth::after {
   position: fixed;
