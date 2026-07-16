@@ -760,10 +760,13 @@ async def batch_analyze_contracts(
 
 
 def _analyze_single_sync(contract_id: str, user_id: str, check_counterparty: bool):
-    """Synchronous single contract analysis for use in thread pool"""
-    from src.models.database import SessionLocal
-    db = SessionLocal()
-    try:
-        analyze_contract_background(contract_id, user_id, check_counterparty, None)
-    finally:
-        db.close()
+    """Синхронная обёртка одного анализа для thread-pool (batch).
+
+    analyze_contract_background — КОРУТИНА (async def). Раньше её вызывали без
+    await из синхронного потока → корутина создавалась и молча выбрасывалась,
+    и весь batch тихо не делал ничего (RuntimeWarning: never awaited). Мы внутри
+    asyncio.to_thread (отдельный поток без активного loop) → asyncio.run корректно
+    исполняет корутину до конца.
+    """
+    import asyncio
+    asyncio.run(analyze_contract_background(contract_id, user_id, check_counterparty, None))

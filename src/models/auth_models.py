@@ -10,6 +10,17 @@ Includes:
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+
+
+def ensure_aware(dt: Optional[datetime]) -> Optional[datetime]:
+    """Привести datetime к aware-UTC. Значения из колонок `timestamp without
+    time zone` приходят naive — считаем их UTC и вешаем tzinfo, чтобы сравнения
+    с aware `datetime.now(timezone.utc)` не падали TypeError."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 from sqlalchemy import (
     Boolean, Column, String, Text, Integer, Float,
     DateTime, ForeignKey, CheckConstraint, UniqueConstraint, JSON, Index
@@ -103,14 +114,24 @@ class User(Base):
         return f"<User(id={self.id}, email={self.email}, role={self.role}, tier={self.subscription_tier})>"
 
     def is_active(self) -> bool:
-        """Check if user account is active"""
+        """Check if user account is active.
+
+        ВАЖНО: временны́е колонки (locked_until/demo_expires/subscription_expires)
+        объявлены как DateTime → PostgreSQL хранит их как `timestamp without time
+        zone` и возвращает NAIVE. Прямое сравнение с aware `datetime.now(tz)`
+        падало с `TypeError: can't compare offset-naive and offset-aware`, а так
+        как is_active зовётся в get_current_user на каждом запросе — залоченный
+        (или demo/подписка-истёкший) юзер получал HTTP 500 на всё. ensure_aware
+        приводит обе стороны к aware-UTC.
+        """
+        now = datetime.now(timezone.utc)
         if not self.active:
             return False
-        if self.locked_until and self.locked_until > datetime.now(timezone.utc):
+        if self.locked_until and ensure_aware(self.locked_until) > now:
             return False
-        if self.is_demo and self.demo_expires and self.demo_expires < datetime.now(timezone.utc):
+        if self.is_demo and self.demo_expires and ensure_aware(self.demo_expires) < now:
             return False
-        if self.subscription_expires and self.subscription_expires < datetime.now(timezone.utc):
+        if self.subscription_expires and ensure_aware(self.subscription_expires) < now:
             return False
         return True
 

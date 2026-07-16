@@ -200,10 +200,15 @@ async def websocket_analysis_updates(
     # Close the injected DB session — we'll use short-lived sessions for polling
     db.close()
 
-    # Register connection
+    # Register connection. ВАЖНО: manager.active_connections — это
+    # Dict[str, Dict[WebSocket, float]] (см. ConnectionManager). Раньше здесь
+    # создавали set() в обход этой структуры → broadcast_to_contract делал
+    # dict-присваивание по set (TypeError), а cleanup_stale звал .items() на set
+    # (краш каждые 600с). accept уже был выше, поэтому регистрируем вручную в том
+    # же dict-формате, что и manager.connect (без повторного accept).
     if contract_id not in manager.active_connections:
-        manager.active_connections[contract_id] = set()
-    manager.active_connections[contract_id].add(websocket)
+        manager.active_connections[contract_id] = {}
+    manager.active_connections[contract_id][websocket] = time.monotonic()
     logger.info(f"WebSocket connected for contract {contract_id}. Total: {len(manager.active_connections[contract_id])}")
 
     try:

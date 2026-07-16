@@ -9,6 +9,7 @@ Features:
 """
 
 import ipaddress
+import hashlib
 
 from fastapi import Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -77,6 +78,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         import os
         is_dev = os.getenv("APP_ENV", "development") != "production"
         multiplier = 10 if is_dev else 1  # Relaxed limits for development
+        # Глобальный лимит тоже смягчаем в dev (раньше ×10 применялся только к
+        # точечным лимитам, а глобальный 1000/min душил обычное чтение и всех
+        # юзеров за одним IP — см. M7 аудита).
+        self.requests_per_minute = requests_per_minute * multiplier
         self.endpoint_limits = {
             '/api/v1/auth/login': 10 * multiplier,
             '/api/v1/auth/register': 5 * multiplier,
@@ -94,8 +99,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         }
 
     async def dispatch(self, request: Request, call_next):
-        # Get client IP
+        # Ключ лимита: для аутентифицированных — по токену (каждый юзер свой бакет,
+        # чтобы юзеры за одним корпоративным NAT-IP не делили лимит), иначе по IP.
         client_ip = self._get_client_ip(request)
+        auth = request.headers.get("authorization", "")
+        if auth.lower().startswith("bearer ") and len(auth) > 20:
+            rate_key = "u:" + hashlib.sha256(auth[7:].encode()).hexdigest()[:20]
+        else:
+            rate_key = client_ip
 
         # Check rate limit — exact match first, then prefix match for AI endpoints
         path = request.url.path
@@ -108,7 +119,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             else:
                 limit = self.requests_per_minute
 
-        if not self._allow_request(client_ip, limit):
+        if not self._allow_request(rate_key, limit):
             return JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 content={

@@ -22,7 +22,8 @@ from sqlalchemy import func, and_, or_
 
 from src.models.auth_models import (
     User, UserSession, DemoToken, AuditLog,
-    PasswordResetRequest, EmailVerification, LoginAttempt
+    PasswordResetRequest, EmailVerification, LoginAttempt,
+    ensure_aware,
 )
 from config.settings import settings
 
@@ -30,8 +31,11 @@ from config.settings import settings
 class AuthService:
     """Authentication service with comprehensive security features"""
 
-    # JWT settings — generate a random key if none provided (safe for dev, warns in logs)
-    JWT_SECRET = settings.secret_key if settings.secret_key else secrets.token_urlsafe(32)
+    # JWT-секрет — ТОЛЬКО из settings (детерминир. в dev, обязателен в prod).
+    # Раньше при пустом ключе был per-process `secrets.token_urlsafe(32)` → каждый
+    # gunicorn-воркер подписывал СВОИМ ключом → токен валиден лишь на «своём»
+    # воркере → случайные 401 под нагрузкой. settings гарантирует непустой ключ.
+    JWT_SECRET = settings.secret_key
     JWT_ALGORITHM = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES = 60  # 1 hour
     REFRESH_TOKEN_EXPIRE_DAYS = 30  # 30 days
@@ -373,9 +377,11 @@ class AuthService:
             self._record_login_attempt(email, False, ip_address, user_agent, "user_not_found")
             return None, "Invalid email or password"
 
-        # Check if account is locked
-        if user.locked_until and user.locked_until > datetime.now(timezone.utc):
-            time_left = int((user.locked_until - datetime.now(timezone.utc)).total_seconds() / 60)
+        # Check if account is locked (ensure_aware: locked_until из БД naive —
+        # см. User.is_active; иначе сравнение с aware-now падает TypeError → 500)
+        _locked_until = ensure_aware(user.locked_until)
+        if _locked_until and _locked_until > datetime.now(timezone.utc):
+            time_left = int((_locked_until - datetime.now(timezone.utc)).total_seconds() / 60)
             return None, f"Account is locked. Try again in {time_left} minutes."
 
         # Verify password

@@ -35,6 +35,9 @@ from sqlalchemy.orm import Session
 
 from src.models.changes_models import ContractVersion
 from src.models.database import get_db
+from src.models.auth_models import User
+from src.models.database import Contract
+from src.api.dependencies import get_current_user
 from src.services.document_diff_service import DocumentDiffService
 from src.services.document_parser import DocumentParser
 from src.services.llm_gateway import LLMGateway
@@ -205,6 +208,23 @@ def _load_revision(db: Session, revision_id: int) -> ContractVersion:
     return rev
 
 
+def _assert_can_access(db: Session, version: ContractVersion, user: User) -> None:
+    """Проверка владельца: редакция доступна только владельцу договора (или admin).
+
+    Без этого /compare и /{contract_id} читали чужие договоры по перебору
+    целочисленных id (IDOR). 404 вместо 403, чтобы не раскрывать существование
+    чужих редакций.
+    """
+    if getattr(user, "role", None) == "admin":
+        return
+    contract = db.query(Contract).filter(Contract.id == version.contract_id).first()
+    if contract is None or contract.assigned_to != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"ContractVersion {version.id} not found",
+        )
+
+
 def _read_content(version: ContractVersion, parser: _ParserAdapter) -> str:
     """Return parsed text content of the revision's file.
 
@@ -238,10 +258,13 @@ def _file_name(version: ContractVersion) -> str:
 def _build_report(
     db: Session,
     req: CompareRequest,
+    user: User,
 ) -> tuple[RevisionDiffReport, str, str]:
     """Load revisions, run the comparator, return (report, old_label, new_label)."""
     old = _load_revision(db, req.old_revision_id)
     new = _load_revision(db, req.new_revision_id)
+    _assert_can_access(db, old, user)
+    _assert_can_access(db, new, user)
     if old.id == new.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -299,8 +322,9 @@ def compare_revisions(
     req: CompareRequest,
     format: Literal["json", "xlsx", "pdf"] = Query("json"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> Any:
-    report, old_label, new_label = _build_report(db, req)
+    report, old_label, new_label = _build_report(db, req, current_user)
 
     if format == "json":
         return JSONResponse(report.as_dict())
@@ -340,7 +364,16 @@ def compare_revisions(
     summary="Список редакций договора (для dropdown «сравнить с …»)",
     response_model=list[RevisionListItem],
 )
-def list_revisions(contract_id: str, db: Session = Depends(get_db)) -> list[RevisionListItem]:
+def list_revisions(
+    contract_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[RevisionListItem]:
+    # Владелец договора (или admin) — иначе 404 (не раскрываем чужие договоры).
+    if getattr(current_user, "role", None) != "admin":
+        contract = db.query(Contract).filter(Contract.id == contract_id).first()
+        if contract is None or contract.assigned_to != current_user.id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
     rows = (
         db.query(ContractVersion)
         .filter(ContractVersion.contract_id == contract_id)
