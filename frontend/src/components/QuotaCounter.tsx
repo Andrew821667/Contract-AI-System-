@@ -16,7 +16,9 @@ export default function QuotaCounter() {
 
   const contractsLeft = Math.max(0, quota.contracts_limit - quota.contracts_used)
   const llmLeft = Math.max(0, quota.llm_limit - quota.llm_used)
-  const contractsPeriodLabel = quota.contracts_period === 'month' ? 'за месяц' : 'сегодня'
+  const contractsPeriodLabel = quota.contracts_period === 'demo'
+    ? 'за демо'
+    : quota.contracts_period === 'month' ? 'за месяц' : 'сегодня'
   const contractsPct = quota.contracts_limit > 0
     ? (quota.contracts_used / quota.contracts_limit) * 100
     : 0

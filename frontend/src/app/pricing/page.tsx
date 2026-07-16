@@ -16,15 +16,15 @@ export default function PricingPage() {
 
   const plans = [
     {
-      name: 'Бесплатный',
+      name: 'Демо',
       tier: 'free',
       price: { monthly: 0, annual: 0 },
-      description: 'Бесплатный режим для первых договоров',
+      description: 'Персональная проверка вашего сценария',
       gradient: 'from-gray-400 to-gray-600',
       popular: false,
       features: [
-        { text: '3 договора в месяц', included: true },
-        { text: 'AI-запросы в рамках бесплатных договоров', included: true },
+        { text: 'Лимит договоров в приглашении', included: true },
+        { text: 'Ограниченный срок доступа', included: true },
         { text: 'Базовый анализ рисков (Уровень 1)', included: true },
         { text: '5 шаблонов генерации', included: true },
         { text: 'Экспорт DOCX', included: true },
@@ -136,7 +136,7 @@ export default function PricingPage() {
 
   const getPrice = (plan: typeof plans[0]) => {
     if (plan.isCustom) return 'По запросу'
-    if (plan.price.monthly === 0) return 'Бесплатно'
+    if (plan.price.monthly === 0) return 'По заявке'
     const price = billingCycle === 'monthly' ? plan.price.monthly : plan.price.annual
     return `${price.toLocaleString('ru-RU')} ₽`
   }
@@ -175,9 +175,9 @@ export default function PricingPage() {
               <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={() => router.push('/')}>
                 ← На главную
               </Button>
-              <Button variant="primary" size="sm" href="/register">
-                <span className="sm:hidden">Начать</span>
-                <span className="hidden sm:inline">3 договора бесплатно</span>
+              <Button variant="primary" size="sm" href="/demo">
+                <span className="sm:hidden">Демо</span>
+                <span className="hidden sm:inline">Запросить демо</span>
               </Button>
             </motion.div>
           </div>
@@ -195,7 +195,7 @@ export default function PricingPage() {
             Тарифы на анализ договоров с ИИ
           </h1>
           <p className="text-xl text-slate-600 max-w-2xl mx-auto mb-8">
-            Бесплатная проверка первых договоров, подписки для юристов и команд, пакеты документов и защищённый Enterprise-контур.
+            Персональное демо по заявке, подписки для юристов и команд, пакеты документов и защищённый Enterprise-контур.
           </p>
 
           {/* Model Toggle */}
@@ -318,8 +318,8 @@ export default function PricingPage() {
                         Связаться с нами
                       </Button>
                     ) : plan.price.monthly === 0 ? (
-                      <Button variant="outline" className="w-full" href="/register">
-                        Начать бесплатно
+                      <Button variant="outline" className="w-full" href="/demo">
+                        Запросить демо
                       </Button>
                     ) : (
                       <Button variant={plan.popular ? 'primary' : 'outline'} className="w-full" href="/#login">
@@ -468,8 +468,8 @@ export default function PricingPage() {
                 <Button variant="primary" onClick={() => window.open('https://t.me/legal_ai_helper_new_bot', '_blank')}>
                   Связаться с нами
                 </Button>
-                <Button variant="outline" href="/register">
-                  Начать бесплатно
+                <Button variant="outline" href="/demo">
+                  Запросить демо
                 </Button>
               </div>
             </div>

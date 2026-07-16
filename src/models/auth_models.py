@@ -4,6 +4,7 @@ Enhanced Authentication Models for Contract-AI-System
 Includes:
 - Extended User model with security features
 - DemoToken for link-based demo access
+- DemoAccessRequest for manually approved demo access
 - UserSession for JWT session management
 - AuditLog for compliance and security tracking
 """
@@ -69,6 +70,7 @@ class User(Base):
     # Usage metrics (for rate limiting)
     contracts_today = Column(Integer, default=0)
     llm_requests_today = Column(Integer, default=0)
+    llm_requests_total = Column(Integer, default=0, nullable=False)
     last_reset_date = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Audit and tracking
@@ -220,7 +222,7 @@ class UserSession(Base):
         """Check if session is still valid"""
         if self.revoked:
             return False
-        if self.expires_at < datetime.now(timezone.utc):
+        if ensure_aware(self.expires_at) < datetime.now(timezone.utc):
             return False
         return True
 
@@ -231,6 +233,7 @@ class DemoToken(Base):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     token = Column(String(255), unique=True, nullable=False, index=True)
+    recipient_email = Column(String(255), index=True)
 
     # Demo access configuration
     max_contracts = Column(Integer, default=3)
@@ -254,7 +257,7 @@ class DemoToken(Base):
     expires_at = Column(DateTime, nullable=False, index=True)
 
     # Marketing tracking
-    source = Column(String(50), index=True)  # 'website', 'admin_panel', 'api', 'landing_page'
+    source = Column(String(50), index=True)  # 'website', 'admin_api', 'api', 'landing_page'
     campaign = Column(String(100), index=True)  # UTM campaign
     medium = Column(String(50))  # UTM medium
     referrer = Column(String(255))  # HTTP referrer
@@ -276,7 +279,7 @@ class DemoToken(Base):
 
     def is_valid(self) -> bool:
         """Check if demo token is still valid"""
-        if self.expires_at < datetime.now(timezone.utc):
+        if ensure_aware(self.expires_at) < datetime.now(timezone.utc):
             return False
         if self.used and self.uses_count >= self.max_uses:
             return False
@@ -285,6 +288,45 @@ class DemoToken(Base):
     def can_use(self) -> bool:
         """Check if token can be used"""
         return self.is_valid() and (not self.used or self.uses_count < self.max_uses)
+
+
+class DemoAccessRequest(Base):
+    """Request for personal, manually approved demo access."""
+    __tablename__ = "demo_access_requests"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    name = Column(String(255), nullable=False)
+    email = Column(String(255), nullable=False, index=True)
+    contact = Column(String(255), nullable=False)
+    company = Column(String(255))
+    task = Column(Text, nullable=False)
+    source = Column(String(50), default="website", nullable=False)
+    consent_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    consent_version = Column(String(20), default="2026-07-16", nullable=False)
+    status = Column(String(20), default="pending", nullable=False, index=True)
+    decision_note = Column(Text)
+    ip_address = Column(String(45))
+    user_agent = Column(Text)
+    demo_token_id = Column(String(36), ForeignKey("demo_tokens.id", ondelete="SET NULL"), index=True)
+    decided_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    decided_at = Column(DateTime)
+
+    demo_token = relationship("DemoToken", foreign_keys=[demo_token_id])
+
+    __table_args__ = (
+        CheckConstraint(
+            status.in_(["pending", "approved", "rejected"]),
+            name="check_demo_access_request_status",
+        ),
+        Index("idx_demo_request_email_status", "email", "status"),
+    )
 
 
 class AuditLog(Base):

@@ -516,7 +516,7 @@ class TestLoginEdgeCases:
             UserSession.user_id == active_user.id,
         ).first()
         assert session is not None
-        assert session.access_token == result["access_token"]
+        assert session.access_token_hash == auth._hash_token(result["access_token"])
         assert session.revoked is False
 
 
@@ -530,7 +530,7 @@ class TestLogout:
         assert auth.logout_user(login["access_token"]) is True
 
         session = db.query(UserSession).filter(
-            UserSession.access_token == login["access_token"],
+            UserSession.access_token_hash == auth._hash_token(login["access_token"]),
         ).first()
         assert session.revoked is True
         assert session.revoke_reason == "user_logout"

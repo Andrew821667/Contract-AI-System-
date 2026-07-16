@@ -135,7 +135,7 @@
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    USER INTERFACE                        │
-│         (Streamlit Web App на локальном сервере)         │
+│          (Next.js Web App на локальном сервере)          │
 └────────────────────────┬────────────────────────────────┘
                          │
                          ▼
@@ -883,16 +883,16 @@ ADD_WATERMARK → LOG_EXPORT → END
 
 Инфраструктура:
   - fastapi: ^0.109.0          # REST API (опционально)
-  - streamlit: ^1.30.0         # UI
   - redis: ^5.0.0              # Кэш (опционально)
 ```
 
 ### Frontend
 
 ```yaml
-Framework: Streamlit 1.30+
+Framework: Next.js 14+
 
 Визуализация:
+  - react: ^18.0.0            # Компоненты UI
   - plotly: ^5.18.0            # Графики
   - pandas: ^2.1.0             # Таблицы
 ```
@@ -1630,7 +1630,7 @@ contract-analyzer-mvp/
 ├── .env.example                        # Пример переменных окружения
 ├── .gitignore
 │
-├── app.py                              # Streamlit UI (главный файл)
+├── frontend/                           # Next.js UI
 │
 ├── config/
 │   ├── __init__.py
@@ -1743,7 +1743,7 @@ contract-analyzer-mvp/
 **День 12-14: Human Review + UI**
 - Нода: human_review
 - Таблица review_tasks в БД
-- Базовый UI в Streamlit:
+- Базовый UI в Next.js:
   - Загрузка файлов
   - Просмотр результатов анализа
   - Очередь задач на проверку
@@ -2034,7 +2034,7 @@ APP_ENV=development  # development | production
 LOG_LEVEL=INFO
 
 # UI
-STREAMLIT_SERVER_PORT=8501
+NEXT_PUBLIC_API_URL=/api
 ```
 
 ### settings.py
@@ -2154,7 +2154,7 @@ settings = Settings()
 - [LangGraph](https://langchain-ai.github.io/langgraph/)
 - [Anthropic Claude API](https://docs.anthropic.com/)
 - [ChromaDB](https://docs.trychroma.com/)
-- [Streamlit](https://docs.streamlit.io/)
+- [Next.js](https://nextjs.org/docs)
 
 ### Законодательство
 

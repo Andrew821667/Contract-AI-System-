@@ -5,9 +5,6 @@ import type { NextRequest } from 'next/server'
 const protectedRoutes = ['/dashboard', '/contracts', '/clauses', '/conditions', '/ai', '/negotiations', '/workflow', '/admin', '/organization', '/counterparties', '/revisions']
 
 // Routes that should redirect to dashboard if already logged in.
-// Keep /register always reachable: browsers can retain a stale has_token cookie
-// after failed/partial auth flows, and the registration page must remain a
-// single reliable entry point from all public CTAs.
 const authRoutes = ['/login']
 const noindexRoutes = [...protectedRoutes, '/login', '/register', '/auth']
 

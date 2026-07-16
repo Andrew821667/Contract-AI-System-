@@ -7,6 +7,7 @@ tenant isolation (user A cannot see org of user B).
 """
 import pytest
 from src.services.auth_service import AuthService
+from src.models import get_db as get_db_models
 
 import src.core.identity_org.models  # noqa: F401
 import src.core.policies.models  # noqa: F401
@@ -32,7 +33,21 @@ BASE = "/api/v2/organizations"
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _register_and_login(client, email, password="OrgPass123!", name="Org User"):
-    client.post("/api/v1/auth/register", json={"email": email, "name": name, "password": password})
+    db_gen = client.app.dependency_overrides[get_db_models]()
+    db = next(db_gen)
+    try:
+        user, error = AuthService(db).register_user(
+            email=email,
+            name=name,
+            password=password,
+            role="lawyer",
+            subscription_tier="pro",
+            send_verification=False,
+        )
+        assert user is not None, error
+        db.commit()
+    finally:
+        db_gen.close()
     resp = client.post("/api/v1/auth/login", data={"username": email, "password": password})
     token = resp.json().get("access_token", "")
     return {"Authorization": f"Bearer {token}"}

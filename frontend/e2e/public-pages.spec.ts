@@ -4,7 +4,7 @@ test.describe('Публичные страницы', () => {
   test('Главная страница загружается', async ({ page }) => {
     await page.goto('/')
     await expect(page).toHaveTitle(/Contract/)
-    // Должны быть кнопки входа/регистрации
+    // Должны быть вход и переход к персональному демо
     await expect(page.getByRole('link', { name: /войти|вход|login/i })).toBeVisible()
   })
 
@@ -15,10 +15,10 @@ test.describe('Публичные страницы', () => {
     await expect(page.getByRole('button', { name: /войти|вход|login/i })).toBeVisible()
   })
 
-  test('Страница регистрации отображает форму', async ({ page }) => {
+  test('Старая регистрация ведёт на заявку демо', async ({ page }) => {
     await page.goto('/register')
-    await expect(page.locator('input[type="password"]').first()).toBeVisible()
-    await expect(page.getByRole('button', { name: /зарегистрироваться|register|создать/i })).toBeVisible()
+    await expect(page).toHaveURL(/\/demo$/)
+    await expect(page.getByRole('button', { name: /отправить заявку/i })).toBeVisible()
   })
 
   test('Страница тарифов загружается', async ({ page }) => {
@@ -28,7 +28,8 @@ test.describe('Публичные страницы', () => {
 
   test('Демо-страница загружается', async ({ page }) => {
     await page.goto('/demo')
-    await expect(page.locator('body')).not.toBeEmpty()
+    await expect(page.getByRole('heading', { name: /проверьте систему/i })).toBeVisible()
+    await expect(page.getByLabel(/телефон или telegram/i)).toBeVisible()
   })
 })
 

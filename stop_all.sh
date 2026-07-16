@@ -55,28 +55,19 @@ kill_by_pidfile() {
 }
 
 # Stop Backend
-echo -e "\n${CYAN}[1/3]${NC} Stopping FastAPI Backend..."
+echo -e "\n${CYAN}[1/2]${NC} Stopping FastAPI Backend..."
 kill_by_pidfile ".backend.pid" "Backend"
 
 # Also kill by port
 lsof -ti:8000 | xargs kill -9 2>/dev/null || true
 
 # Stop Frontend
-echo -e "\n${CYAN}[2/3]${NC} Stopping Next.js Frontend..."
+echo -e "\n${CYAN}[2/2]${NC} Stopping Next.js Frontend..."
 kill_by_pidfile ".frontend.pid" "Frontend"
 
 # Also kill by port
 lsof -ti:3000 | xargs kill -9 2>/dev/null || true
 
-# Stop Admin Panel
-echo -e "\n${CYAN}[3/3]${NC} Stopping Streamlit Admin Panel..."
-kill_by_pidfile ".admin.pid" "Admin Panel"
-
-# Also kill by port
-lsof -ti:8501 | xargs kill -9 2>/dev/null || true
-
-# Kill any remaining streamlit processes
-pkill -f "streamlit run app_admin.py" 2>/dev/null || true
 pkill -f "uvicorn src.main:app" 2>/dev/null || true
 pkill -f "next dev" 2>/dev/null || true
 

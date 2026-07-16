@@ -8,6 +8,8 @@ Covers: pricing, checkout, portal, subscription status, cancel, webhook auth.
 import json
 import pytest
 from unittest.mock import MagicMock, patch
+from src.models import get_db as get_db_models
+from src.services.auth_service import AuthService
 
 import src.core.identity_org.models  # noqa: F401
 import src.core.policies.models  # noqa: F401
@@ -31,10 +33,22 @@ pytestmark = pytest.mark.skipif(
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _auth_headers(client, email="pay_user@example.com", password="PayPass123!"):
-    """Register + login, return Bearer headers."""
-    client.post("/api/v1/auth/register", json={
-        "email": email, "name": "Pay User", "password": password,
-    })
+    """Create + login, return Bearer headers."""
+    db_gen = client.app.dependency_overrides[get_db_models]()
+    db = next(db_gen)
+    try:
+        user, error = AuthService(db).register_user(
+            email=email,
+            name="Pay User",
+            password=password,
+            role="lawyer",
+            subscription_tier="pro",
+            send_verification=False,
+        )
+        assert user is not None, error
+        db.commit()
+    finally:
+        db_gen.close()
     resp = client.post(
         "/api/v1/auth/login",
         data={"username": email, "password": password},

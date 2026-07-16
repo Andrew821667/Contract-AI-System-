@@ -3,7 +3,7 @@ import { pricingFaq } from '@/content/contractSeo'
 
 export const metadata: Metadata = {
   title: 'Тарифы на анализ и проверку договоров с ИИ',
-  description: 'Цены Contract AI: бесплатная проверка до 3 договоров в месяц, тарифы для юристов и команд, пакеты документов и Enterprise on-premise.',
+  description: 'Цены Contract AI: персональное демо по заявке, тарифы для юристов и команд, пакеты документов и Enterprise on-premise.',
   alternates: { canonical: '/pricing' },
   openGraph: {
     type: 'website',

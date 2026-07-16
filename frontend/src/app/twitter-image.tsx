@@ -24,7 +24,7 @@ export default function Image() {
       >
         <div style={{ display: 'flex', fontSize: 28, color: '#67e8f9' }}>Contract AI · by AI Verdict</div>
         <div style={{ display: 'flex', fontSize: 64, fontWeight: 700 }}>Анализ договоров с ИИ</div>
-        <div style={{ display: 'flex', fontSize: 30, color: '#fbbf24' }}>3 договора в месяц бесплатно</div>
+        <div style={{ display: 'flex', fontSize: 30, color: '#fbbf24' }}>Персональное демо по заявке</div>
       </div>
     ),
     size,

@@ -68,3 +68,44 @@ def notify_new_user_model(user: User, ip_address: Optional[str] = None) -> None:
         subscription_tier=user.subscription_tier,
         ip_address=ip_address,
     )
+
+
+def notify_demo_request(
+    request_id: str,
+    email: str,
+    name: str,
+    contact: str,
+    company: Optional[str],
+    task: str,
+) -> None:
+    token, chat_id = _telegram_config()
+    if not token or not chat_id:
+        logger.info("Telegram demo-request notification skipped: bot token or chat id is not configured")
+        return
+
+    task_preview = task[:1200] + ("..." if len(task) > 1200 else "")
+    text = (
+        "<b>Новая заявка на демо Contract AI</b>\n"
+        f"Имя: {escape(name)}\n"
+        f"Email: <code>{escape(email)}</code>\n"
+        f"Контакт: {escape(contact)}\n"
+        f"Компания: {escape(company or '-')}\n\n"
+        f"<b>Задача</b>\n{escape(task_preview)}\n\n"
+        f"ID: <code>{escape(request_id)}</code>"
+    )
+
+    try:
+        response = requests.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+            },
+            timeout=5,
+        )
+        response.raise_for_status()
+        logger.info(f"Telegram demo-request notification sent for request {request_id}")
+    except Exception as exc:
+        logger.warning(f"Telegram demo-request notification failed: {exc}")

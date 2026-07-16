@@ -21,7 +21,6 @@ export default function robots(): MetadataRoute.Robots {
           '/negotiations',
           '/organization',
           '/revisions',
-          '/streamlit-admin/',
           '/workflow',
         ],
       },

@@ -4,7 +4,7 @@ Database models and connection management
 from loguru import logger
 from .database import Base, engine, SessionLocal, get_db, Template, Contract, AnalysisResult, ReviewTask, LegalDocument, ExportLog, ContractFeedback, ScheduledTaskLog
 from .auth_models import (
-    User, UserSession, DemoToken, AuditLog,
+    User, UserSession, DemoToken, DemoAccessRequest, AuditLog,
     PasswordResetRequest, EmailVerification, LoginAttempt
 )
 from .analyzer_models import ContractRisk, ContractRecommendation, ContractAnnotation, ContractSuggestedChange, AnalysisFeedback
@@ -40,6 +40,7 @@ __all__ = [
     "User",
     "UserSession",
     "DemoToken",
+    "DemoAccessRequest",
     "AuditLog",
     "PasswordResetRequest",
     "EmailVerification",

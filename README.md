@@ -195,7 +195,6 @@ cd frontend && npm install && npm run dev
 | **redis** | Cache + sessions |
 | **backend** | FastAPI (128 endpoints) |
 | **frontend** | Next.js 14 |
-| **streamlit** | Admin dashboard |
 | **nginx** | Reverse proxy |
 
 ---
@@ -238,7 +237,6 @@ Contract-AI-System/
 │   │   └── bridge/              # Bridge API (интеграция)
 │   └── models/                  # SQLAlchemy (37 таблиц)
 ├── frontend/                    # Next.js 14 (16 страниц)
-├── admin/                       # Streamlit admin (RAG, клаузулы)
 ├── config/                      # Pydantic Settings
 ├── docker-compose.yml           # Production stack
 ├── .github/workflows/ci.yml     # CI: lint + test + docker

@@ -56,30 +56,11 @@ else
     exit 1
 fi
 
-# Start admin panel (Streamlit) - check if app.py exists
-if [ -f "app.py" ]; then
-    echo "Starting admin panel..."
-    streamlit run app.py --server.port 8501 --server.headless true </dev/null >logs/streamlit.log 2>&1 &
-    ADMIN_PID=$!
-    echo $ADMIN_PID > .admin.pid
-    echo "Admin PID: $ADMIN_PID"
-
-    # Wait and check admin panel
-    sleep 3
-    if ps -p $ADMIN_PID > /dev/null; then
-        echo "Admin panel is running"
-    else
-        echo "Admin panel failed to start (check logs/streamlit.log)"
-    fi
-else
-    echo "Admin panel (app.py) not found in current directory - skipping"
-fi
-
 echo "=========================================="
 echo "All services started successfully!"
 echo "Backend: http://localhost:8000"
 echo "Frontend: http://localhost:3000"
-echo "Admin: http://localhost:8501"
+echo "Admin: http://localhost:3000/admin"
 echo "=========================================="
 
 # Open browser
