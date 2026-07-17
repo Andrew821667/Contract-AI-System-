@@ -109,3 +109,28 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:8000
           NEXT_PUBLIC_WS_URL: ws://localhost:8000/api/v1/ws
         run: npm run build
+
+  blind-except-gate:
+    # Гейт против НОВЫХ «слепых» except (L13 аудита). Diff-scoped: легаси (~53
+    # случая, часть легитимна) не блокирует PR, но новый код не протаскивает
+    # молчаливое проглатывание ошибок. Только на PR — нужна база для диффа.
+    name: Gate — новые слепые except
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # нужна история: сравниваем с базой PR
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Проверить добавленные except
+        run: |
+          git fetch -q origin "${{ github.base_ref }}"
+          python scripts/check_blind_except.py --base "origin/${{ github.base_ref }}"
