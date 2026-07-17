@@ -360,6 +360,14 @@ def setup_cors(app):
             "Cache-Control",
             "X-Requested-With",
             "X-Organization-Id",
+            # Фронтенд (api.ts, axios.create) шлёт этот заголовок на КАЖДОМ
+            # запросе. Кастомный заголовок делает запрос «непростым» → браузер
+            # шлёт preflight → тот просит ngrok-skip-browser-warning → его не
+            # было в allow_headers → Starlette CORS отвечал 400 "Disallowed CORS
+            # headers" → ВСЕ кросс-origin вызовы фронта падали (в проде не видно:
+            # Caddy отдаёт фронт и API с одного origin, CORS не участвует; но
+            # split-origin dev/ngrok/NEXT_PUBLIC_API_URL на другой хост — ломался).
+            "ngrok-skip-browser-warning",
         ],
         expose_headers=["Content-Length", "X-Total-Count"],
         max_age=600,  # Cache preflight requests for 10 minutes
