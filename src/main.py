@@ -261,7 +261,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler"""
-    logger.error(f"Unhandled exception: {type(exc).__name__}: {exc}", exc_info=True)
+    # НЕ f-string: интерполированный текст исключения может содержать фигурные
+    # скобки (напр. SQL-параметры psycopg2: `%(email_1)s ... {'email_1': ...}`),
+    # и loguru пытается .format() такое сообщение → KeyError ВНУТРИ обработчика
+    # ошибок, из-за чего настоящая ошибка терялась. Передаём аргументы лениво:
+    # шаблон форматируется значениями, а скобки в значениях не переобрабатываются.
+    logger.opt(exception=True).error(
+        "Unhandled exception: {}: {}", type(exc).__name__, exc
+    )
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={

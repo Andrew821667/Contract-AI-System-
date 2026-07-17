@@ -32,7 +32,12 @@ from src.services.admin_rag_retriever import (
     get_collection as _get_collection_shared,
 )
 
-router = APIRouter(prefix="/rag", tags=["RAG Admin"])
+# БЕЗ prefix="/rag": роутер уже монтируется в main.py как prefix="/api/v1/rag".
+# Свой префикс задваивал путь → реальные эндпоинты жили на /api/v1/rag/rag/*, а
+# фронтенд (api.ts: /api/v1/rag/stats, /api/v1/rag/documents) бил в /api/v1/rag/*
+# и получал 404 — RAG-админка в UI была нерабочей (L11). Двойной путь не ждёт
+# никто, поэтому убираем префикс: серверные пути сходятся с клиентскими.
+router = APIRouter(tags=["RAG Admin"])
 
 RAG_MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 МБ — лимит на загрузку документа в БЗ
 

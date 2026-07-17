@@ -139,6 +139,20 @@ class Settings(BaseSettings):
                 "  SECRET_KEY=<generated-key>"
             )
 
+        # Аналогично — DATABASE_URL обязателен в production (L14). Дефолт с
+        # dev-кредами (contract_user:dev_password@localhost) удобен локально, но
+        # в проде он молча уводил бы на несуществующую/чужую БД вместо явной
+        # ошибки конфигурации. Fail-fast лучше тихого коннекта не туда.
+        if self.app_env == "production" and (
+            not self.database_url or "dev_password@localhost" in self.database_url
+        ):
+            raise ValueError(
+                "❌ DATABASE_URL must be set explicitly in production environment!\n"
+                "Dev default (contract_user:dev_password@localhost) is not allowed in prod.\n"
+                "Add to .env file:\n"
+                "  DATABASE_URL=postgresql://<user>:<password>@<host>:5432/<db>"
+            )
+
         # Auto-generate SECRET_KEY in dev if not set (with loud warning).
         # ВАЖНО: ключ ДЕТЕРМИНИРОВАННЫЙ (sha256 от пути проекта), а не random.
         # Раньше каждый gunicorn-воркер генерил СВОЙ random-ключ (+ гонка записи
