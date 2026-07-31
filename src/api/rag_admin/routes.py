@@ -359,13 +359,15 @@ async def list_documents(
     all_documents.sort(key=lambda d: d.created_at or "", reverse=True)
     paginated = all_documents[offset : offset + limit]
 
-    # При обрыве по лимиту точный total неизвестен — берём его из фонового
-    # кеша doc_count (если тот уже посчитан), иначе отдаём что просканировали.
-    total = len(all_documents)
-    if truncated and is_admin:
-        with _doc_count_lock:
-            total = max(total, _doc_counts.get(collection, 0))
-    return DocumentsResponse(documents=paginated, total=total)
+    # total — ровно то, что реально доступно для листания. Подставлять сюда
+    # полный doc_count из кеша нельзя: при обрыве обхода по лимиту пагинация
+    # уводила бы на заведомо пустые страницы. Полные цифры показывает /stats.
+    if truncated:
+        logger.info(
+            f"Коллекция {collection}: обход прерван на {scanned} чанках "
+            f"(лимит {_DOC_SCAN_MAX_CHUNKS}), показаны {len(all_documents)} док."
+        )
+    return DocumentsResponse(documents=paginated, total=len(all_documents))
 
 
 @router.post("/documents", status_code=status.HTTP_201_CREATED, response_model=UploadResponse)
