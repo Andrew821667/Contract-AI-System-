@@ -13,6 +13,7 @@ Endpoints:
 import collections
 import hashlib
 import io
+import json
 import re
 import threading
 import time
@@ -45,6 +46,24 @@ RAG_MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 МБ — лимит на загруз
 _stats_cache: Optional[tuple] = None  # (StatsResponse, expires_at: float)
 _STATS_TTL = 60.0
 
+# ── Кеш числа документов ────────────────────────────────────────────────────
+# doc_count = число уникальных doc_id среди метаданных ВСЕХ чанков коллекции.
+# На проде это 1.3 млн чанков в 20-ГБ сторе: полный обход через chroma занимает
+# ~60с (laws ~23с + case_law ~39с), прямой SQL по chroma.sqlite3 — ещё хуже
+# (2м13с на холодном кеше). Таймаут axios во фронте — 30с, поэтому синхронный
+# расчёт ГАРАНТИРОВАННО обрывался и админ-панель показывала пустоту.
+# Решение: ответ отдаём мгновенно (chunk_count дёшев через count()), а doc_count
+# берём из кеша, который пересчитывает фоновый поток. Кеш переживает рестарт
+# (пишется на диск), иначе после каждого рестарта панель снова показывала бы нули.
+_DOC_COUNT_TTL = 6 * 3600.0     # пересчёт не чаще раза в 6 часов
+_DOC_COUNT_PAGE = 10000         # размер страницы при обходе метаданных
+_DOC_SCAN_MAX_CHUNKS = 50000    # потолок обхода в /documents, чтобы не подвесить панель
+_DOC_COUNT_FILE = Path("data/rag_doc_counts.json")
+_doc_counts: Dict[str, int] = {}
+_doc_counts_at: float = 0.0
+_doc_count_lock = threading.Lock()
+_doc_count_running = False
+
 # Upload rate limiter: 10 uploads per user per minute (token bucket per user_id)
 _upload_rl_lock = threading.Lock()
 _upload_rl_buckets: dict[str, collections.deque] = {}
@@ -76,6 +95,80 @@ def _get_collection(name: str):
     if coll is None:
         raise HTTPException(status_code=503, detail="ChromaDB недоступна")
     return coll
+
+
+# ── Фоновый подсчёт документов ──────────────────────────────────────────────
+
+def _load_doc_counts() -> None:
+    """Поднять кеш с диска при старте (best-effort)."""
+    global _doc_counts, _doc_counts_at
+    try:
+        raw = json.loads(_DOC_COUNT_FILE.read_text(encoding="utf-8"))
+        _doc_counts = {str(k): int(v) for k, v in (raw.get("counts") or {}).items()}
+        _doc_counts_at = float(raw.get("computed_at") or 0.0)
+    except (OSError, ValueError, TypeError) as e:
+        logger.debug(f"RAG doc-count кеш не поднят с диска: {e}")
+
+
+def _save_doc_counts(counts: Dict[str, int], computed_at: float) -> None:
+    try:
+        _DOC_COUNT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _DOC_COUNT_FILE.write_text(
+            json.dumps({"counts": counts, "computed_at": computed_at}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError as e:
+        logger.warning(f"Не удалось сохранить RAG doc-count кеш: {e}")
+
+
+def _count_docs(coll) -> int:
+    """Уникальные doc_id в коллекции. Дорого — только для фонового потока."""
+    total = coll.count()
+    doc_ids: set = set()
+    offset = 0
+    while offset < total:
+        batch = coll.get(include=["metadatas"], limit=_DOC_COUNT_PAGE, offset=offset)
+        metas = batch.get("metadatas") or []
+        if not metas:
+            break
+        doc_ids.update(m.get("doc_id") for m in metas if m.get("doc_id"))
+        offset += len(metas)
+    return len(doc_ids)
+
+
+def _refresh_doc_counts() -> None:
+    global _doc_counts, _doc_counts_at, _doc_count_running
+    try:
+        counts: Dict[str, int] = {}
+        for name in COLLECTIONS:
+            coll = _get_collection_shared(name)
+            if coll is None:
+                continue
+            counts[name] = _count_docs(coll)
+        now = time.time()
+        with _doc_count_lock:
+            _doc_counts = counts
+            _doc_counts_at = now
+        _save_doc_counts(counts, now)
+        logger.info(f"RAG doc-count обновлён: {counts}")
+    except Exception as e:
+        logger.warning(f"Фоновый пересчёт RAG doc-count не удался: {e}")
+    finally:
+        with _doc_count_lock:
+            _doc_count_running = False
+
+
+def _ensure_doc_counts_fresh() -> None:
+    """Запустить фоновый пересчёт, если кеш протух. Не блокирует запрос."""
+    global _doc_count_running
+    with _doc_count_lock:
+        if _doc_count_running or (time.time() - _doc_counts_at) < _DOC_COUNT_TTL:
+            return
+        _doc_count_running = True
+    threading.Thread(target=_refresh_doc_counts, name="rag-doc-counts", daemon=True).start()
+
+
+_load_doc_counts()
 
 
 # ── Text extraction ──────────────────────────────────────────────────────────
@@ -171,39 +264,29 @@ async def get_stats(current_user: User = Depends(get_current_user)):
     if _stats_cache is not None and _stats_cache[1] > time.time():
         return _stats_cache[0]
 
+    # Дорогой подсчёт doc_count — фоном; сам ответ собираем только из дешёвых
+    # count(). Раньше обход метаданных всех коллекций (~1.3 млн чанков) занимал
+    # больше минуты и не укладывался в 30-секундный таймаут фронта → панель
+    # оставалась пустой, хотя данные в сторе были на месте.
+    _ensure_doc_counts_fresh()
+    with _doc_count_lock:
+        known_docs = dict(_doc_counts)
+
     result = []
     for name in COLLECTIONS:
+        chunk_count = 0
         try:
-            coll = _get_collection(name)
-            # chunk_count — дёшево через count(); метаданные для подсчёта
-            # уникальных doc_id тянем СТРАНИЦАМИ, а не всю коллекцию разом
-            # (раньше coll.get() грузил сотни тысяч метадатных строк в память).
-            chunk_count = coll.count()
-            doc_ids: set = set()
-            _PAGE = 10000
-            _off = 0
-            while _off < chunk_count:
-                batch = coll.get(include=["metadatas"], limit=_PAGE, offset=_off)
-                metas = batch.get("metadatas") or []
-                if not metas:
-                    break
-                doc_ids.update(m.get("doc_id") for m in metas if m.get("doc_id"))
-                _off += _PAGE
-            result.append(CollectionStat(
-                name=name,
-                label=COLLECTION_LABELS.get(name, name),
-                chunk_count=chunk_count,
-                doc_count=len(doc_ids),
-            ))
-        except HTTPException:
-            result.append(CollectionStat(
-                name=name, label=COLLECTION_LABELS.get(name, name), chunk_count=0, doc_count=0,
-            ))
+            chunk_count = _get_collection(name).count()
+        except HTTPException as e:
+            logger.warning(f"Коллекция {name} недоступна: {e.detail}")
         except Exception as e:
             logger.warning(f"Не удалось получить статистику для {name}: {e}")
-            result.append(CollectionStat(
-                name=name, label=COLLECTION_LABELS.get(name, name), chunk_count=0, doc_count=0,
-            ))
+        result.append(CollectionStat(
+            name=name,
+            label=COLLECTION_LABELS.get(name, name),
+            chunk_count=chunk_count,
+            doc_count=known_docs.get(name, 0),
+        ))
     response = StatsResponse(collections=result)
     _stats_cache = (response, time.time() + _STATS_TTL)
     return response
@@ -218,33 +301,56 @@ async def list_documents(
 ):
     """Список документов в коллекции (сгруппированных по doc_id)."""
     coll = _get_collection(collection)
-    all_items = coll.get(include=["metadatas"])
 
+    # Раньше здесь был coll.get(include=["metadatas"]) БЕЗ лимита: для laws это
+    # 375 тыс. метадатных строк разом — запрос не укладывался в таймаут фронта и
+    # съедал память. Читаем страницами и ограничиваем глубину: пользовательские
+    # коллекции (knowledge/templates) малы и вычитываются целиком, а массовые
+    # laws/case_law не подвешивают панель.
     is_admin = current_user.role in ("admin", "senior_lawyer")
+    total_chunks = coll.count()
     docs: Dict[str, Dict[str, Any]] = {}
-    for meta in all_items["metadatas"]:
-        doc_id = meta.get("doc_id")
-        if not doc_id:
-            continue
-        # IDOR fix: non-admin users see only their own documents
-        if not is_admin and meta.get("uploaded_by") != str(current_user.id):
-            continue
-        if doc_id not in docs:
-            docs[doc_id] = {
-                "doc_id": doc_id,
-                "title": meta.get("title", doc_id),
-                "collection": collection,
-                "doc_type": meta.get("doc_type"),
-                "uploaded_by": meta.get("uploaded_by"),
-                "created_at": meta.get("created_at"),
-                "chunks": 0,
-            }
-        docs[doc_id]["chunks"] += 1
+    scanned = 0
+    truncated = False
+    while scanned < total_chunks:
+        if scanned >= _DOC_SCAN_MAX_CHUNKS:
+            truncated = True
+            break
+        batch = coll.get(include=["metadatas"], limit=_DOC_COUNT_PAGE, offset=scanned)
+        metas = batch.get("metadatas") or []
+        if not metas:
+            break
+        for meta in metas:
+            doc_id = meta.get("doc_id")
+            if not doc_id:
+                continue
+            # IDOR fix: non-admin users see only their own documents
+            if not is_admin and meta.get("uploaded_by") != str(current_user.id):
+                continue
+            if doc_id not in docs:
+                docs[doc_id] = {
+                    "doc_id": doc_id,
+                    "title": meta.get("title", doc_id),
+                    "collection": collection,
+                    "doc_type": meta.get("doc_type"),
+                    "uploaded_by": meta.get("uploaded_by"),
+                    "created_at": meta.get("created_at"),
+                    "chunks": 0,
+                }
+            docs[doc_id]["chunks"] += 1
+        scanned += len(metas)
 
     all_documents = [RAGDocument(**d) for d in docs.values()]
     all_documents.sort(key=lambda d: d.created_at or "", reverse=True)
     paginated = all_documents[offset : offset + limit]
-    return DocumentsResponse(documents=paginated, total=len(all_documents))
+
+    # При обрыве по лимиту точный total неизвестен — берём его из фонового
+    # кеша doc_count (если тот уже посчитан), иначе отдаём что просканировали.
+    total = len(all_documents)
+    if truncated and is_admin:
+        with _doc_count_lock:
+            total = max(total, _doc_counts.get(collection, 0))
+    return DocumentsResponse(documents=paginated, total=total)
 
 
 @router.post("/documents", status_code=status.HTTP_201_CREATED, response_model=UploadResponse)
