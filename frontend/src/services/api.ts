@@ -56,6 +56,8 @@ export interface RAGCollectionStat {
   label: string;
   chunk_count: number;
   doc_count: number;
+  /** false — число документов ещё считается фоном (показываем «…», а не «0») */
+  doc_count_ready?: boolean;
 }
 
 export interface RAGDocument {
