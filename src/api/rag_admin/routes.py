@@ -236,6 +236,10 @@ class CollectionStat(BaseModel):
     label: str
     chunk_count: int
     doc_count: int
+    # False, пока фоновый пересчёт не отработал ни разу. Без этого флага UI рисовал
+    # крупный «0» в плитке — визуально неотличимо от «данных нет», хотя чанки уже
+    # посчитаны. Именно так админка выглядела пустой при живой базе знаний.
+    doc_count_ready: bool = True
 
 
 class RAGDocument(BaseModel):
@@ -301,6 +305,7 @@ async def get_stats(current_user: User = Depends(get_current_user)):
             label=COLLECTION_LABELS.get(name, name),
             chunk_count=chunk_count,
             doc_count=known_docs.get(name, 0),
+            doc_count_ready=name in known_docs,
         ))
     response = StatsResponse(collections=result)
     _stats_cache = (response, time.time() + _STATS_TTL)

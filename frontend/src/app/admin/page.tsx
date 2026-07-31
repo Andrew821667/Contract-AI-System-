@@ -235,7 +235,9 @@ export default function AdminPage() {
                     }`}
                   >
                     <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">{c.label}</p>
-                    <p className="text-lg font-bold text-gray-900 dark:text-gray-100">{c.doc_count}</p>
+                    <p className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                      {c.doc_count_ready === false ? '…' : c.doc_count}
+                    </p>
                     <p className="text-[10px] text-gray-400">{c.chunk_count} чанков</p>
                   </button>
                 ))}
