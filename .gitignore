@@ -153,3 +153,6 @@ frontend/build
 frontend/playwright-report/
 frontend/test-results/
 create_test_users.py
+
+# Рантайм-кеш числа документов RAG-админки (пересчитывается фоном)
+data/rag_doc_counts.json
