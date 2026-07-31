@@ -158,11 +158,26 @@ def _refresh_doc_counts() -> None:
             _doc_count_running = False
 
 
+def _fresh() -> bool:
+    with _doc_count_lock:
+        return (time.time() - _doc_counts_at) < _DOC_COUNT_TTL
+
+
 def _ensure_doc_counts_fresh() -> None:
     """Запустить фоновый пересчёт, если кеш протух. Не блокирует запрос."""
     global _doc_count_running
     with _doc_count_lock:
-        if _doc_count_running or (time.time() - _doc_counts_at) < _DOC_COUNT_TTL:
+        if _doc_count_running:
+            return
+    # Файл мог появиться/обновиться уже ПОСЛЕ импорта модуля — например, кеш
+    # прогрели отдельным процессом при деплое. Без этой перечитки живой сервер
+    # показывал бы нули до конца фонового прохода, хотя готовые цифры уже на диске.
+    if not _fresh():
+        _load_doc_counts()
+    if _fresh():
+        return
+    with _doc_count_lock:
+        if _doc_count_running:
             return
         _doc_count_running = True
     threading.Thread(target=_refresh_doc_counts, name="rag-doc-counts", daemon=True).start()
