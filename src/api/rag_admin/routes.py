@@ -63,6 +63,7 @@ _doc_counts: Dict[str, int] = {}
 _doc_counts_at: float = 0.0
 _doc_count_lock = threading.Lock()
 _doc_count_running = False
+_doc_counts_dirty = False   # выставляется после загрузки/удаления документа
 
 # Upload rate limiter: 10 uploads per user per minute (token bucket per user_id)
 _upload_rl_lock = threading.Lock()
@@ -137,7 +138,7 @@ def _count_docs(coll) -> int:
 
 
 def _refresh_doc_counts() -> None:
-    global _doc_counts, _doc_counts_at, _doc_count_running
+    global _doc_counts, _doc_counts_at, _doc_count_running, _doc_counts_dirty
     try:
         counts: Dict[str, int] = {}
         for name in COLLECTIONS:
@@ -149,6 +150,7 @@ def _refresh_doc_counts() -> None:
         with _doc_count_lock:
             _doc_counts = counts
             _doc_counts_at = now
+            _doc_counts_dirty = False
         _save_doc_counts(counts, now)
         logger.info(f"RAG doc-count обновлён: {counts}")
     except Exception as e:
@@ -160,7 +162,23 @@ def _refresh_doc_counts() -> None:
 
 def _fresh() -> bool:
     with _doc_count_lock:
+        if _doc_counts_dirty:
+            return False
         return (time.time() - _doc_counts_at) < _DOC_COUNT_TTL
+
+
+def _invalidate_doc_counts() -> None:
+    """Пометить кеш устаревшим после записи в коллекцию.
+
+    Без этого загруженный документ до 6 часов не попадал в счётчик: плитка
+    показывала прежнее число, а список под ней — уже новый документ.
+    Флаг (а не обнуление времени) нужен потому, что _ensure_doc_counts_fresh
+    перечитывает кеш с диска — свежий по времени файл вернул бы старое значение.
+    """
+    global _stats_cache, _doc_counts_dirty
+    with _doc_count_lock:
+        _doc_counts_dirty = True
+    _stats_cache = None
 
 
 def _ensure_doc_counts_fresh() -> None:
@@ -308,7 +326,14 @@ async def get_stats(current_user: User = Depends(get_current_user)):
             doc_count_ready=name in known_docs,
         ))
     response = StatsResponse(collections=result)
-    _stats_cache = (response, time.time() + _STATS_TTL)
+    # Кешируем ответ на минуту ТОЛЬКО когда doc_count актуален. Пока идёт
+    # фоновый пересчёт (сразу после загрузки/удаления документа) ответ содержит
+    # заведомо старое число: закешировав его, мы бы на минуту показывали прежний
+    # счётчик рядом с уже обновившимся списком документов.
+    if _fresh():
+        _stats_cache = (response, time.time() + _STATS_TTL)
+    else:
+        _stats_cache = None
     return response
 
 
@@ -438,8 +463,10 @@ async def upload_document(
     logger.info(
         f"RAG: загружен '{title}' ({len(chunks)} чанков) → '{collection}' пользователем {current_user.id}"
     )
-    global _stats_cache
-    _stats_cache = None  # invalidate stats cache after upload
+    # Сбрасываем и кеш ответа, и кеш числа документов: раньше обнулялся только
+    # первый, а doc_count продолжал браться из 6-часового кеша — плитка
+    # показывала прежнее число, хотя документ уже был в списке.
+    _invalidate_doc_counts()
 
     return UploadResponse(ok=True, doc_id=doc_id, title=title, collection=collection, chunks=len(chunks))
 
@@ -465,6 +492,5 @@ async def delete_document(
 
     coll.delete(ids=existing["ids"])
     logger.info(f"RAG: удалён документ {doc_id} из коллекции '{collection}' пользователем {current_user.id}")
-    global _stats_cache
-    _stats_cache = None  # invalidate stats cache after delete
+    _invalidate_doc_counts()  # см. комментарий в upload_document
     return DeleteResponse(ok=True, deleted_chunks=len(existing["ids"]))
