@@ -10,8 +10,12 @@ Graph-RAG Analyze Tools
 """
 from __future__ import annotations
 
+import json
 import logging
+import threading
+import time
 from collections import Counter
+from pathlib import Path
 from typing import Any, Optional, List, Dict
 
 from sqlalchemy import func
@@ -21,6 +25,122 @@ from ..models import GraphDocument, GraphNode, GraphEdge, GraphEntity, Candidate
 from ..repository import GraphRepository
 
 logger = logging.getLogger(__name__)
+
+# ── Кеш глобальной статистики графа ─────────────────────────────────────────
+# Четыре COUNT(*) по таблицам графа на проде занимают ~28с (узлы 16.9с, связи
+# 7.2с, сущности 3.8с — 300 тыс./865 тыс./694 тыс. строк), при таймауте фронта
+# 30с. Замер стабилен между прогонами, то есть панель Graph-RAG работала в двух
+# секундах от обрыва: любая параллельная нагрузка — и вкладка показывает пустоту.
+# Индекс по is_archived есть и используется, дело в объёме перебора.
+# Подставить предрассчитанные graph_documents.nodes_count/edges_count нельзя:
+# по узлам сумма сходится точно (303590), а по связям занижает (763418 против
+# 865220) — счётчик рёбер неполный. Поэтому считаем честно, но фоном.
+_GRAPH_STATS_TTL = 15 * 60.0            # пересчёт не чаще раза в 15 минут
+_GRAPH_STATS_FILE = Path("data/graph_stats.json")
+_graph_stats: Optional[Dict[str, Any]] = None
+_graph_stats_at: float = 0.0
+_graph_stats_lock = threading.Lock()
+_graph_stats_running = False
+
+
+def _load_graph_stats() -> None:
+    """Поднять кеш с диска — иначе после каждого рестарта первый заход снова ждёт 28с."""
+    global _graph_stats, _graph_stats_at
+    try:
+        raw = json.loads(_GRAPH_STATS_FILE.read_text(encoding="utf-8"))
+        _graph_stats = raw.get("stats")
+        _graph_stats_at = float(raw.get("computed_at") or 0.0)
+    except (OSError, ValueError, TypeError) as e:
+        logger.debug(f"Graph-stats кеш не поднят с диска: {e}")
+
+
+def _save_graph_stats(stats: Dict[str, Any], computed_at: float) -> None:
+    try:
+        _GRAPH_STATS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _GRAPH_STATS_FILE.write_text(
+            json.dumps({"stats": stats, "computed_at": computed_at}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError as e:
+        logger.warning(f"Не удалось сохранить graph-stats кеш: {e}")
+
+
+def _compute_global_stats(db: Session) -> Dict[str, Any]:
+    """Честный пересчёт. Дорого (~28с на проде) — звать только фоном."""
+    docs_count = db.query(func.count(GraphDocument.id)).scalar()
+    nodes_count = db.query(func.count(GraphNode.id)).filter(
+        GraphNode.is_archived == False
+    ).scalar()
+    edges_count = db.query(func.count(GraphEdge.id)).scalar()
+    entities_count = db.query(func.count(GraphEntity.id)).scalar()
+
+    by_layer = dict(
+        db.query(GraphDocument.layer, func.count(GraphDocument.id))
+        .group_by(GraphDocument.layer)
+        .all()
+    )
+
+    return {
+        "documents_total": docs_count,
+        "nodes_total": nodes_count,
+        "edges_total": edges_count,
+        "entities_total": entities_count,
+        "by_layer": by_layer,
+    }
+
+
+def _refresh_graph_stats() -> None:
+    """Фоновый пересчёт со своей сессией: сессия запроса к этому моменту закрыта."""
+    global _graph_stats, _graph_stats_at, _graph_stats_running
+    from src.models.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        stats = _compute_global_stats(db)
+        now = time.time()
+        with _graph_stats_lock:
+            _graph_stats = stats
+            _graph_stats_at = now
+        _save_graph_stats(stats, now)
+        logger.info(
+            "Graph-stats обновлён: документов=%s узлов=%s связей=%s сущностей=%s",
+            stats.get("documents_total"), stats.get("nodes_total"),
+            stats.get("edges_total"), stats.get("entities_total"),
+        )
+    except Exception as e:
+        logger.warning(f"Фоновый пересчёт graph-stats не удался: {e}")
+    finally:
+        db.close()
+        with _graph_stats_lock:
+            _graph_stats_running = False
+
+
+def _graph_stats_fresh() -> bool:
+    return _graph_stats is not None and (time.time() - _graph_stats_at) < _GRAPH_STATS_TTL
+
+
+def _ensure_graph_stats_fresh() -> None:
+    """Запустить фоновый пересчёт, если кеш протух. Запрос не блокирует."""
+    global _graph_stats_running
+    with _graph_stats_lock:
+        if _graph_stats_running:
+            return
+        fresh = _graph_stats_fresh()
+    # Файл мог обновиться уже после импорта — например, кеш прогрели при деплое.
+    if not fresh:
+        _load_graph_stats()
+        with _graph_stats_lock:
+            fresh = _graph_stats_fresh()
+    if fresh:
+        return
+    with _graph_stats_lock:
+        if _graph_stats_running:
+            return
+        _graph_stats_running = True
+    threading.Thread(target=_refresh_graph_stats, name="graph-stats", daemon=True).start()
+
+
+_load_graph_stats()
 
 
 class GraphAnalyzeTools:
@@ -244,23 +364,15 @@ class GraphAnalyzeTools:
         }
 
     def _global_stats(self) -> Dict[str, Any]:
-        docs_count = self.db.query(func.count(GraphDocument.id)).scalar()
-        nodes_count = self.db.query(func.count(GraphNode.id)).filter(
-            GraphNode.is_archived == False
-        ).scalar()
-        edges_count = self.db.query(func.count(GraphEdge.id)).scalar()
-        entities_count = self.db.query(func.count(GraphEntity.id)).scalar()
+        """Глобальная статистика: отдаём из кеша, пересчитываем фоном.
 
-        by_layer = dict(
-            self.db.query(GraphDocument.layer, func.count(GraphDocument.id))
-            .group_by(GraphDocument.layer)
-            .all()
-        )
-
-        return {
-            "documents_total": docs_count,
-            "nodes_total": nodes_count,
-            "edges_total": edges_count,
-            "entities_total": entities_count,
-            "by_layer": by_layer,
-        }
+        Синхронный расчёт остаётся запасным путём — он отрабатывает только на
+        пустом кеше (свежая инсталляция), где граф мал и считается мгновенно.
+        На больших графах кеш прогревается заранее и этот путь не используется.
+        """
+        _ensure_graph_stats_fresh()
+        with _graph_stats_lock:
+            cached = _graph_stats
+        if cached is not None:
+            return cached
+        return _compute_global_stats(self.db)
