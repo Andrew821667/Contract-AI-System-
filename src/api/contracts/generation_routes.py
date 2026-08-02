@@ -73,6 +73,26 @@ async def generate_contract(
 
         if result.success:
             logger.info(f"Contract generated: {result.data.get('contract_id')} by user {current_user.id}")
+            # Агент считает УСПЕХОМ и случай «шаблон не найден» — он возвращает
+            # запрос на выбор шаблона (template_selection_required). Раньше эта
+            # ветка сюда не проверялась, и наружу уходило «Contract generated
+            # successfully» с пустым file_path: пользователь видел успех без
+            # документа, а причина («нет шаблона для типа») терялась по дороге.
+            if result.data.get('template_selection_required'):
+                contract_type = (result.data.get('extracted_params') or {}).get('contract_type')
+                logger.info(
+                    f"Генерация остановлена: нет шаблона для типа '{contract_type}' "
+                    f"(user={current_user.id})"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=(
+                        result.data.get('message')
+                        or f"Шаблон для типа «{contract_type}» не найден. "
+                           "Сохраните подходящий договор как шаблон и повторите."
+                    ),
+                )
+
             return ContractGenerateResponse(
                 contract_id=result.data.get('contract_id'),
                 file_path=result.data.get('file_path'),
