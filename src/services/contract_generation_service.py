@@ -92,8 +92,12 @@ class ContractGenerationService:
         self.exports_dir = exports_dir
         os.makedirs(self.exports_dir, exist_ok=True)
 
-    def generate(self, params: ContractParams) -> GenerationResult:
-        """Генерирует текст договора и сохраняет в DOCX."""
+    def generate(self, params: ContractParams, template_text: str = "") -> GenerationResult:
+        """Генерирует текст договора и сохраняет в DOCX.
+
+        template_text — типовой шаблон организации для этого типа договора,
+        если он заведён. Без него генерация работает как раньше.
+        """
         import time
         start_time = time.time()
 
@@ -103,7 +107,7 @@ class ContractGenerationService:
             type_name = get_contract_type_name(params.contract_type)
 
             # Сформировать промпт
-            prompt = self._build_prompt(params, type_name)
+            prompt = self._build_prompt(params, type_name, template_text)
             logger.info(f"Генерация договора: {type_name} | {params.party_a.name} ↔ {params.party_b.name}")
 
             # Вызвать LLM
@@ -153,9 +157,25 @@ class ContractGenerationService:
             logger.error(f"Ошибка генерации договора: {e}")
             return GenerationResult(success=False, error=str(e))
 
-    def _build_prompt(self, params: ContractParams, type_name: str) -> str:
-        """Формирует промпт для LLM из параметров."""
+    def _build_prompt(
+        self,
+        params: ContractParams,
+        type_name: str,
+        template_text: str = "",
+    ) -> str:
+        """Формирует промпт для LLM из параметров и (опционально) типового шаблона."""
         parts = [f"Составь {type_name.upper()}\n"]
+
+        # Типовой шаблон организации — структурный образец, а не текст для копирования.
+        # Лимит щедрый: агент раньше резал шаблон до 3000 символов, и от документа
+        # на 11 тыс. знаков до модели доходила четверть — терялись целые разделы.
+        if template_text:
+            parts.append(
+                "ТИПОВОЙ ШАБЛОН ОРГАНИЗАЦИИ (следуй его структуре, нумерации и "
+                "формулировкам, подставляя данные ниже):\n"
+                + template_text[:20000]
+                + "\n"
+            )
 
         parts.append("ДАННЫЕ СТОРОН:")
         parts.append(self._format_party(params.party_a, "Сторона 1"))

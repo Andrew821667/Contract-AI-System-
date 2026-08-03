@@ -2,6 +2,8 @@
 """
 Contract Generation Routes
 """
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from loguru import logger
@@ -61,49 +63,87 @@ async def generate_contract(
     **Returns:** Generated contract ID and file path
     """
     try:
-        llm_gateway = LLMGateway(model=settings.llm_quick_model)
-        agent = ContractGeneratorAgent(llm_gateway=llm_gateway, db_session=db)
+        # Раньше здесь звался ContractGeneratorAgent, но он спроектирован под
+        # генерацию ИЗ уже загруженного договора и требует в состоянии
+        # contract_id + parsed_xml. Эндпоинт передавал тип и параметры формы,
+        # проверка состояния падала, и генерация из интерфейса отдавала 500 —
+        # по любому типу, при любых данных. ContractGenerationService делает
+        # ровно то, что нужно этому эндпоинту: параметры → текст → DOCX.
+        from src.services.contract_generation_service import (
+            ContractGenerationService,
+            ContractParams,
+            ContractParty,
+        )
+        from src.models.database import Contract, Template, generate_uuid
 
-        result = agent.execute({
-            'template_id': request_data.template_id or f"tpl_{request_data.contract_type}_001",
-            'contract_type': request_data.contract_type,
-            'params': request_data.params,
-            'user_id': current_user.id
-        })
+        p = request_data.params or {}
 
-        if result.success:
-            logger.info(f"Contract generated: {result.data.get('contract_id')} by user {current_user.id}")
-            # Агент считает УСПЕХОМ и случай «шаблон не найден» — он возвращает
-            # запрос на выбор шаблона (template_selection_required). Раньше эта
-            # ветка сюда не проверялась, и наружу уходило «Contract generated
-            # successfully» с пустым file_path: пользователь видел успех без
-            # документа, а причина («нет шаблона для типа») терялась по дороге.
-            if result.data.get('template_selection_required'):
-                contract_type = (result.data.get('extracted_params') or {}).get('contract_type')
-                logger.info(
-                    f"Генерация остановлена: нет шаблона для типа '{contract_type}' "
-                    f"(user={current_user.id})"
-                )
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=(
-                        result.data.get('message')
-                        or f"Шаблон для типа «{contract_type}» не найден. "
-                           "Сохраните подходящий договор как шаблон и повторите."
-                    ),
-                )
+        # Типовой шаблон организации для этого типа, если заведён.
+        template_text = ""
+        tpl = (
+            db.query(Template)
+            .filter(Template.contract_type == request_data.contract_type, Template.active == True)  # noqa: E712
+            .order_by(Template.created_at.desc())
+            .first()
+        )
+        if tpl and tpl.xml_content:
+            template_text = tpl.xml_content
 
-            return ContractGenerateResponse(
-                contract_id=result.data.get('contract_id'),
-                file_path=result.data.get('file_path'),
-                status='generated',
-                message='Contract generated successfully'
+        gen_params = ContractParams(
+            contract_type=request_data.contract_type,
+            party_a=ContractParty(name=str(p.get("party_a") or "")),
+            party_b=ContractParty(name=str(p.get("party_b") or "")),
+            subject=str(p.get("subject") or ""),
+            amount=str(p.get("amount") or ""),
+            start_date=str(p.get("start_date") or ""),
+            duration=str(p.get("end_date") or ""),
+            payment_terms=str(p.get("payment_terms") or ""),
+            additional_conditions=str(p.get("additional_terms") or ""),
+        )
+
+        result = ContractGenerationService().generate(gen_params, template_text=template_text)
+
+        if not result.success:
+            # Текст ошибки провайдера пишем в лог, наружу не отдаём: он содержит
+            # диагностику вызова вплоть до хвоста API-ключа.
+            logger.error(
+                f"Генерация не удалась (тип={request_data.contract_type}, "
+                f"пользователь={current_user.id}): {result.error}"
             )
-        else:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Contract generation failed: {result.error}"
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Не удалось сгенерировать договор: сервис генерации недоступен. Попробуйте позже.",
             )
+
+        # Сохраняем результат как договор — иначе интерфейсу некуда переходить
+        # после генерации (он открывает /contracts/{id}).
+        contract = Contract(
+            id=generate_uuid(),
+            file_name=os.path.basename(result.docx_path),
+            file_path=result.docx_path,
+            document_type="generated",
+            contract_type=request_data.contract_type,
+            status="completed",
+            assigned_to=current_user.id,
+            meta_info={
+                "origin": "generated",
+                "template_id": tpl.id if tpl else None,
+                "generated_from_params": p,
+            },
+        )
+        db.add(contract)
+        db.commit()
+
+        logger.info(
+            f"Договор сгенерирован: {contract.id} тип={request_data.contract_type} "
+            f"шаблон={'да' if tpl else 'нет'} пользователь={current_user.id}"
+        )
+        return ContractGenerateResponse(
+            contract_id=contract.id,
+            file_path=result.docx_path,
+            status="generated",
+            message="Contract generated successfully",
+        )
 
     except HTTPException:
         raise
