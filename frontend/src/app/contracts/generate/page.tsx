@@ -164,7 +164,10 @@ export default function GenerateContractPage() {
 
   const availableTemplates = useMemo(
     () => templates.filter((t) => t.type === formData.contractType),
-    [formData.contractType]
+    // templates обязателен в зависимостях: список приходит асинхронно уже ПОСЛЕ
+    // смены типа, и без него пересчёт не запускался — экран навсегда оставался
+    // с «шаблон не найден», хотя ответ API уже лежал в состоянии.
+    [templates, formData.contractType]
   )
 
   const selectedType = useMemo(
@@ -247,7 +250,11 @@ export default function GenerateContractPage() {
                     key={type.value}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => setFormData((prev) => ({ ...prev, contractType: type.value, templateId: '' }))}
+                    // Через handleInputChange, а не setFormData напрямую: только он
+                    // дёргает loadTemplates. Прямой setState оставлял список шаблонов
+                    // пустым навсегда — экран всегда писал «шаблон не найден», даже
+                    // когда шаблон для типа был заведён.
+                    onClick={() => handleInputChange('contractType', type.value)}
                     className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${
                       formData.contractType === type.value
                         ? 'border-primary-500 bg-primary-50'
