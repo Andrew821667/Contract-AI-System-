@@ -39,6 +39,21 @@ status running "добор новых документов"
 $PYC modules/federal_laws.py --all --only fz --skip-amendments >> $LOG 2>&1 || echo "warn: fz" >> $LOG
 $PYC -m modules.decrees >> $LOG 2>&1 || echo "warn: decrees" >> $LOG
 
+# 2a. добор СУДЕБНОЙ ПРАКТИКИ.
+#     Раньше этого шага не было вовсе: качались только ФЗ и подзаконка, а
+#     `--kind court` ниже лишь заливает в граф уже лежащие файлы. В результате
+#     корпус судебной практики стоял с 05.06.2026 (6927 файлов), и каждый
+#     недельный прогон честно рапортовал «case_law: добавлено 0».
+#     Органы и фильтр — те же, что в разовом court_night.sh, которым корпус
+#     собирали изначально.
+status running "добор судебной практики"
+$PYC -m modules.court_practice --organ "Пленум Верховного Суда РФ" --slug plenum_vs \
+     >> $LOG 2>&1 || echo "warn: court plenum_vs" >> $LOG
+$PYC -m modules.court_practice --organ "Верховный Суд РФ" --slug vs_all \
+     >> $LOG 2>&1 || echo "warn: court vs_all" >> $LOG
+$PYC -m modules.court_practice --organ "Конституционный Суд РФ" --slug ks_post --title-filter "^Постановление" \
+     >> $LOG 2>&1 || echo "warn: court ks_post" >> $LOG
+
 # 2b. дедуп редакций: у каждой редакции в К+ свой doc_id, добор качает новую
 #     редакцию как НОВЫЙ файл (edition_check по старому id смену не видит) —
 #     без этого шага в сторах копятся устаревшие редакции законов.
