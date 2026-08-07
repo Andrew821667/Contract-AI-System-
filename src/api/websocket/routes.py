@@ -344,8 +344,15 @@ async def websocket_notifications(
         pass
 
     if not ws_token:
-        await websocket.send_json({"type": "error", "message": "Authentication failed"})
-        await websocket.close(code=1008, reason="Invalid token")
+        # Клиент к этому моменту мог уже отвалиться — тогда send после close даёт
+        # RuntimeError «Unexpected ASGI message websocket.send». Пользователю это
+        # ничем не грозит, но засоряет лог трейсбеками (в аналогичном обработчике
+        # анализа отправка давно обёрнута, здесь — нет).
+        try:
+            await websocket.send_json({"type": "error", "message": "Authentication failed"})
+            await websocket.close(code=1008, reason="Invalid token")
+        except Exception as e:
+            logger.debug(f"Клиент уведомлений уже отключился до ответа об авторизации: {e}")
         return
 
     auth_info = _authenticate_ws(db, ws_token)
@@ -407,9 +414,15 @@ async def websocket_notifications(
             finally:
                 poll_db.close()
 
-            # Send collected notifications outside DB session
+            # Send collected notifications outside DB session.
+            # Через send_personal_message, а не напрямую: он гасит отправку в уже
+            # закрытый сокет и возвращает False. Прямой send_json после разрыва
+            # поднимал RuntimeError, который ловил внешний except и писал в лог
+            # полный трейсбек на каждое отключение вкладки.
             for notif in notifications:
-                await websocket.send_json(notif)
+                if not await manager.send_personal_message(notif, websocket):
+                    logger.info(f"Клиент уведомлений {user_id} отключился — останавливаю опрос")
+                    return
 
     except WebSocketDisconnect:
         logger.info(f"User {user_id} disconnected from notifications")
