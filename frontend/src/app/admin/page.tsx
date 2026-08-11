@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuthGuard } from '@/hooks/useAuthGuard'
 import AppLayout from '@/components/AppLayout'
@@ -26,7 +26,19 @@ import {
   useUploadRagDocument,
   useDeleteRagDocument,
 } from '@/hooks/useRAGAdmin'
+import api from '@/services/api'
 import type { Organization, OrgMembership, Policy, ToolDefinition, AgentDefinition, ClausePolicy, TemplateVersion, RAGDocument } from '@/services/api'
+
+/** Элемент библиотеки шаблонов генерации (ответ /api/v1/contracts/templates). */
+type TemplateLibraryItem = {
+  id: string
+  name: string
+  contract_type: string
+  version?: string
+  created_at?: string
+  chars?: number
+  origin?: string
+}
 import LLMSettings from '@/components/admin/LLMSettings'
 import IntegrationSettings from '@/components/admin/IntegrationSettings'
 import GraphRAGPanel from '@/components/admin/GraphRAGPanel'
@@ -70,6 +82,25 @@ export default function AdminPage() {
   const [cpRiskExplanation, setCpRiskExplanation] = useState('')
   const [templateIdInput, setTemplateIdInput] = useState('')
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
+
+  // Библиотека шаблонов генерации. Раньше её нигде не было видно: шаблоны
+  // существовали в базе, но посмотреть их списком было негде — только по
+  // одному, выбрав тип на экране генерации.
+  const [templateLibrary, setTemplateLibrary] = useState<TemplateLibraryItem[]>([])
+  const [templateLibraryLoading, setTemplateLibraryLoading] = useState(false)
+  const [templateLibraryError, setTemplateLibraryError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (activeTab !== 'templates') return
+    let active = true
+    setTemplateLibraryLoading(true)
+    setTemplateLibraryError(null)
+    api.listTemplates()
+      .then((items) => { if (active) setTemplateLibrary(items) })
+      .catch(() => { if (active) setTemplateLibraryError('Не удалось загрузить библиотеку шаблонов') })
+      .finally(() => { if (active) setTemplateLibraryLoading(false) })
+    return () => { active = false }
+  }, [activeTab])
 
   const [ragCollection, setRagCollection] = useState('knowledge')
   const [ragDocType, setRagDocType] = useState('document')
@@ -593,6 +624,53 @@ export default function AdminPage() {
         {/* Templates tab */}
         {activeTab === 'templates' && (
           <div className="space-y-6">
+            {/* Библиотека шаблонов генерации */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200">
+                  Библиотека шаблонов{templateLibrary.length > 0 ? ` (${templateLibrary.length})` : ''}
+                </h3>
+                <span className="text-[10px] text-gray-400">используются при генерации договоров</span>
+              </div>
+
+              {templateLibraryLoading ? (
+                <p className="text-xs text-gray-400">Загрузка…</p>
+              ) : templateLibraryError ? (
+                <p className="text-xs text-red-500">{templateLibraryError}</p>
+              ) : templateLibrary.length === 0 ? (
+                <div className="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 p-5">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Шаблонов пока нет. Их можно создать из проанализированного договора —
+                    кнопка «Сохранить как шаблон» на странице договора.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {templateLibrary.map((t) => (
+                    <div
+                      key={t.id}
+                      className="bg-white dark:bg-dark-800 rounded-xl border border-gray-200 dark:border-dark-700 px-4 py-3 flex items-center justify-between gap-4"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-900 dark:text-gray-100 truncate">{t.name}</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">
+                          {t.contract_type}
+                          {t.version ? ` · v${t.version}` : ''}
+                          {typeof t.chars === 'number' ? ` · ${t.chars.toLocaleString('ru-RU')} знаков` : ''}
+                          {t.created_at ? ` · ${new Date(t.created_at).toLocaleDateString('ru-RU')}` : ''}
+                        </p>
+                      </div>
+                      {t.origin === 'ai_generated' && (
+                        <span className="shrink-0 px-2 py-0.5 text-[10px] uppercase tracking-wide rounded-full bg-amber-100 text-amber-700">
+                          не проверен
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Clause Policies */}
             <div>
               <div className="flex items-center justify-between mb-3">
