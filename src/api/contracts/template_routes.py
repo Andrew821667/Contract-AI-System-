@@ -34,6 +34,11 @@ class TemplateListItem(BaseModel):
     contract_type: str
     version: Optional[str] = None
     source_file_name: Optional[str] = None
+    # Поля для списка в админке: до этого библиотеку шаблонов нигде не было
+    # видно — 51 документ существовал, а посмотреть их списком было негде.
+    created_at: Optional[str] = None
+    chars: Optional[int] = None
+    origin: Optional[str] = None  # ai_generated | from_contract
 
 
 class TemplateStatusResponse(BaseModel):
@@ -66,6 +71,10 @@ async def list_templates(
             contract_type=t.contract_type,
             version=t.version,
             source_file_name=(t.meta_info or {}).get("source_file_name"),
+            created_at=t.created_at.isoformat() if t.created_at else None,
+            chars=len(t.xml_content or ""),
+            origin=(t.meta_info or {}).get("origin")
+            or ("from_contract" if (t.meta_info or {}).get("source_contract_id") else None),
         )
         for t in templates
     ]

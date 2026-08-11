@@ -559,6 +559,10 @@ class APIClient {
     contract_type: string;
     version?: string;
     source_file_name?: string;
+    created_at?: string;
+    chars?: number;
+    /** ai_generated — сгенерирован системой; from_contract — сохранён из договора */
+    origin?: string;
   }>> {
     const params = contractType ? { contract_type: contractType } : {};
     const response = await this.client.get('/api/v1/contracts/templates', { params });
