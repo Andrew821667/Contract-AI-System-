@@ -104,15 +104,34 @@ $PYK scripts/kb_relink.py "$DB" >> $LOG 2>&1 || echo "warn: relink" >> $LOG
 status running "рестарт бэкенда"
 BPID=$(pgrep -f "uvicorn src.main:app" | head -1)
 if [ -n "$BPID" ]; then
+  # Обычного TERM недостаточно: uvicorn регулярно виснет на async-shutdown —
+  # процесс остаётся жив, launchd его не переподнимает (он ведь не умер), и
+  # бэкенд стоит мёртвым, отвечая пустотой. Ровно так прод пролежал после
+  # прогона 09.08.2026: скрипт написал «не поднялся за 60с» и завершился ОК.
+  # Поэтому: TERM → ждём смерти → добиваем KILL → ждём health.
   kill "$BPID" 2>/dev/null
+  for _ in $(seq 1 10); do
+    kill -0 "$BPID" 2>/dev/null || break
+    sleep 2
+  done
+  if kill -0 "$BPID" 2>/dev/null; then
+    echo "$(date) backend не умер по TERM за 20с — добиваю KILL (pid $BPID)" >> $LOG
+    kill -9 "$BPID" 2>/dev/null
+  fi
+
   RESTARTED=0
-  for _ in $(seq 1 30); do
+  for _ in $(seq 1 45); do
     sleep 2
     if curl -s -m 3 http://127.0.0.1:8000/health 2>/dev/null | grep -q healthy; then
       echo "$(date) backend respawned (was pid $BPID)" >> $LOG; RESTARTED=1; break
     fi
   done
-  [ "$RESTARTED" = 1 ] || echo "warn: backend не поднялся за 60с после рестарта" >> $LOG
+  # Не поднялся — это НЕ мелочь: система лежит. Пишем в статус, чтобы падение
+  # было видно снаружи, а не только строкой «warn» в середине лога.
+  if [ "$RESTARTED" != 1 ]; then
+    echo "$(date) ОШИБКА: backend не поднялся за 90с после рестарта" >> $LOG
+    status error "backend не поднялся после рестарта — система недоступна"
+  fi
 else
   echo "warn: uvicorn не найден — рестарт пропущен" >> $LOG
 fi
