@@ -22,6 +22,9 @@ class AgentDefinitionRead(BaseModel):
     active: bool
     version: str
     created_at: datetime
+    # db — запись в таблице (её можно редактировать), runtime — агент, поднятый
+    # bootstrap-ом в памяти процесса; редактирование для него недоступно.
+    source: str = "db"
 
     model_config = {"from_attributes": True, "protected_namespaces": ()}
 

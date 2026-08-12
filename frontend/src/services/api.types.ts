@@ -891,6 +891,8 @@ export interface AgentDefinition {
   active: boolean;
   version: string;
   created_at: string;
+  /** db — запись в таблице (редактируемая); runtime — агент из памяти процесса */
+  source?: string;
 }
 
 export interface AgentDefinitionUpdate {
