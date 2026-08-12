@@ -23,6 +23,11 @@ class ToolDefinitionRead(BaseModel):
     active: bool
     version: str
     created_at: datetime
+    # db — запись в таблице (редактируемая), runtime — инструмент, поднятый
+    # bootstrap-ом в памяти процесса. Раньше вкладка показывала только записи
+    # из таблицы, а она пустая: админка писала «нет инструментов», хотя в
+    # рантайме их 17.
+    source: str = "db"
 
     model_config = {"from_attributes": True}
 

@@ -849,12 +849,20 @@ export default function AdminPage() {
                       }`}>
                         {a.active ? 'Активен' : 'Неактивен'}
                       </span>
-                      <button
-                        onClick={() => setEditingAgent(a)}
-                        className="text-[10px] px-2 py-0.5 rounded border border-primary-300 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition font-medium"
-                      >
-                        Редактировать
-                      </button>
+                      {/* Рантайм-агент живёт в памяти процесса, записи в таблице
+                          у него нет — редактировать нечего, сохранение упало бы. */}
+                      {a.source === 'runtime' ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-dark-700 dark:text-gray-300 font-medium">
+                          рантайм
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => setEditingAgent(a)}
+                          className="text-[10px] px-2 py-0.5 rounded border border-primary-300 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition font-medium"
+                        >
+                          Редактировать
+                        </button>
+                      )}
                     </div>
                   </div>
                   {a.description && <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{a.description}</p>}
