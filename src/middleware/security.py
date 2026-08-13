@@ -167,14 +167,29 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         direct_ip = request.client.host if request.client else "unknown"
         forwarded = request.headers.get("X-Forwarded-For")
         if forwarded:
+            candidate = forwarded.split(",")[0].strip()
             try:
-                addr = ipaddress.ip_address(direct_ip)
-                if addr.is_private or addr.is_loopback:
+                peer = ipaddress.ip_address(direct_ip)
+                if peer.is_private or peer.is_loopback:
                     # Заголовку верим только от внутреннего прокси.
-                    return forwarded.split(",")[0].strip(), False
+                    client = ipaddress.ip_address(candidate)
+                    if not (client.is_private or client.is_loopback):
+                        return candidate, False  # настоящий внешний клиент
+                    # В заголовке внутренний адрес: цепочка прокси не донесла
+                    # клиента (Docker на macOS подменяет источник шлюзом), и
+                    # значение одинаково для всех — ключ общий.
+                    return candidate, True
             except ValueError:
                 pass
-            return direct_ip, False
+            return direct_ip, True
+
+        # Прямое подключение снаружи: адрес клиента известен — лимит строгий.
+        try:
+            peer = ipaddress.ip_address(direct_ip)
+            if not (peer.is_private or peer.is_loopback):
+                return direct_ip, False
+        except ValueError:
+            pass
 
         # Заголовка нет — различить клиентов НЕЛЬЗЯ, ключ общий на всех.
         # Раньше это определялось по «приватности» адреса прокси, и на проде
