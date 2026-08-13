@@ -38,6 +38,11 @@ def _get_redis_client():
         return None
 
 
+# Во сколько раз смягчаем лимит, когда бакет общий на всех пользователей
+# (прокси не передал реальный адрес клиента) — см. пояснение в dispatch().
+_SHARED_KEY_LIMIT_FACTOR = 20
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
     Rate limiting middleware using token bucket algorithm.
@@ -104,10 +109,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Ключ лимита: для аутентифицированных — по токену (каждый юзер свой бакет,
         # чтобы юзеры за одним корпоративным NAT-IP не делили лимит), иначе по IP.
-        client_ip = self._get_client_ip(request)
+        client_ip, key_is_shared = self._client_ip_with_origin(request)
         auth = request.headers.get("authorization", "")
         if auth.lower().startswith("bearer ") and len(auth) > 20:
             rate_key = "u:" + hashlib.sha256(auth[7:].encode()).hexdigest()[:20]
+            key_is_shared = False  # у каждого токена свой бакет
         else:
             rate_key = client_ip
 
@@ -121,6 +127,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     break
             else:
                 limit = self.requests_per_minute
+
+        # Если реальный адрес клиента до нас не доходит (прокси не передал
+        # X-Forwarded-For), все неаутентифицированные пользователи делят ОДИН
+        # бакет. При боевых лимитах это значит, что десяток входов подряд
+        # блокирует вход всем сразу — что и произошло на проде 13.08.2026.
+        # Пока адрес не доходит, множим лимит: перебор паролей всё равно
+        # ограничен блокировкой аккаунта после серии неудач (она по учётке,
+        # а не по адресу). Как только прокси начнёт передавать адрес, лимиты
+        # автоматически станут персональными и строгими.
+        if key_is_shared:
+            limit *= _SHARED_KEY_LIMIT_FACTOR
 
         if not self._allow_request(rate_key, limit):
             return JSONResponse(
@@ -138,16 +155,27 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def _get_client_ip(self, request: Request) -> str:
         """Extract client IP, trusting X-Forwarded-For only from internal proxies."""
+        return self._client_ip_with_origin(request)[0]
+
+    def _client_ip_with_origin(self, request: Request) -> tuple[str, bool]:
+        """(адрес, общий_ли_ключ).
+
+        Второй элемент — True, когда запрос пришёл через прокси, а реального
+        адреса клиента в нём нет: тогда ключ лимита один на всех и строгие
+        персональные лимиты применять нельзя.
+        """
         direct_ip = request.client.host if request.client else "unknown"
         try:
             addr = ipaddress.ip_address(direct_ip)
             if addr.is_private or addr.is_loopback:
                 forwarded = request.headers.get("X-Forwarded-For")
                 if forwarded:
-                    return forwarded.split(",")[0].strip()
+                    return forwarded.split(",")[0].strip(), False
+                # За прокси, но адрес клиента не передан — ключ общий.
+                return direct_ip, True
         except ValueError:
             pass
-        return direct_ip
+        return direct_ip, False
 
     def _allow_request(self, client_ip: str, limit: int) -> bool:
         """
