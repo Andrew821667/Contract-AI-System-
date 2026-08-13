@@ -74,9 +74,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             'last_update': time.time()
         })
 
-        # Specific limits for endpoints (per minute per IP)
-        import os
-        is_dev = os.getenv("APP_ENV", "development") != "production"
+        # Specific limits for endpoints (per minute per IP).
+        # Режим — из настроек: APP_ENV задан в .env и в окружение процесса не
+        # попадает, поэтому os.getenv видел «development» даже на боевом проде.
+        from config.settings import settings as _settings
+        is_dev = _settings.app_env != "production"
         multiplier = 10 if is_dev else 1  # Relaxed limits for development
         # Глобальный лимит тоже смягчаем в dev (раньше ×10 применялся только к
         # точечным лимитам, а глобальный 1000/min душил обычное чтение и всех
@@ -336,8 +338,9 @@ def setup_cors(app):
     if ngrok_url:
         allowed_origins.append(ngrok_url)
 
-    # In development, allow ngrok/cloudflare tunnel origins (strict pattern)
-    is_dev = os.getenv("APP_ENV", "development") != "production"
+    # In development, allow ngrok/cloudflare tunnel origins (strict pattern).
+    # Режим — из настроек, а не из окружения: см. пояснение выше по коду.
+    is_dev = settings.app_env != "production"
     if is_dev:
         # Only match direct subdomains, not arbitrary prefixes
         allow_origin_regex = r"https://[a-z0-9\-]+\.(ngrok-free\.dev|ngrok\.io|trycloudflare\.com)"
