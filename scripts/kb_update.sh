@@ -96,6 +96,14 @@ $PYK scripts/kb_fts_build.py >> $LOG 2>&1 || echo "warn: fts_build" >> $LOG
 status running "пересборка связей"
 $PYK scripts/kb_relink.py "$DB" >> $LOG 2>&1 || echo "warn: relink" >> $LOG
 
+# 5b. пересчёт счётчиков документов.
+#     relink достраивает cross-document рёбра ПОСЛЕ ингеста и update_stats()
+#     не зовёт — счётчики документов отстают и врут в админке. К 10.08.2026
+#     недосчёт накопился до 90 891 ребра (879 854 в графе против 788 963 в
+#     сумме счётчиков), расхождение было у 6879 документов из 8212.
+status running "пересчёт счётчиков графа"
+$PYK scripts/graph_recount_stats.py >> $LOG 2>&1 || echo "warn: graph_recount_stats" >> $LOG
+
 # 6. рестарт бэкенда: KeepAlive-LaunchDaemon грузит ChromaDB-HNSW в память ПРИ
 #    СТАРТЕ — новые (ингест) и вычищенные (дедуп 2b) доки не видны ЖИВОМУ индексу
 #    до рестарта. Убиваем uvicorn (legalai владеет процессом) → launchd поднимает
