@@ -19,7 +19,14 @@ from loguru import logger
 logger.remove()
 # Default request_id ("-") для логов вне HTTP-контекста (startup, background tasks)
 logger.configure(extra={"request_id": "-"})
-_is_production = os.getenv("APP_ENV") == "production"
+# Режим берём из настроек, а не из os.getenv: APP_ENV живёт в .env, а его
+# pydantic-settings читает в объект настроек и в окружение процесса НЕ кладёт.
+# Из-за этого переключение прода в боевой режим срабатывало наполовину:
+# create_all отключался, а формат логов, лимиты и флаг Secure у refresh-cookie
+# продолжали думать, что это development.
+from config.settings import settings as _settings_for_env  # noqa: E402
+
+_is_production = _settings_for_env.app_env == "production"
 if _is_production:
     # JSON format for machine parsing in production (ELK, CloudWatch, etc.)
     logger.add(sys.stdout, serialize=True, level="INFO")
