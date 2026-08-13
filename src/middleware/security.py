@@ -165,17 +165,25 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         персональные лимиты применять нельзя.
         """
         direct_ip = request.client.host if request.client else "unknown"
-        try:
-            addr = ipaddress.ip_address(direct_ip)
-            if addr.is_private or addr.is_loopback:
-                forwarded = request.headers.get("X-Forwarded-For")
-                if forwarded:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            try:
+                addr = ipaddress.ip_address(direct_ip)
+                if addr.is_private or addr.is_loopback:
+                    # Заголовку верим только от внутреннего прокси.
                     return forwarded.split(",")[0].strip(), False
-                # За прокси, но адрес клиента не передан — ключ общий.
-                return direct_ip, True
-        except ValueError:
-            pass
-        return direct_ip, False
+            except ValueError:
+                pass
+            return direct_ip, False
+
+        # Заголовка нет — различить клиентов НЕЛЬЗЯ, ключ общий на всех.
+        # Раньше это определялось по «приватности» адреса прокси, и на проде
+        # проверка не срабатывала: адрес выглядел не приватным, признак не
+        # выставлялся, и строгий лимит применялся к общему бакету — десяток
+        # входов блокировал вход всем. Бэкенд слушает только петлевой адрес,
+        # то есть прямых клиентов у него не бывает, все запросы идут через
+        # прокси — поэтому отсутствие заголовка всегда означает общий ключ.
+        return direct_ip, True
 
     def _allow_request(self, client_ip: str, limit: int) -> bool:
         """
