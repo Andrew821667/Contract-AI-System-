@@ -28,7 +28,15 @@
 - [x] Добавлена миграция `025_deepseek_v4_routing` для `system_config` и LLM-политик.
 - [x] Обновлены production-пример, Docker Compose, CI, документация и публичное название моделей.
 - [x] Офлайн-проверки: 19 passed, блокировка live eval сработала, frontend type-check/build прошли.
-- [ ] Опубликовать повторный аудит и применить миграцию в production.
+- [x] Опубликовать повторный аудит и применить миграцию в production.
+
+### 2026-08-25 — повторный аудит опубликован
+- Коммиты `4bea4de`, `cab2073` и `bab7af0` применены в `/Users/legalai/projects/Contract-AI-System-`.
+- Миграция `025_deepseek_v4_routing` применена к production SQLite; отсутствие неиспользуемой legacy-таблицы `system_config` обрабатывается штатно.
+- Production Python 3.11: 19 офлайн-тестов passed; LLM-ключи в тестовых процессах были пустыми, live API-вызовов не было.
+- Публичный frontend пересобран как `contract-ai-frontend:bab7af0` и занимает единственный активный маршрут `127.0.0.1:3103`.
+- `verify_deploy.sh` подтвердил публичный BUILD_ID и API proxy; `/`, `/health`, backend и frontend возвращают HTTP 200.
+- Старый frontend остановлен и сохранён только как rollback-контейнер; временный canary и неработающий дубль удалены.
 
 ### 2026-08-25 — production
 - Коммит `a46b94b` опубликован и применён fast-forward в `/Users/legalai/projects/Contract-AI-System-`.
