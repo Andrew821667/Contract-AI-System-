@@ -13,7 +13,7 @@ const AUTONOMY_LEVELS = [
 
 const LLM_PROVIDERS = ['deepseek', 'openai', 'anthropic', 'yandex', 'qwen', 'ollama']
 const LLM_MODELS: Record<string, string[]> = {
-  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
+  deepseek: ['deepseek-v4-flash', 'deepseek-v4-pro'],
   openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
   anthropic: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001'],
   yandex: ['yandexgpt-lite', 'yandexgpt'],

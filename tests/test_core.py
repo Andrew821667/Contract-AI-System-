@@ -1124,7 +1124,7 @@ class TestLLMRoutingPolicy:
             local_first=True,
             external_allowed=False,
             blocked_models=["gpt-4o", "claude-sonnet-4-20250514"],
-            local_models=["deepseek-v3"],
+            local_models=["qwen3:7b"],
         )
         assert policy.local_first is True
         assert policy.external_allowed is False
@@ -1135,11 +1135,11 @@ class TestLLMRoutingPolicy:
 
         policy = LLMRoutingPolicy(
             blocked_models=["gpt-4o"],
-            default_model="deepseek-v3",
+            default_model="deepseek-v4-flash",
         )
         svc = LLMRoutingPolicyService(db=None)  # type: ignore[arg-type]
         model, reason = svc.apply_policy("gpt-4o", policy)
-        assert model == "deepseek-v3"
+        assert model == "deepseek-v4-flash"
         assert "заблокирована" in reason
 
     def test_apply_policy_sensitivity_override(self):
@@ -1149,7 +1149,7 @@ class TestLLMRoutingPolicy:
             high_sensitivity_model="claude-sonnet-4-20250514",
         )
         svc = LLMRoutingPolicyService(db=None)  # type: ignore[arg-type]
-        model, reason = svc.apply_policy("deepseek-v3", policy, sensitivity="high")
+        model, reason = svc.apply_policy("deepseek-v4-flash", policy, sensitivity="high")
         assert model == "claude-sonnet-4-20250514"
         assert "чувствительность" in reason.lower()
 
@@ -1159,11 +1159,11 @@ class TestLLMRoutingPolicy:
         policy = LLMRoutingPolicy(
             local_first=True,
             external_allowed=False,
-            local_models=["deepseek-v3"],
+            local_models=["qwen3:7b"],
         )
         svc = LLMRoutingPolicyService(db=None)  # type: ignore[arg-type]
         model, reason = svc.apply_policy("gpt-4o", policy)
-        assert model == "deepseek-v3"
+        assert model == "qwen3:7b"
         assert "External" in reason
 
 
@@ -1200,19 +1200,19 @@ class TestFallbackHandler:
         from src.core.llm_cascade.fallback import FallbackHandler
         handler = FallbackHandler()
         # Clear any leftover failures from prior tests
-        for model in ["deepseek-v3", "deepseek-chat", "gpt-4o", "gpt-4o-mini"]:
+        for model in ["deepseek-v4-flash", "deepseek-v4-pro", "gpt-4o", "gpt-4o-mini"]:
             handler.clear_failures(model)
         return handler
 
     def test_circuit_breaker(self):
         handler = self._fresh_handler()
-        assert handler.is_healthy("deepseek-v3") is True
+        assert handler.is_healthy("deepseek-v4-flash") is True
 
         # Record failures
         for _ in range(3):
-            handler.record_failure("deepseek-v3")
+            handler.record_failure("deepseek-v4-flash")
 
-        assert handler.is_healthy("deepseek-v3") is False
+        assert handler.is_healthy("deepseek-v4-flash") is False
         assert handler.is_healthy("gpt-4o") is True  # Other model unaffected
 
     def test_get_healthy_models(self):
@@ -1220,19 +1220,19 @@ class TestFallbackHandler:
         for _ in range(3):
             handler.record_failure("gpt-4o")
 
-        healthy = handler.get_healthy_models(["deepseek-v3", "gpt-4o", "gpt-4o-mini"])
-        assert "deepseek-v3" in healthy
+        healthy = handler.get_healthy_models(["deepseek-v4-flash", "gpt-4o", "gpt-4o-mini"])
+        assert "deepseek-v4-flash" in healthy
         assert "gpt-4o" not in healthy
         assert "gpt-4o-mini" in healthy
 
     def test_clear_failures(self):
         handler = self._fresh_handler()
         for _ in range(3):
-            handler.record_failure("deepseek-v3")
-        assert handler.is_healthy("deepseek-v3") is False
+            handler.record_failure("deepseek-v4-flash")
+        assert handler.is_healthy("deepseek-v4-flash") is False
 
-        handler.clear_failures("deepseek-v3")
-        assert handler.is_healthy("deepseek-v3") is True
+        handler.clear_failures("deepseek-v4-flash")
+        assert handler.is_healthy("deepseek-v4-flash") is True
 
     def test_get_status(self):
         handler = self._fresh_handler()

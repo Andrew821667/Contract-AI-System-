@@ -1,6 +1,6 @@
 """
 Smart Model Router for Contract AI System v2.0
-Intelligent selection between DeepSeek-V3, Claude 4.5 Sonnet, GPT-4o, and GPT-4o-mini
+DeepSeek Flash by default, DeepSeek Pro for explicit expert work
 
 H11: When CascadeManager (v2) is available, delegates to it transparently.
      Otherwise falls back to legacy rule-based logic.
@@ -9,6 +9,11 @@ from __future__ import annotations
 
 from typing import Optional, Dict, Any, TYPE_CHECKING
 from src.config.llm_config import get_llm_config
+from src.core.llm_models import (
+    DEEPSEEK_FLASH_MODEL,
+    DEEPSEEK_PRO_MODEL,
+    normalize_model_name,
+)
 import logging
 
 if TYPE_CHECKING:
@@ -47,8 +52,9 @@ class ModelRouter:
     Smart Router for LLM model selection.
 
     Strategy:
-    - DeepSeek-V3: Primary worker for 90% of tasks
-    - Claude 4.6 Sonnet: Expert fallback for complex scans/documents
+    - DeepSeek V4 Flash: primary worker for standard tasks
+    - DeepSeek V4 Pro: serious/expert tasks
+    - Claude 4.6 Sonnet: expert fallback
     - GPT-5.4: Reserve channel if primary/fallback unavailable
     - GPT-5.4 Mini: Testing and validation
     """
@@ -90,12 +96,12 @@ class ModelRouter:
                 - 0.5-0.8: Medium (complex tables, multiple parties)
                 - 0.8-1.0: Complex (poor scan, handwritten notes, nested tables)
             is_scanned_image: True if document is a scan/photo (not native PDF/DOCX)
-            force_model: Force specific model (deepseek-chat, claude-sonnet-4-6-20250227, gpt-5.4, gpt-5.4-mini)
+            force_model: Force a specific supported model
             use_rag_context: Use RAG to check similar documents' processing history
             user_mode: User preference mode
                 - 'optimal': Auto-select (DeepSeek by default) - recommended
-                - 'expert': Always use Claude 4.6 Sonnet
-                - 'testing': Use GPT-5.4 Mini for cost-effective testing
+                - 'expert': Always use DeepSeek Pro
+                - 'testing': Use DeepSeek Flash
 
         Returns:
             Model name to use
@@ -137,12 +143,15 @@ class ModelRouter:
 
         # User mode override
         if user_mode == "expert":
-            logger.info("Expert mode: using Claude 4.6 Sonnet")
-            return self.config.ANTHROPIC_MODEL
+            logger.info("Expert mode: using DeepSeek Pro")
+            return normalize_model_name(
+                self.config.DEEPSEEK_REASONING_MODEL,
+                DEEPSEEK_PRO_MODEL,
+            )
 
         if user_mode == "testing":
-            logger.info("Testing mode: using DeepSeek Chat")
-            return self.config.DEEPSEEK_MODEL
+            logger.info("Testing mode: using DeepSeek Flash")
+            return normalize_model_name(self.config.DEEPSEEK_MODEL)
 
         # RAG-assisted routing (if available)
         if use_rag_context and self.rag:
@@ -175,19 +184,24 @@ class ModelRouter:
         [Legacy] Rule-based model selection logic.
 
         Rules:
-        1. Scanned image + high complexity → Claude (best Vision capabilities)
-        2. Complexity > threshold → Claude (expert handling)
-        3. Default → DeepSeek (cost-effective workhorse)
+        1. High complexity -> DeepSeek Pro (reasoning)
+        2. Simple task -> local model when available
+        3. Default -> DeepSeek Flash
         """
-        # Rule 1: Complex scanned images need Claude's Vision
-        if is_scanned_image and doc_complexity_score > self.config.ROUTER_COMPLEXITY_THRESHOLD:
-            logger.debug("Routing to Claude: complex scanned image")
-            return self.config.ANTHROPIC_MODEL
+        reasoning_model = normalize_model_name(
+            self.config.DEEPSEEK_REASONING_MODEL,
+            DEEPSEEK_PRO_MODEL,
+        )
 
-        # Rule 2: High complexity (even native docs) → Claude
+        # OCR runs before routing, so complex scans are processed as extracted text.
+        if is_scanned_image and doc_complexity_score > self.config.ROUTER_COMPLEXITY_THRESHOLD:
+            logger.debug("Routing to DeepSeek Pro: complex scanned document")
+            return reasoning_model
+
+        # Rule 2: High complexity -> reasoning model
         if doc_complexity_score > self.config.ROUTER_COMPLEXITY_THRESHOLD:
-            logger.debug("Routing to Claude: high complexity score")
-            return self.config.ANTHROPIC_MODEL
+            logger.debug("Routing to DeepSeek Pro: high complexity score")
+            return reasoning_model
 
         # Rule 3: Simple tasks → Ollama (local, бесплатно) если доступен
         if doc_complexity_score < 0.4 and self.config.is_model_available(self.config.OLLAMA_MODEL):
@@ -196,7 +210,7 @@ class ModelRouter:
 
         # Rule 4: Default to DeepSeek (medium complexity)
         logger.debug("Routing to DeepSeek: standard document")
-        return self.config.DEEPSEEK_MODEL
+        return normalize_model_name(self.config.DEEPSEEK_MODEL)
 
     def _get_rag_suggestion(self, doc_complexity_score: float) -> Optional[str]:
         """
@@ -230,7 +244,7 @@ class ModelRouter:
             # Analyze success rates by model
             model_stats = {}
             for doc in similar_docs:
-                model = doc.get("model_used")
+                model = normalize_model_name(doc.get("model_used"))
                 success = doc.get("success", False)
 
                 if model not in model_stats:
@@ -241,13 +255,13 @@ class ModelRouter:
                     model_stats[model]["success"] += 1
 
             # Check if DeepSeek has high success rate
-            if "deepseek-v3" in model_stats:
-                deepseek_stats = model_stats["deepseek-v3"]
+            if DEEPSEEK_FLASH_MODEL in model_stats:
+                deepseek_stats = model_stats[DEEPSEEK_FLASH_MODEL]
                 success_rate = deepseek_stats["success"] / deepseek_stats["total"]
 
                 if success_rate >= 0.8 and deepseek_stats["total"] >= 3:
                     logger.debug(f"RAG: DeepSeek success rate {success_rate:.1%} on similar docs")
-                    return self.config.DEEPSEEK_MODEL
+                    return normalize_model_name(self.config.DEEPSEEK_MODEL)
 
             # If DeepSeek failed often, use Claude
             logger.debug("RAG: Suggesting Claude due to DeepSeek failures on similar docs")
@@ -267,10 +281,8 @@ class ModelRouter:
         Returns:
             Full model identifier
         """
+        normalized = normalize_model_name(model)
         model_map = {
-            "deepseek": self.config.DEEPSEEK_MODEL,
-            "deepseek-v3": self.config.DEEPSEEK_MODEL,
-            "deepseek-chat": self.config.DEEPSEEK_MODEL,
             "claude": self.config.ANTHROPIC_MODEL,
             "claude-4-6-sonnet": self.config.ANTHROPIC_MODEL,
             "claude-sonnet-4-6-20250227": self.config.ANTHROPIC_MODEL,
@@ -281,7 +293,7 @@ class ModelRouter:
             "gemini-2.5-pro": "gemini-2.5-pro",
         }
 
-        return model_map.get(model.lower(), model)
+        return model_map.get(normalized.lower(), normalized)
 
     def get_fallback_model(self, failed_model: str) -> Optional[str]:
         """
@@ -331,11 +343,18 @@ class ModelRouter:
         # ------------------------------------------------------------------
         # Legacy v1 fallback chain
         # ------------------------------------------------------------------
+        flash_model = normalize_model_name(self.config.DEEPSEEK_MODEL)
+        pro_model = normalize_model_name(
+            self.config.DEEPSEEK_REASONING_MODEL,
+            DEEPSEEK_PRO_MODEL,
+        )
+        failed_model = normalize_model_name(failed_model)
         fallback_chain = {
-            self.config.DEEPSEEK_MODEL: self.config.ANTHROPIC_MODEL,
+            flash_model: self.config.ANTHROPIC_MODEL,
+            pro_model: self.config.ANTHROPIC_MODEL,
             self.config.ANTHROPIC_MODEL: self.config.OPENAI_MODEL,
             self.config.OPENAI_MODEL: None,
-            self.config.OPENAI_MODEL_MINI: self.config.DEEPSEEK_MODEL,
+            self.config.OPENAI_MODEL_MINI: flash_model,
         }
 
         fallback = fallback_chain.get(failed_model)
@@ -380,12 +399,19 @@ class ModelRouter:
             Dict with model info (role, cost, strengths)
         """
         model_info = {
-            self.config.DEEPSEEK_MODEL: {
+            normalize_model_name(self.config.DEEPSEEK_MODEL): {
                 "role": "Primary Worker",
                 "cost_per_1m_input": self.config.COST_DEEPSEEK_INPUT,
                 "cost_per_1m_output": self.config.COST_DEEPSEEK_OUTPUT,
                 "strengths": ["Cost-effective", "Fast", "Good for standard documents"],
                 "weaknesses": ["May struggle with poor scans", "Complex nested tables"],
+            },
+            normalize_model_name(self.config.DEEPSEEK_REASONING_MODEL, DEEPSEEK_PRO_MODEL): {
+                "role": "Reasoning Expert",
+                "cost_per_1m_input": self.config.COST_DEEPSEEK_PRO_INPUT,
+                "cost_per_1m_output": self.config.COST_DEEPSEEK_PRO_OUTPUT,
+                "strengths": ["Deep reasoning", "Complex legal analysis", "Large context"],
+                "weaknesses": ["Slower", "Higher token use"],
             },
             self.config.ANTHROPIC_MODEL: {
                 "role": "Expert Fallback",
@@ -436,5 +462,5 @@ if __name__ == "__main__":
     print(f"Expert mode → {model}")
 
     # Example 5: Cost estimation
-    cost = router.estimate_cost("deepseek-v3", 1000, 500)
+    cost = router.estimate_cost(DEEPSEEK_FLASH_MODEL, 1000, 500)
     print(f"Cost (DeepSeek, 1k in + 500 out) → ${cost:.6f}")

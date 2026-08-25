@@ -11,6 +11,14 @@ from tenacity import Retrying, stop_after_attempt, wait_exponential
 from loguru import logger
 from datetime import datetime, timezone
 from config.settings import settings
+from src.core.llm_models import (
+    DEEPSEEK_FLASH_MODEL,
+    DEEPSEEK_PRO_MODEL,
+    ensure_deepseek_model,
+    is_reasoning_model,
+    normalize_model_name,
+    openai_compatible_model_options,
+)
 from ..utils.rate_limiter import get_global_rate_limiter, RateLimitExceeded
 
 # Dedicated thread pool for LLM calls — keeps blocking LLM I/O off the event loop.
@@ -31,9 +39,12 @@ class LLMGateway:
             provider: 0720=85 ?@>20945@0 8;8 None 4;O 8A?>;L7>20=8O default
         """
         self.provider = provider or settings.default_llm_provider
+        if self.provider == "deepseek":
+            self.model = ensure_deepseek_model(model or settings.llm_quick_model)
+        else:
+            self.model = normalize_model_name(model) if model else None
         self._client = None
         self._initialize_client()
-        self.model = model
         self.total_input_tokens = 0
         self.total_output_tokens = 0
 
@@ -170,7 +181,7 @@ class LLMGateway:
             cache_entry = LLMCache(
                 prompt_hash=cache_key,
                 provider=self.provider,
-                model=self.model or "deepseek-chat",
+                model=self.model or DEEPSEEK_FLASH_MODEL,
                 prompt=prompt[:5000],  # Truncate prompt for storage (cache key uses full hash)
                 system_prompt=system_prompt[:2000] if system_prompt else None,
                 response=response if isinstance(response, str) else json.dumps(response),  # Store full response
@@ -271,7 +282,8 @@ class LLMGateway:
         # Token limit check — warn/truncate if prompt exceeds model context
         estimated_input_tokens = len(prompt) // 4 + (len(system_prompt) // 4 if system_prompt else 0)
         MODEL_CONTEXT_LIMITS = {
-            "deepseek-chat": 128000, "gpt-5.4": 128000, "gpt-5.4-mini": 128000,
+            DEEPSEEK_FLASH_MODEL: 1000000, DEEPSEEK_PRO_MODEL: 1000000,
+            "gpt-5.4": 128000, "gpt-5.4-mini": 128000,
             "claude-sonnet-4-6-20250227": 200000, "claude-haiku-4-5-20251001": 200000,
             "gemini-2.5-flash": 1000000, "gemini-2.5-pro": 1000000,
             "qwen3:7b": 32768, "llama4:8b": 131072,
@@ -384,8 +396,11 @@ class LLMGateway:
 
     def _estimate_cost(self, tokens: int) -> float:
         """Estimate cost based on tokens (rough approximation)"""
-        model = self.model or "deepseek-chat"
-        pricing = settings.llm_pricing.get(model, {"input": 0.28, "output": 0.42})
+        model = self.model or DEEPSEEK_FLASH_MODEL
+        pricing = settings.llm_pricing.get(
+            model,
+            settings.llm_pricing[DEEPSEEK_FLASH_MODEL],
+        )
 
         # Assume 60% input, 40% output split
         input_tokens = int(tokens * 0.6)
@@ -427,7 +442,7 @@ class LLMGateway:
         if self.model:
             model = self.model
         elif self.provider == "deepseek":
-            model = "deepseek-chat"
+            model = DEEPSEEK_FLASH_MODEL
         elif self.provider == "openai":
             model = "gpt-5.4-mini"
         elif self.provider == "perplexity":
@@ -437,12 +452,17 @@ class LLMGateway:
         elif self.provider == "google":
             model = "gemini-2.5-flash"
         else:
-            model = "deepseek-chat"
+            model = DEEPSEEK_FLASH_MODEL
 
-        # Safety: if using deepseek provider, force deepseek model
-        if self.provider == "deepseek" and model not in ("deepseek-chat", "deepseek-reasoner"):
-            logger.warning(f"Model {model} is not a DeepSeek model, forcing deepseek-chat")
-            model = "deepseek-chat"
+        if self.provider == "deepseek":
+            requested_model = model
+            model = ensure_deepseek_model(model)
+            if model != normalize_model_name(requested_model):
+                logger.warning(
+                    f"Model {requested_model} is not supported by DeepSeek provider, "
+                    f"forcing {DEEPSEEK_FLASH_MODEL}"
+                )
+            self.model = model
 
         timeout = kwargs.pop("timeout", None)
         if timeout is None:
@@ -453,13 +473,15 @@ class LLMGateway:
             f"prompt_len={sum(len(m['content']) for m in messages)}, timeout={timeout}s"
         )
         try:
-            response = self._client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                timeout=timeout,
-            )
+            params = {
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "timeout": timeout,
+                **openai_compatible_model_options(model),
+            }
+            if not is_reasoning_model(model):
+                params["temperature"] = temperature
+            response = self._client.chat.completions.create(**params)
         except Exception as e:
             logger.error(f"API call failed: {type(e).__name__}: {e}")
             raise
@@ -551,21 +573,27 @@ class LLMGateway:
             model = self.model
             if not model:
                 if self.provider == "deepseek":
-                    model = "deepseek-chat"
+                    model = DEEPSEEK_FLASH_MODEL
                 elif self.provider == "openai":
                     model = "gpt-5.4-mini"
                 elif self.provider == "perplexity":
                     model = "llama-3.1-sonar-large-128k-online"
                 else:
-                    model = "deepseek-chat"
+                    model = DEEPSEEK_FLASH_MODEL
 
-            response = self._client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stream=True,
-            )
+            if self.provider == "deepseek":
+                model = ensure_deepseek_model(model)
+                self.model = model
+
+            params = {
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "stream": True,
+                **openai_compatible_model_options(model),
+            }
+            if not is_reasoning_model(model):
+                params["temperature"] = temperature
+            response = self._client.chat.completions.create(**params)
 
             for chunk in response:
                 if chunk.choices and chunk.choices[0].delta.content:
@@ -597,7 +625,7 @@ class LLMGateway:
             Словарь с информацией о токенах и стоимости
         """
         # Определяем текущую модель
-        current_model = self.model or "deepseek-chat"
+        current_model = self.model or DEEPSEEK_FLASH_MODEL
         
         # Получаем цены из настроек
         pricing = settings.llm_pricing.get(current_model, {"input": 0, "output": 0})

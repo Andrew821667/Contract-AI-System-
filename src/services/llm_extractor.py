@@ -18,6 +18,14 @@ from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 import time
 
+from src.core.llm_models import (
+    DEEPSEEK_FLASH_MODEL,
+    is_reasoning_model,
+    model_costs,
+    normalize_model_name,
+    openai_compatible_model_options,
+)
+
 # OpenAI client
 try:
     from openai import AsyncOpenAI
@@ -47,7 +55,7 @@ class LLMExtractor:
     Использует промпты для извлечения структурированных данных
     """
 
-    def __init__(self, api_key: str, model: str = "deepseek-chat",
+    def __init__(self, api_key: str, model: str = DEEPSEEK_FLASH_MODEL,
                  base_url: str = None):
         """
         Args:
@@ -63,11 +71,10 @@ class LLMExtractor:
             client_kwargs["base_url"] = base_url
 
         self.client = AsyncOpenAI(**client_kwargs)
-        self.model = model
+        self.model = normalize_model_name(model)
 
         # Стоимость токенов (на 1M токенов)
         self.costs = {
-            "deepseek-chat": {"input": 0.28, "output": 0.42},
             "gpt-5.4-mini": {"input": 0.75, "output": 4.50},
             "gpt-5.4": {"input": 2.50, "output": 20.00},
             "claude-sonnet-4-6-20250227": {"input": 3.00, "output": 15.00},
@@ -95,15 +102,17 @@ class LLMExtractor:
 
         # Вызываем LLM
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
+            params = {
+                "messages": [
                     {"role": "system", "content": self._get_system_prompt()},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.1,  # Low temperature для consistency
-                response_format={"type": "json_object"}  # JSON mode
-            )
+                "response_format": {"type": "json_object"},
+                **openai_compatible_model_options(self.model),
+            }
+            if not is_reasoning_model(self.model):
+                params["temperature"] = 0.1
+            response = await self.client.chat.completions.create(**params)
 
             # Парсим ответ
             raw_response = response.choices[0].message.content
@@ -343,7 +352,11 @@ class LLMExtractor:
 
     def _calculate_cost(self, tokens_input: int, tokens_output: int) -> float:
         """Рассчитывает стоимость запроса"""
-        costs = self.costs.get(self.model, {"input": 0, "output": 0})
+        deepseek_cost = model_costs(self.model)
+        if deepseek_cost:
+            costs = {"input": deepseek_cost[0], "output": deepseek_cost[1]}
+        else:
+            costs = self.costs.get(self.model, {"input": 0, "output": 0})
 
         cost_input = (tokens_input / 1_000_000) * costs["input"]
         cost_output = (tokens_output / 1_000_000) * costs["output"]

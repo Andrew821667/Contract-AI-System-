@@ -14,6 +14,15 @@ from pydantic import BaseModel, Field
 
 from src.api.dependencies import get_current_user
 from src.models.auth_models import User
+from src.core.llm_models import (
+    DEEPSEEK_FLASH_INPUT_COST,
+    DEEPSEEK_FLASH_MODEL,
+    DEEPSEEK_FLASH_OUTPUT_COST,
+    DEEPSEEK_PRO_INPUT_COST,
+    DEEPSEEK_PRO_MODEL,
+    DEEPSEEK_PRO_OUTPUT_COST,
+    normalize_model_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +32,20 @@ router = APIRouter(prefix="/admin/llm", tags=["Admin LLM"])
 
 AVAILABLE_MODELS = [
     {
-        "id": "deepseek-chat",
-        "name": "DeepSeek V3.2",
+        "id": DEEPSEEK_FLASH_MODEL,
+        "name": "DeepSeek V4 Flash",
         "provider": "deepseek",
-        "cost_input": 0.28,
-        "cost_output": 0.42,
-        "description": "Основная модель, быстрая и дешёвая",
+        "cost_input": DEEPSEEK_FLASH_INPUT_COST,
+        "cost_output": DEEPSEEK_FLASH_OUTPUT_COST,
+        "description": "Основная модель без режима размышления",
+    },
+    {
+        "id": DEEPSEEK_PRO_MODEL,
+        "name": "DeepSeek V4 Pro",
+        "provider": "deepseek",
+        "cost_input": DEEPSEEK_PRO_INPUT_COST,
+        "cost_output": DEEPSEEK_PRO_OUTPUT_COST,
+        "description": "Думающая модель только для сложных и экспертных задач",
     },
     {
         "id": "claude-sonnet-4-6-20250227",
@@ -103,7 +120,7 @@ LLM_STAGES = [
         "id": "document_processing",
         "name": "Обработка документов",
         "description": "Извлечение структурированных данных из текста договора",
-        "default_model": "deepseek-chat",
+        "default_model": DEEPSEEK_FLASH_MODEL,
         "default_temperature": 0.1,
         "default_max_tokens": 4096,
     },
@@ -111,7 +128,7 @@ LLM_STAGES = [
         "id": "contract_analysis",
         "name": "Анализ контракта",
         "description": "Анализ разделов контракта, проверка соответствия",
-        "default_model": "deepseek-chat",
+        "default_model": DEEPSEEK_FLASH_MODEL,
         "default_temperature": 0.1,
         "default_max_tokens": 4096,
     },
@@ -119,7 +136,7 @@ LLM_STAGES = [
         "id": "risk_assessment",
         "name": "Оценка рисков",
         "description": "Анализ клаузул на финансовые, юридические и операционные риски",
-        "default_model": "deepseek-chat",
+        "default_model": DEEPSEEK_FLASH_MODEL,
         "default_temperature": 0.1,
         "default_max_tokens": 4096,
     },
@@ -127,7 +144,7 @@ LLM_STAGES = [
         "id": "recommendation_generation",
         "name": "Генерация рекомендаций",
         "description": "Создание рекомендаций и предложений по исправлению рисков",
-        "default_model": "deepseek-chat",
+        "default_model": DEEPSEEK_FLASH_MODEL,
         "default_temperature": 0.2,
         "default_max_tokens": 4096,
     },
@@ -135,7 +152,7 @@ LLM_STAGES = [
         "id": "contract_generation",
         "name": "Генерация контрактов",
         "description": "Создание полного текста договора по параметрам",
-        "default_model": "deepseek-chat",
+        "default_model": DEEPSEEK_FLASH_MODEL,
         "default_temperature": 0.3,
         "default_max_tokens": 4096,
     },
@@ -143,7 +160,7 @@ LLM_STAGES = [
         "id": "clause_suggestion",
         "name": "Подсказки клаузул",
         "description": "Контекстные подсказки при редактировании договора",
-        "default_model": "deepseek-chat",
+        "default_model": DEEPSEEK_FLASH_MODEL,
         "default_temperature": 0.3,
         "default_max_tokens": 2048,
     },
@@ -151,7 +168,7 @@ LLM_STAGES = [
         "id": "disagreement_analysis",
         "name": "Протокол разногласий",
         "description": "Генерация возражений и протокола разногласий",
-        "default_model": "deepseek-chat",
+        "default_model": DEEPSEEK_FLASH_MODEL,
         "default_temperature": 0.2,
         "default_max_tokens": 4096,
     },
@@ -159,7 +176,7 @@ LLM_STAGES = [
         "id": "metadata_analysis",
         "name": "Анализ метаданных",
         "description": "Проверка контрагентов, прогноз споров, сравнение с шаблонами",
-        "default_model": "deepseek-chat",
+        "default_model": DEEPSEEK_FLASH_MODEL,
         "default_temperature": 0.1,
         "default_max_tokens": 4096,
     },
@@ -187,7 +204,11 @@ def _load_settings() -> Dict[str, Any]:
     if r:
         raw = r.get(REDIS_KEY)
         if raw:
-            return json.loads(raw)
+            data = json.loads(raw)
+            for value in data.values():
+                if isinstance(value, dict) and value.get("model"):
+                    value["model"] = normalize_model_name(value["model"])
+            return data
     return {}
 
 
@@ -299,12 +320,13 @@ async def update_stage_setting(
         raise HTTPException(status_code=404, detail=f"Этап '{stage_id}' не найден")
 
     valid_models = {m["id"] for m in AVAILABLE_MODELS}
-    if body.model not in valid_models:
+    model = normalize_model_name(body.model)
+    if model not in valid_models:
         raise HTTPException(status_code=400, detail=f"Модель '{body.model}' не поддерживается")
 
     saved = _load_settings()
     saved[stage_id] = {
-        "model": body.model,
+        "model": model,
         "temperature": body.temperature,
         "max_tokens": body.max_tokens,
         "enabled": body.enabled,
@@ -339,10 +361,11 @@ async def update_all_settings(
             continue
         if stage_id not in valid_ids:
             raise HTTPException(status_code=400, detail=f"Этап '{stage_id}' не найден")
-        if setting.model not in valid_models:
+        model = normalize_model_name(setting.model)
+        if model not in valid_models:
             raise HTTPException(status_code=400, detail=f"Модель '{setting.model}' не поддерживается")
         saved[stage_id] = {
-            "model": setting.model,
+            "model": model,
             "temperature": setting.temperature,
             "max_tokens": setting.max_tokens,
             "enabled": setting.enabled,

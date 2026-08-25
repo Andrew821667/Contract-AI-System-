@@ -21,6 +21,7 @@ from src.middleware.metrics import (
     llm_cascade_fallbacks_total,
     llm_cascade_total_failures_total,
 )
+from src.core.llm_models import DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL
 
 from .routing_policy import LLMRoutingPolicy, LLMRoutingPolicyService
 from .fallback import FallbackHandler, FallbackMode
@@ -30,19 +31,19 @@ from .fallback import FallbackHandler, FallbackMode
 CASCADE_LEVELS: dict[str, dict[str, Any]] = {
     "orchestration": {
         "description": "Fast/cheap — маршрутизация и планирование",
-        "preferred_models": ["deepseek-chat", "gemini-2.5-flash"],
+        "preferred_models": [DEEPSEEK_FLASH_MODEL, "gemini-2.5-flash"],
         "max_tokens": 2048,
         "temperature": 0.1,
     },
     "agent": {
         "description": "Domain-specific — анализ, генерация, переговоры",
-        "preferred_models": ["deepseek-chat", "claude-sonnet-4-6-20250227"],
+        "preferred_models": [DEEPSEEK_FLASH_MODEL, "claude-sonnet-4-6-20250227"],
         "max_tokens": 4096,
         "temperature": 0.3,
     },
     "expert": {
         "description": "Expert — сложные юридические задачи",
-        "preferred_models": ["claude-sonnet-4-6-20250227", "gpt-5.4"],
+        "preferred_models": [DEEPSEEK_PRO_MODEL, "claude-sonnet-4-6-20250227", "gpt-5.4"],
         "max_tokens": 4096,
         "temperature": 0.2,
     },
@@ -133,7 +134,9 @@ class CascadeManager:
 
         # cascade mode: level preferred -> all available
         chain: list[str] = []
-        all_models = ["deepseek-chat", "gemini-2.5-flash", "claude-sonnet-4-6-20250227", "gpt-5.4"]
+        all_models = [DEEPSEEK_FLASH_MODEL, "gemini-2.5-flash", "claude-sonnet-4-6-20250227", "gpt-5.4"]
+        if DEEPSEEK_PRO_MODEL in level_config.get("preferred_models", []):
+            all_models.insert(0, DEEPSEEK_PRO_MODEL)
 
         # Level preferred first
         for m in level_config.get("preferred_models", []):

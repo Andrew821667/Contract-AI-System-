@@ -26,6 +26,7 @@ from src.services.rag_service import RAGService
 from src.services.contract_section_analyzer import ContractSectionAnalyzer
 from src.services.complexity_scorer import ComplexityScorer
 from src.services.model_router import ModelRouter
+from src.core.llm_models import DEEPSEEK_FLASH_MODEL, normalize_model_name
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +177,7 @@ class DocumentProcessor:
         """Определяет модель и credentials — из явных параметров или из LLMConfig."""
         if model and api_key:
             # Всё задано явно
-            return model, api_key, base_url
+            return normalize_model_name(model), api_key, base_url
 
         # Пробуем через LLMConfig
         try:
@@ -184,7 +185,13 @@ class DocumentProcessor:
             config = get_llm_config()
 
             if not model:
-                model = config.DEEPSEEK_MODEL if config.is_model_available(config.DEEPSEEK_MODEL) else "deepseek-chat"
+                model = (
+                    normalize_model_name(config.DEEPSEEK_MODEL)
+                    if config.is_model_available(config.DEEPSEEK_MODEL)
+                    else DEEPSEEK_FLASH_MODEL
+                )
+            else:
+                model = normalize_model_name(model)
 
             if not api_key:
                 api_key, base_url = config.get_model_credentials(model)
@@ -197,7 +204,7 @@ class DocumentProcessor:
             if not api_key:
                 api_key = os.getenv("DEEPSEEK_API_KEY") or os.getenv("OPENAI_API_KEY", "")
             if not model:
-                model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+                model = normalize_model_name(os.getenv("DEEPSEEK_MODEL", DEEPSEEK_FLASH_MODEL))
             if not base_url and os.getenv("DEEPSEEK_API_KEY"):
                 base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
             return model, api_key, base_url
@@ -255,6 +262,12 @@ class DocumentProcessor:
                             self.llm_extractor = LLMExtractor(
                                 api_key=new_key, model=selected_model, base_url=new_base_url
                             )
+                            if self.use_section_analysis:
+                                self.section_analyzer = ContractSectionAnalyzer(
+                                    model=selected_model,
+                                    api_key=new_key,
+                                    base_url=new_base_url,
+                                )
                             self._current_model = selected_model
                             self._current_key = new_key
                             self._current_base_url = new_base_url

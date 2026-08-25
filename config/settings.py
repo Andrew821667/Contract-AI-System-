@@ -4,7 +4,19 @@
 import os
 from pathlib import Path
 from typing import Literal
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from src.core.llm_models import (
+    DEEPSEEK_FLASH_INPUT_COST,
+    DEEPSEEK_FLASH_MODEL,
+    DEEPSEEK_FLASH_OUTPUT_COST,
+    DEEPSEEK_PRO_INPUT_COST,
+    DEEPSEEK_PRO_MODEL,
+    DEEPSEEK_PRO_OUTPUT_COST,
+    normalize_reasoning_model_name,
+    normalize_standard_model_name,
+)
 
 
 class Settings(BaseSettings):
@@ -23,7 +35,7 @@ class Settings(BaseSettings):
     deepseek_api_key: str = ""
 
     # RAG feature flags
-    rag_rewrite: bool = False   # RAG_REWRITE=1 → query rewriting via deepseek-chat
+    rag_rewrite: bool = False   # RAG_REWRITE=1 -> query rewriting via DeepSeek Flash
     rag_graph_hop: bool = False  # RAG_GRAPH_HOP=1 → multi-hop обогащение связанными нормами (граф)
     qwen_api_key: str = ""
 
@@ -79,8 +91,18 @@ class Settings(BaseSettings):
     llm_test_mode: bool = False  # Переключатель: True = тестовый режим, False = продакшн
 
     # Two-level analysis system
-    llm_quick_model: str = "deepseek-chat"  # Быстрый анализ (Уровень 1)
-    llm_deep_model: str = "deepseek-chat"   # Глубокий анализ (Уровень 2)
+    llm_quick_model: str = DEEPSEEK_FLASH_MODEL  # Быстрый анализ без thinking
+    llm_deep_model: str = DEEPSEEK_PRO_MODEL     # Глубокий анализ с thinking
+
+    @field_validator("llm_quick_model")
+    @classmethod
+    def normalize_quick_model(cls, model: str) -> str:
+        return normalize_standard_model_name(model)
+
+    @field_validator("llm_deep_model")
+    @classmethod
+    def normalize_deep_model(cls, model: str) -> str:
+        return normalize_reasoning_model_name(model)
 
     # Batch analysis settings
     llm_batch_size: int = 10  # Пунктов в одном батче (уменьшено — клаузулы теперь полные)
@@ -90,9 +112,16 @@ class Settings(BaseSettings):
     llm_test_max_tokens: int = 800       # Для тестового режима
     llm_test_max_clauses: int = 20       # Макс. пунктов для анализа в тесте (увеличено для эффективности)
 
-    # Model pricing (per 1M tokens) для расчёта стоимости — актуально на март 2026
+    # Model pricing per 1M tokens. DeepSeek rates are cache-miss rates.
     llm_pricing: dict = {
-        "deepseek-chat": {"input": 0.28, "output": 0.42},
+        DEEPSEEK_FLASH_MODEL: {
+            "input": DEEPSEEK_FLASH_INPUT_COST,
+            "output": DEEPSEEK_FLASH_OUTPUT_COST,
+        },
+        DEEPSEEK_PRO_MODEL: {
+            "input": DEEPSEEK_PRO_INPUT_COST,
+            "output": DEEPSEEK_PRO_OUTPUT_COST,
+        },
         "claude-sonnet-4-6-20250227": {"input": 3.00, "output": 15.00},
         "claude-haiku-4-5-20251001": {"input": 1.00, "output": 5.00},
         "gpt-5.4": {"input": 2.50, "output": 20.00},

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Замер pool-union: raw vs replace vs UNION (get_legal_context aux_query=рерайт).
-Реальный deepseek-chat. Одни и те же рерайты для всех вариантов."""
+Реальный DeepSeek Flash. Одни и те же рерайты для всех вариантов."""
 import os, sys, re
 os.environ.setdefault("HF_HUB_OFFLINE", "1"); os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 sys.path.insert(0, "/Users/legalai/projects/Contract-AI-System-"); sys.path.insert(0, "/tmp")
@@ -22,7 +22,7 @@ FEWSHOT = ("Примеры (для других тем):\n"
     "Вопрос: что будет если не платить транспортный налог\n"
     "Запрос: ответственность за неуплату транспортного налога, взыскание недоимки\n\n"
     "Вопрос: {q}\nЗапрос:")
-gw = LLMGateway(provider="deepseek", model="deepseek-chat")
+gw = LLMGateway(provider="deepseek", model="deepseek-v4-flash")
 
 def rewrite(q):
     out = gw.call(prompt=FEWSHOT.format(q=q), system_prompt=SYS,

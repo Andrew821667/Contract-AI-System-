@@ -15,12 +15,15 @@ from loguru import logger
 from src.core.base import LLMProfile
 from src.services.llm_gateway import LLMGateway
 from src.services.model_router import ModelRouter
+from src.core.llm_models import DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL
 
 
 # Маппинг model name → provider для LLMGateway
 _MODEL_TO_PROVIDER: dict[str, str] = {
     "deepseek-v3": "deepseek",
     "deepseek-chat": "deepseek",
+    DEEPSEEK_FLASH_MODEL: "deepseek",
+    DEEPSEEK_PRO_MODEL: "deepseek",
     "claude-sonnet-4-6-20250227": "claude",
     "claude-haiku-4-5-20251001": "claude",
     "gpt-5.4": "openai",

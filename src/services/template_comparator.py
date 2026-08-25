@@ -13,6 +13,13 @@ import asyncio
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from openai import AsyncOpenAI
+
+from src.core.llm_models import (
+    DEEPSEEK_FLASH_MODEL,
+    is_reasoning_model,
+    normalize_model_name,
+    openai_compatible_model_options,
+)
 import os
 
 logger = logging.getLogger(__name__)
@@ -55,9 +62,9 @@ class TemplateComparisonResult:
 class TemplateComparator:
     """Сравнивает черновик договора с эталонным шаблоном через LLM"""
 
-    def __init__(self, model: str = "deepseek-chat", api_key: str = None,
+    def __init__(self, model: str = DEEPSEEK_FLASH_MODEL, api_key: str = None,
                  base_url: str = None):
-        self.model = model
+        self.model = normalize_model_name(model)
         client_kwargs = {"api_key": api_key or os.getenv("OPENAI_API_KEY")}
         if base_url:
             client_kwargs["base_url"] = base_url
@@ -190,9 +197,8 @@ SEVERITY (СТРОГО СОБЛЮДАЙ ПРОПОРЦИОНАЛЬНОСТЬ!):
 """
 
         try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
+            params = {
+                "messages": [
                     {
                         "role": "system",
                         "content": "Ты ведущий юрист-эксперт по договорному праву РФ с 15-летним опытом. "
@@ -201,9 +207,12 @@ SEVERITY (СТРОГО СОБЛЮДАЙ ПРОПОРЦИОНАЛЬНОСТЬ!):
                     },
                     {"role": "user", "content": prompt}
                 ],
-                response_format={"type": "json_object"},
-                temperature=0.2
-            )
+                "response_format": {"type": "json_object"},
+                **openai_compatible_model_options(self.model),
+            }
+            if not is_reasoning_model(self.model):
+                params["temperature"] = 0.2
+            response = await self.client.chat.completions.create(**params)
 
             result = json.loads(response.choices[0].message.content)
 

@@ -9,6 +9,8 @@ from sqlalchemy import select, text, update
 import logging
 import json
 
+from src.core.llm_models import DEEPSEEK_FLASH_MODEL, normalize_model_name
+
 logger = logging.getLogger(__name__)
 
 
@@ -276,8 +278,12 @@ class SystemConfigService:
             Router config dict
         """
         config = await self._get_config("router_config")
-        return config or {
-            "default_model": "deepseek-v3",
+        if config:
+            config = dict(config)
+            config["default_model"] = normalize_model_name(config.get("default_model"))
+            return config
+        return {
+            "default_model": DEEPSEEK_FLASH_MODEL,
             "complexity_threshold": 0.8,
             "enable_fallback": True
         }
@@ -301,7 +307,7 @@ class SystemConfigService:
         current_config = await self.get_router_config()
 
         if default_model is not None:
-            current_config["default_model"] = default_model
+            current_config["default_model"] = normalize_model_name(default_model)
         if complexity_threshold is not None:
             current_config["complexity_threshold"] = complexity_threshold
         if enable_fallback is not None:

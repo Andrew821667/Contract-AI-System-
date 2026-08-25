@@ -19,6 +19,8 @@ from typing import Any
 
 from loguru import logger
 
+from src.core.llm_models import DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL
+
 
 class FallbackMode(str, Enum):
     CASCADE = "cascade"
@@ -146,7 +148,7 @@ class FallbackHandler:
 
     def get_status(self) -> dict[str, Any]:
         """Статус здоровья всех моделей."""
-        all_models = ["deepseek-chat", "gemini-2.5-flash", "claude-sonnet-4-6-20250227", "gpt-5.4"]
+        all_models = [DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL, "gemini-2.5-flash", "claude-sonnet-4-6-20250227", "gpt-5.4"]
         return {
             "models": {
                 m: {

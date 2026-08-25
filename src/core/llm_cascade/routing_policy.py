@@ -8,9 +8,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from loguru import logger
 from sqlalchemy.orm import Session
+
+from src.core.llm_models import (
+    DEEPSEEK_FLASH_MODEL,
+    DEEPSEEK_PRO_MODEL,
+    normalize_model_name,
+)
 
 
 class LLMRoutingPolicy(BaseModel):
@@ -32,7 +38,7 @@ class LLMRoutingPolicy(BaseModel):
     confidentiality_level: str = "standard"  # standard | confidential | restricted
     # Local-first: prefer local/on-premise models
     local_first: bool = False
-    local_models: list[str] = Field(default_factory=lambda: ["deepseek-v3"])
+    local_models: list[str] = Field(default_factory=lambda: ["qwen3:7b"])
     # External allowed (if False, only local models used)
     external_allowed: bool = True
     # Fallback mode
@@ -41,6 +47,24 @@ class LLMRoutingPolicy(BaseModel):
     max_cascade_retries: int = 3
     # Temperature overrides by task type
     temperature_overrides: dict[str, float] = Field(default_factory=dict)
+
+    @field_validator("allowed_models", "blocked_models")
+    @classmethod
+    def normalize_model_lists(cls, models: list[str]) -> list[str]:
+        return [normalize_model_name(model) for model in models]
+
+    @field_validator("default_model", "high_sensitivity_model")
+    @classmethod
+    def normalize_optional_model(cls, model: str | None) -> str | None:
+        return normalize_model_name(model) if model else None
+
+    @field_validator("local_models")
+    @classmethod
+    def keep_local_models_local(cls, models: list[str]) -> list[str]:
+        normalized = [normalize_model_name(model) for model in models]
+        cloud_models = {DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL}
+        local = [model for model in normalized if model not in cloud_models]
+        return local or ["qwen3:7b"]
 
 
 class LLMRoutingPolicyService:
@@ -132,20 +156,22 @@ class LLMRoutingPolicyService:
 
         Returns: (final_model, reason)
         """
+        model = normalize_model_name(model)
+
         # Check blocked
         if model in policy.blocked_models:
-            model = policy.default_model or "deepseek-v3"
+            model = policy.default_model or DEEPSEEK_FLASH_MODEL
             return model, f"Модель заблокирована политикой, переключено на {model}"
 
         # Check allowed list
         if policy.allowed_models and model not in policy.allowed_models:
-            model = policy.allowed_models[0] if policy.allowed_models else "deepseek-v3"
+            model = policy.allowed_models[0] if policy.allowed_models else DEEPSEEK_FLASH_MODEL
             return model, f"Модель не в списке разрешённых, переключено на {model}"
 
         # Local-first enforcement
         if policy.local_first and not policy.external_allowed:
             if model not in policy.local_models:
-                model = policy.local_models[0] if policy.local_models else "deepseek-v3"
+                model = policy.local_models[0] if policy.local_models else "qwen3:7b"
                 return model, f"External модели запрещены, переключено на локальную {model}"
 
         # Sensitivity override
@@ -156,7 +182,7 @@ class LLMRoutingPolicyService:
         # Confidentiality enforcement
         if policy.confidentiality_level == "restricted":
             if model not in policy.local_models:
-                model = policy.local_models[0] if policy.local_models else "deepseek-v3"
+                model = policy.local_models[0] if policy.local_models else "qwen3:7b"
                 return model, f"Restricted confidentiality -> только локальные модели: {model}"
 
         return model, "Политика применена, модель не изменена"

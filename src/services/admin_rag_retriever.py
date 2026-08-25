@@ -17,6 +17,8 @@ from typing import List, Optional
 
 from loguru import logger
 
+from src.core.llm_models import DEEPSEEK_FLASH_MODEL
+
 _CHROMA_DIR = "data/chromadb"
 COLLECTIONS = ["laws", "case_law", "templates", "knowledge"]
 COLLECTION_LABELS = {
@@ -310,7 +312,7 @@ def _graph_hop_text(query, qemb, base_ctx=""):
                     "НК": ["19671"], "ЖК": ["51057"], "ГПК": ["39570"],
                     "УПК": ["34481"], "АПК": ["37800"], "ЗК": ["33773"],
                     "БК": ["19702"]}
-            _o = _GW(provider="deepseek", model="deepseek-chat").call(
+            _o = _GW(provider="deepseek", model=DEEPSEEK_FLASH_MODEL).call(
                 prompt=(f"Вопрос: {query}\nНазови 1-2 статьи российских кодексов, напрямую "
                         "регулирующие вопрос. Формат СТРОГО: ст.НОМЕР КОДЕКС (кодекс одним "
                         "словом: ГК, УК, ТК, СК, КоАП, НК, ЖК, ГПК, УПК, АПК, ЗК, БК), "
@@ -381,7 +383,7 @@ def get_legal_context(
         collections = ["laws", "case_law"]
 
     try:
-        # 0) Авто-рерайт за флагом RAG_REWRITE: deepseek-chat переводит разговорный
+        # 0) Авто-рерайт за флагом RAG_REWRITE: DeepSeek Flash переводит разговорный
         # запрос в канон-форму → pool-union расширяет пул кандидатов.
         # aux_query=None (default) → активируется; явный aux_query → без изменений.
         _do_rewrite = False
@@ -423,7 +425,7 @@ def get_legal_context(
                     "федеральный закон о рекламе, требования к распространению рекламы\n\n"
                     f"Вопрос: {query}\nЗапрос:"
                 )
-                _rw = _GW(provider="deepseek", model="deepseek-chat").call(
+                _rw = _GW(provider="deepseek", model=DEEPSEEK_FLASH_MODEL).call(
                     prompt=_FEWSHOT, system_prompt=_SYS,
                     response_format="text", temperature=0.0, max_tokens=160,
                 )

@@ -13,7 +13,7 @@ from config.settings import settings
 settings.deepseek_api_key=_key; settings.rag_rewrite=True
 from src.services.admin_rag_retriever import get_legal_context
 from src.services.llm_gateway import LLMGateway
-gw=LLMGateway(provider="deepseek",model="deepseek-chat")
+gw=LLMGateway(provider="deepseek",model="deepseek-v4-flash")
 
 SYS_ANS=("Ты — AI-ассистент юридической системы Contract AI System. "
  "Ты помогаешь юристам анализировать договоры, выявлять риски, предлагать формулировки и отвечать на вопросы о работе системы.\n\n"

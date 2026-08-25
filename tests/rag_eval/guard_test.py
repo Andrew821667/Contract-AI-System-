@@ -40,7 +40,7 @@ settings.rag_graph_hop = True    # прод-путь (нормы в бюджет
 from src.services.admin_rag_retriever import get_legal_context
 from src.services.llm_gateway import LLMGateway
 
-gw = LLMGateway(provider="deepseek", model="deepseek-chat")
+gw = LLMGateway(provider="deepseek", model="deepseek-v4-flash")
 
 # Заголовок прод-промпта без строки о ссылках — строка о ссылках у каждого arm'а своя.
 _HEADER = (

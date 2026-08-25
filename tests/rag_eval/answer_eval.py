@@ -2,7 +2,7 @@
 """ANSWER-EVAL: оценка КАЧЕСТВА ОТВЕТА (не только retrieval).
 Триада LLM-судьи: Coverage / Groundedness / Factuality (веса 25/35/40).
 Пайплайн на каждый вопрос: get_legal_context (рерайт вкл, прод-путь) →
-ответ deepseek-chat с юр-промптом → судья deepseek-chat (JSON-вердикт по
+ответ DeepSeek Flash с юр-промптом -> судья DeepSeek Flash (JSON-вердикт по
 нумерованным найденным фрагментам + эталонным ключевым пунктам).
 Методика: habr/gram_ax 1020248 (чанки судье явным списком, JSON, код-проверки)."""
 import os, sys, re, json
@@ -16,7 +16,7 @@ settings.rag_rewrite = True  # прод-путь: авто-рерайт вклю
 from src.services.admin_rag_retriever import get_legal_context
 from src.services.llm_gateway import LLMGateway
 
-gw = LLMGateway(provider="deepseek", model="deepseek-chat")
+gw = LLMGateway(provider="deepseek", model="deepseek-v4-flash")
 
 # (id, разговорный вопрос, [эталонные ключевые пункты])
 QUESTIONS = [

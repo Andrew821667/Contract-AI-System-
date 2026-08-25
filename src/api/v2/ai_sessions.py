@@ -217,6 +217,7 @@ async def _generate_ai_response(
     """Генерирует ответ AI через LLMGateway с RAG-обогащением."""
     from src.services.llm_gateway import LLMGateway
     from src.services.admin_rag_retriever import get_legal_context, has_legal_docs
+    from src.core.llm_models import DEEPSEEK_FLASH_MODEL
 
     # Собираем историю диалога
     history = (
@@ -302,7 +303,7 @@ async def _generate_ai_response(
     prompt = "\n\n".join(messages_text)
 
     # Вызываем LLM
-    gateway = LLMGateway(provider="deepseek", model="deepseek-chat")
+    gateway = LLMGateway(provider="deepseek", model=DEEPSEEK_FLASH_MODEL)
     response = await gateway.acall(
         prompt=prompt,
         system_prompt=system_prompt,

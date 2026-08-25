@@ -44,7 +44,7 @@ class AgentDefinition(Base):
     confidence_threshold = Column(Float, default=0.8)
 
     # LLM
-    model_profile = Column(JSON, nullable=True)  # {"provider": "deepseek", "model": "deepseek-v3", ...}
+    model_profile = Column(JSON, nullable=True)  # {"provider": "deepseek", "model": "deepseek-v4-flash", ...}
 
     # Metadata
     active = Column(Boolean, default=True, index=True)
