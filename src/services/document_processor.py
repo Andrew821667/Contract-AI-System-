@@ -26,7 +26,11 @@ from src.services.rag_service import RAGService
 from src.services.contract_section_analyzer import ContractSectionAnalyzer
 from src.services.complexity_scorer import ComplexityScorer
 from src.services.model_router import ModelRouter
-from src.core.llm_models import DEEPSEEK_FLASH_MODEL, normalize_model_name
+from src.core.llm_models import (
+    DEEPSEEK_FLASH_MODEL,
+    normalize_model_name,
+    openai_compatible_client_options,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -176,8 +180,13 @@ class DocumentProcessor:
     def _resolve_model_credentials(self, model, api_key, base_url):
         """Определяет модель и credentials — из явных параметров или из LLMConfig."""
         if model and api_key:
-            # Всё задано явно
-            return normalize_model_name(model), api_key, base_url
+            normalized = normalize_model_name(model)
+            client_options = openai_compatible_client_options(
+                normalized,
+                api_key,
+                base_url,
+            )
+            return normalized, client_options["api_key"], client_options.get("base_url")
 
         # Пробуем через LLMConfig
         try:

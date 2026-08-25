@@ -56,7 +56,8 @@ Contract AI System — не очередной «чатбот рядом с до
 
 | Модель | Роль | Контекст |
 |--------|------|----------|
-| DeepSeek-V3 | Primary (90% задач) | 128K токенов |
+| DeepSeek V4 Flash | Основная модель для стандартных задач | 128K токенов |
+| DeepSeek V4 Pro | Думающая модель для сложных и экспертных задач | 128K токенов |
 | Claude | Expert fallback | 200K токенов |
 | GPT-4o | Reserve | 128K токенов |
 | Gemini | Extended context | 1M токенов |

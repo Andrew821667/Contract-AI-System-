@@ -30,11 +30,12 @@ def _v1_to_cascade_level(
     doc_complexity_score: float,
     is_scanned_image: bool,
     user_mode: str,
+    expert_threshold: float = 0.8,
 ) -> str:
     """Map v1 routing params to a v2 cascade level."""
     if user_mode == "expert":
         return "expert"
-    if doc_complexity_score > 0.7 or (is_scanned_image and doc_complexity_score > 0.5):
+    if doc_complexity_score >= expert_threshold:
         return "expert"
     if doc_complexity_score > 0.4:
         return "agent"
@@ -117,7 +118,10 @@ class ModelRouter:
         if self._cascade is not None and user_mode != "testing":
             try:
                 cascade_level = _v1_to_cascade_level(
-                    doc_complexity_score, is_scanned_image, user_mode,
+                    doc_complexity_score,
+                    is_scanned_image,
+                    user_mode,
+                    self.config.ROUTER_COMPLEXITY_THRESHOLD,
                 )
                 sensitivity = _v1_to_sensitivity(user_mode)
                 selection = self._cascade.select_model_for_level(

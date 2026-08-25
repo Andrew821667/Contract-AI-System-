@@ -140,7 +140,11 @@ def test_contract_generator_agent():
     # Initialize LLM Gateway
     print("\n4. Initialize LLM Gateway...")
     try:
-        if 'OPENAI_API_KEY' in os.environ and os.environ['OPENAI_API_KEY'] != 'test-key-for-stub-agents':
+        live_llm = (
+            os.environ.get("RUN_LIVE_LLM_TESTS") == "I_ACCEPT_API_CHARGES"
+            and bool(os.environ.get("OPENAI_API_KEY"))
+        )
+        if live_llm:
             llm = LLMGateway(provider="openai")
             print("   ✓ LLM Gateway initialized (OpenAI GPT)")
             llm_available = True
@@ -382,7 +386,7 @@ def test_contract_generator_agent():
 
     else:
         print("\n9-12. LLM-based tests skipped (no API key)")
-        print("   ℹ Set OPENAI_API_KEY environment variable to run full tests")
+        print("   ℹ Live tests require explicit paid-API opt-in")
 
     # Test 7: Template selection request (no template found)
     print("\n13. Test template selection request...")

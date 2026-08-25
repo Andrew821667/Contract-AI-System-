@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 
 DEEPSEEK_FLASH_MODEL = "deepseek-v4-flash"
 DEEPSEEK_PRO_MODEL = "deepseek-v4-pro"
+DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 
 DEEPSEEK_FLASH_INPUT_COST = 0.14
 DEEPSEEK_FLASH_OUTPUT_COST = 0.28
@@ -75,6 +77,26 @@ def openai_compatible_model_options(model: str) -> dict[str, Any]:
     return options
 
 
+def openai_compatible_client_options(
+    model: str,
+    api_key: str | None = None,
+    base_url: str | None = None,
+) -> dict[str, str]:
+    """Resolve credentials and endpoint consistently for OpenAI-compatible clients."""
+    normalized = normalize_model_name(model)
+    if is_deepseek_model(normalized):
+        key = api_key or os.getenv("DEEPSEEK_API_KEY", "")
+        url = base_url or os.getenv("DEEPSEEK_BASE_URL", DEEPSEEK_BASE_URL)
+    else:
+        key = api_key or os.getenv("OPENAI_API_KEY", "")
+        url = base_url
+
+    options = {"api_key": key}
+    if url:
+        options["base_url"] = url
+    return options
+
+
 def model_costs(model: str | None) -> tuple[float, float] | None:
     """Return current DeepSeek input/output prices per million tokens."""
     normalized = normalize_model_name(model)
@@ -88,6 +110,7 @@ def model_costs(model: str | None) -> tuple[float, float] | None:
 __all__ = [
     "DEEPSEEK_FLASH_MODEL",
     "DEEPSEEK_PRO_MODEL",
+    "DEEPSEEK_BASE_URL",
     "DEEPSEEK_FLASH_INPUT_COST",
     "DEEPSEEK_FLASH_OUTPUT_COST",
     "DEEPSEEK_PRO_INPUT_COST",
@@ -99,5 +122,6 @@ __all__ = [
     "normalize_model_name",
     "normalize_reasoning_model_name",
     "normalize_standard_model_name",
+    "openai_compatible_client_options",
     "openai_compatible_model_options",
 ]

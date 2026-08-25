@@ -6,6 +6,24 @@ Each test gets a fresh tmp-file SQLite database for speed and isolation.
 The application itself uses PostgreSQL only — SQLite is only for tests.
 Both get_db functions (from src.models and src.models.database) are overridden.
 """
+import os
+
+# Loading application settings during test collection can otherwise pick up real
+# credentials from the shell or .env. Live LLM tests require an explicit opt-in.
+if os.environ.get("RUN_LIVE_LLM_TESTS") != "I_ACCEPT_API_CHARGES":
+    for _key in (
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "QWEN_API_KEY",
+        "PERPLEXITY_API_KEY",
+        "YANDEX_API_KEY",
+        "DSKEY",
+    ):
+        os.environ[_key] = ""
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

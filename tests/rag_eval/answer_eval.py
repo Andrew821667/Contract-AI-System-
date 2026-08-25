@@ -6,6 +6,10 @@
 нумерованным найденным фрагментам + эталонным ключевым пунктам).
 Методика: habr/gram_ax 1020248 (чанки судье явным списком, JSON, код-проверки)."""
 import os, sys, re, json
+from live_guard import require_live_llm_eval
+
+require_live_llm_eval()
+
 os.environ.setdefault("HF_HUB_OFFLINE", "1"); os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 sys.path.insert(0, "/Users/legalai/projects/Contract-AI-System-")
 _key = os.environ.get("DSKEY", "").strip()

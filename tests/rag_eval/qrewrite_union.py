@@ -2,6 +2,10 @@
 """Замер pool-union: raw vs replace vs UNION (get_legal_context aux_query=рерайт).
 Реальный DeepSeek Flash. Одни и те же рерайты для всех вариантов."""
 import os, sys, re
+from live_guard import require_live_llm_eval
+
+require_live_llm_eval()
+
 os.environ.setdefault("HF_HUB_OFFLINE", "1"); os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 sys.path.insert(0, "/Users/legalai/projects/Contract-AI-System-"); sys.path.insert(0, "/tmp")
 _key = os.environ.get("DSKEY", "").strip()

@@ -1,5 +1,10 @@
 # 🚀 Детальный план реализации Contract AI System v2.0
 
+> Исторический план. Актуальная политика моделей: DeepSeek V4 Flash для
+> стандартных задач и DeepSeek V4 Pro только для сложного экспертного анализа.
+> Проверка маршрутизации выполняется офлайн через
+> `python scripts/check_llm_routing.py` и не использует API-ключи.
+
 **Версия:** 2.0
 **Дата создания:** 2026-01-08
 **Общая длительность:** 20 недель (5 этапов)
@@ -121,7 +126,7 @@ class LLMConfig(BaseSettings):
     # DeepSeek
     DEEPSEEK_API_KEY: str
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/v1"
-    DEEPSEEK_MODEL: str = "deepseek-v3"
+    DEEPSEEK_MODEL: str = "deepseek-v4-flash"
     DEEPSEEK_MAX_TOKENS: int = 4096
 
     # Anthropic Claude
@@ -134,7 +139,7 @@ class LLMConfig(BaseSettings):
     OPENAI_MODEL: str = "gpt-4o"
 
     # Router Config
-    ROUTER_DEFAULT_MODEL: str = "deepseek-v3"
+    ROUTER_DEFAULT_MODEL: str = "deepseek-v4-flash"
     ROUTER_COMPLEXITY_THRESHOLD: float = 0.8  # Порог для переключения на Claude
 
     class Config:
@@ -154,8 +159,8 @@ DATABASE_URL=postgresql://user:password@localhost:5432/contract_ai
 
 **Тестирование:**
 ```python
-# Тестовый скрипт для проверки API доступности
-python scripts/test_llm_connection.py
+# Офлайн-проверка политики выбора моделей
+python scripts/check_llm_routing.py
 ```
 
 ### 0.3 Базовый Smart Router (День 4-5)
@@ -163,7 +168,7 @@ python scripts/test_llm_connection.py
 **Файл:** `src/services/model_router.py`
 
 **Функционал:**
-- Выбор модели по умолчанию (DeepSeek-V3)
+- Выбор модели по умолчанию (DeepSeek V4 Flash)
 - Заглушка для complexity_score
 - Принудительный выбор модели через параметр
 
@@ -181,7 +186,7 @@ class ModelRouter:
         Args:
             doc_complexity_score: 0.0-1.0, оценка сложности документа
             is_scanned_image: True если документ - скан/фото
-            force_model: Принудительный выбор ('deepseek-v3' | 'claude-4-5-sonnet')
+            force_model: Принудительный выбор ('deepseek-v4-flash' | 'deepseek-v4-pro')
 
         Returns:
             Название модели для использования
@@ -192,13 +197,13 @@ class ModelRouter:
         if is_scanned_image and doc_complexity_score > 0.8:
             return "claude-4-5-sonnet"
 
-        return "deepseek-v3"
+        return "deepseek-v4-flash"
 ```
 
 **Тестирование:**
 ```python
 router = ModelRouter()
-assert router.select_model() == "deepseek-v3"
+assert router.select_model() == "deepseek-v4-flash"
 assert router.select_model(force_model="claude-4-5-sonnet") == "claude-4-5-sonnet"
 assert router.select_model(doc_complexity_score=0.9, is_scanned_image=True) == "claude-4-5-sonnet"
 ```
@@ -274,7 +279,7 @@ class IntermediateJSON(BaseModel):
 @router.post("/api/v1/contracts/digitize")
 async def digitize_contract(
     file: UploadFile = File(...),
-    force_model: Optional[str] = Query(None, regex="^(deepseek-v3|claude-4-5-sonnet)$"),
+    force_model: Optional[str] = Query(None, regex="^(deepseek-v4-flash|deepseek-v4-pro)$"),
     background_tasks: BackgroundTasks
 ):
     """
@@ -297,7 +302,7 @@ async def digitize_contract(
 ```bash
 curl -X POST "http://localhost:8000/api/v1/contracts/digitize" \
   -F "file=@test_contract.pdf" \
-  -F "force_model=deepseek-v3"
+  -F "force_model=deepseek-v4-flash"
 ```
 
 ### 1.2 Orchestrator: Обработка документа (Неделя 3, День 3-7)
@@ -402,7 +407,7 @@ class LLMClient:
 
         Args:
             text: Текст документа
-            model: Название модели ('deepseek-v3' | 'claude-4-5-sonnet')
+            model: Название модели ('deepseek-v4-flash' | 'deepseek-v4-pro')
             schema: JSON Schema для структурированного вывода
 
         Returns:
@@ -410,7 +415,7 @@ class LLMClient:
         """
         prompt = self._build_extraction_prompt(text, schema)
 
-        if model == "deepseek-v3":
+        if model == "deepseek-v4-flash":
             response = await self.deepseek.chat(prompt)
         elif model == "claude-4-5-sonnet":
             response = await self.anthropic.chat(prompt)
@@ -499,7 +504,7 @@ async def get_structured_contract(contract_id: UUID):
 
 - [ ] Endpoint `/contracts/digitize` работает с PDF и DOCX
 - [ ] Level 1 Extractor извлекает базовые данные (даты, ИНН, суммы)
-- [ ] LLM Client подключается к DeepSeek-V3 и извлекает структуру
+- [ ] LLM Client использует DeepSeek V4 Flash и извлекает структуру
 - [ ] Данные сохраняются во все таблицы (core, parties, items, schedule, rules)
 - [ ] Endpoint `/contracts/{id}/structured` возвращает полные данные
 - [ ] Интеграционные тесты проходят для 3+ типов документов
@@ -744,7 +749,7 @@ class ModelRouterV2:
         if is_scan and complexity > 0.8:
             return "claude-4-5-sonnet"
 
-        return "deepseek-v3"
+        return "deepseek-v4-flash"
 ```
 
 ### 3.3 Fallback механизм (Неделя 12)

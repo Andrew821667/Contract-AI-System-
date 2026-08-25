@@ -18,9 +18,9 @@ from src.core.llm_models import (
     DEEPSEEK_FLASH_MODEL,
     is_reasoning_model,
     normalize_model_name,
+    openai_compatible_client_options,
     openai_compatible_model_options,
 )
-import os
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +65,7 @@ class TemplateComparator:
     def __init__(self, model: str = DEEPSEEK_FLASH_MODEL, api_key: str = None,
                  base_url: str = None):
         self.model = normalize_model_name(model)
-        client_kwargs = {"api_key": api_key or os.getenv("OPENAI_API_KEY")}
-        if base_url:
-            client_kwargs["base_url"] = base_url
+        client_kwargs = openai_compatible_client_options(self.model, api_key, base_url)
         self.client = AsyncOpenAI(**client_kwargs)
 
     async def compare(
@@ -90,7 +88,7 @@ class TemplateComparator:
         logger.info(f"Starting template comparison: draft={len(draft_text)} chars, template={len(template_text)} chars")
 
         # Обрезаем текст если слишком длинный (лимит контекста LLM)
-        # DeepSeek-chat: 64K токенов (~250K символов), оставляем запас на промпт и ответ
+        # Keep enough context space for the model response.
         max_chars = 50000
         draft_trimmed = draft_text[:max_chars]
         template_trimmed = template_text[:max_chars]

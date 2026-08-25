@@ -17,6 +17,7 @@ from src.core.llm_models import (
     ensure_deepseek_model,
     is_reasoning_model,
     normalize_model_name,
+    openai_compatible_client_options,
     openai_compatible_model_options,
 )
 from ..utils.rate_limiter import get_global_rate_limiter, RateLimitExceeded
@@ -38,7 +39,14 @@ class LLMGateway:
         Args:
             provider: 0720=85 ?@>20945@0 8;8 None 4;O 8A?>;L7>20=8O default
         """
-        self.provider = provider or settings.default_llm_provider
+        # The platform's implicit primary route is always DeepSeek. Other
+        # providers remain available through explicit selection and fallbacks.
+        if provider:
+            self.provider = provider
+        elif not model or normalize_model_name(model).startswith("deepseek-"):
+            self.provider = "deepseek"
+        else:
+            self.provider = settings.default_llm_provider
         if self.provider == "deepseek":
             self.model = ensure_deepseek_model(model or settings.llm_quick_model)
         else:
@@ -99,10 +107,11 @@ class LLMGateway:
 
         elif self.provider == "deepseek":
             from openai import OpenAI
-            self._client = OpenAI(
+            client_options = openai_compatible_client_options(
+                self.model,
                 api_key=settings.deepseek_api_key,
-                base_url="https://api.deepseek.com"
             )
+            self._client = OpenAI(**client_options)
 
         elif self.provider == "qwen":
             import dashscope

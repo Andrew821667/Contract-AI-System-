@@ -8,6 +8,7 @@ from src.core.llm_models import (
     normalize_model_name,
     normalize_reasoning_model_name,
     normalize_standard_model_name,
+    openai_compatible_client_options,
     openai_compatible_model_options,
 )
 
@@ -57,6 +58,18 @@ def test_pro_enables_high_effort_thinking() -> None:
     }
 
 
+def test_deepseek_client_uses_deepseek_endpoint() -> None:
+    options = openai_compatible_client_options(
+        DEEPSEEK_FLASH_MODEL,
+        api_key="test-key",
+    )
+
+    assert options == {
+        "api_key": "test-key",
+        "base_url": "https://api.deepseek.com/v1",
+    }
+
+
 class _FakeCompletions:
     def __init__(self) -> None:
         self.params = None
@@ -98,6 +111,24 @@ def test_gateway_sends_flash_without_thinking() -> None:
     }
 
 
+def test_implicit_gateway_ignores_a_stale_openai_default() -> None:
+    from config.settings import settings
+    from src.services.llm_gateway import LLMGateway
+
+    original_provider = settings.default_llm_provider
+    original_key = settings.deepseek_api_key
+    settings.default_llm_provider = "openai"
+    settings.deepseek_api_key = ""
+    try:
+        gateway = LLMGateway()
+    finally:
+        settings.default_llm_provider = original_provider
+        settings.deepseek_api_key = original_key
+
+    assert gateway.provider == "deepseek"
+    assert gateway.model == DEEPSEEK_FLASH_MODEL
+
+
 def test_gateway_sends_pro_with_reasoning_and_without_temperature() -> None:
     gateway, completions = _gateway_for("deepseek-reasoner")
 
@@ -134,6 +165,14 @@ def test_router_uses_pro_only_for_serious_work() -> None:
     assert router.select_model(user_mode="expert") == DEEPSEEK_PRO_MODEL
 
 
+def test_cascade_level_respects_the_expert_threshold() -> None:
+    from src.services.model_router import _v1_to_cascade_level
+
+    assert _v1_to_cascade_level(0.79, True, "optimal", 0.8) == "agent"
+    assert _v1_to_cascade_level(0.8, False, "optimal", 0.8) == "expert"
+    assert _v1_to_cascade_level(0.1, False, "expert", 0.8) == "expert"
+
+
 def test_standard_fallback_chain_does_not_add_pro() -> None:
     from src.core.llm_cascade.cascade_manager import CascadeManager
     from src.core.llm_cascade.routing_policy import LLMRoutingPolicy
@@ -163,3 +202,30 @@ def test_legacy_cloud_model_is_not_treated_as_local() -> None:
     policy = LLMRoutingPolicy(local_models=["deepseek-v3"])
 
     assert policy.local_models == ["qwen3:7b"]
+
+
+def test_policy_normalizes_models_by_route_role() -> None:
+    from src.core.llm_cascade.routing_policy import LLMRoutingPolicy
+
+    policy = LLMRoutingPolicy(
+        default_model="deepseek-reasoner",
+        high_sensitivity_model="deepseek-chat",
+    )
+
+    assert policy.default_model == DEEPSEEK_FLASH_MODEL
+    assert policy.high_sensitivity_model == DEEPSEEK_PRO_MODEL
+
+
+def test_system_router_keeps_legacy_reasoner_on_standard_route() -> None:
+    import asyncio
+    from src.services.system_config_service import SystemConfigService
+
+    service = SystemConfigService(db_session=object())
+
+    async def _legacy_config(_key: str):
+        return {"default_model": "deepseek-reasoner", "complexity_threshold": 0.8}
+
+    service._get_config = _legacy_config
+    config = asyncio.run(service.get_router_config())
+
+    assert config["default_model"] == DEEPSEEK_FLASH_MODEL

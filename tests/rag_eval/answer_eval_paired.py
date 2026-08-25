@@ -4,6 +4,10 @@
 прод-параметры (collections=laws/case_law/knowledge, n=3, max_chars=2000, прод-промпт с guard).
 Ответы temp=0.0 для воспроизводимости."""
 import os, sys, re, json
+from live_guard import require_live_llm_eval
+
+require_live_llm_eval()
+
 os.environ.setdefault("HF_HUB_OFFLINE","1"); os.environ.setdefault("TRANSFORMERS_OFFLINE","1")
 os.environ.pop("RAG_GRAPH_HOP",None)
 sys.path.insert(0,"/Users/legalai/projects/Contract-AI-System-")

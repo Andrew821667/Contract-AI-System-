@@ -90,7 +90,7 @@
   "system_mode": {"mode": "full_load"},
   "enabled_modules": {"modules": ["ocr", "level1_extraction", ...]},
   "rag_enabled": {"enabled": true, "top_k": 5},
-  "router_config": {"default_model": "deepseek-v3", "complexity_threshold": 0.8}
+  "router_config": {"default_model": "deepseek-v4-flash", "complexity_threshold": 0.8}
 }
 ```
 
@@ -126,7 +126,7 @@
 
 **Таблица:**
 1. `llm_usage_metrics` - Метрики использования LLM моделей
-   - Модели: `deepseek-v3`, `claude-4-5-sonnet`, `gpt-4o`, `gpt-4o-mini`
+   - Модели: `deepseek-v4-flash`, `deepseek-v4-pro`, резервные провайдеры
    - Метрики: `tokens_input`, `tokens_output`, `cost_usd`, `processing_time_sec`
    - Оценка: `complexity_score`, `confidence_score`
    - RAG: `rag_used`, `rag_docs_retrieved`

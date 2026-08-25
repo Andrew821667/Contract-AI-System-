@@ -20,10 +20,15 @@ OOD от отвечаемых (11/16 OOD внутри диапазона отв�
 
 Запуск (под legalai, прод-окружение):
   HOME=/Users/legalai HF_HOME=/Users/legalai/.cache/huggingface \
-  HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 DSKEY=<deepseek_key> \
+  HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+  RUN_LIVE_LLM_EVALS=I_ACCEPT_API_CHARGES DSKEY=<deepseek_key> \
   .venv/bin/python tests/rag_eval/abstain_eval.py
 """
 import os, sys, re, json
+from live_guard import require_live_llm_eval
+
+require_live_llm_eval()
+
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 sys.path.insert(0, "/Users/legalai/projects/Contract-AI-System-")

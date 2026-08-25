@@ -69,8 +69,11 @@ def test_onboarding_agent():
     # Initialize LLM Gateway
     print("\n2. Initialize LLM Gateway...")
     try:
-        # Check if API key is available
-        if 'OPENAI_API_KEY' in os.environ and os.environ['OPENAI_API_KEY'] != 'test-key-for-stub-agents':
+        live_llm = (
+            os.environ.get("RUN_LIVE_LLM_TESTS") == "I_ACCEPT_API_CHARGES"
+            and bool(os.environ.get("OPENAI_API_KEY"))
+        )
+        if live_llm:
             llm = LLMGateway(provider="openai")
             print("   ✓ LLM Gateway initialized (OpenAI GPT)")
             llm_available = True
@@ -286,7 +289,7 @@ def test_onboarding_agent():
 
     else:
         print("\n7-10. LLM-based tests skipped (no API key)")
-        print("   ℹ Set OPENAI_API_KEY environment variable to run full tests")
+        print("   ℹ Live tests require explicit paid-API opt-in")
 
     # Cleanup
     db.close()

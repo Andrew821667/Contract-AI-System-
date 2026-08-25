@@ -23,6 +23,7 @@ from src.core.llm_models import (
     is_reasoning_model,
     model_costs,
     normalize_model_name,
+    openai_compatible_client_options,
     openai_compatible_model_options,
 )
 
@@ -66,12 +67,9 @@ class LLMExtractor:
         if not AsyncOpenAI:
             raise ImportError("openai package required. pip install openai")
 
-        client_kwargs = {"api_key": api_key}
-        if base_url:
-            client_kwargs["base_url"] = base_url
-
-        self.client = AsyncOpenAI(**client_kwargs)
         self.model = normalize_model_name(model)
+        client_kwargs = openai_compatible_client_options(self.model, api_key, base_url)
+        self.client = AsyncOpenAI(**client_kwargs)
 
         # Стоимость токенов (на 1M токенов)
         self.costs = {

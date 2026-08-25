@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Comprehensive test of the complete workflow with new features:
-1. Two-level analysis system (gpt-4o-mini + gpt-4o)
+1. Two-level analysis system (DeepSeek V4 Flash + Pro)
 2. Batching (5 clauses per request)
 3. LLM caching in database
 4. Token tracking and cost calculation
@@ -27,26 +27,24 @@ import json
 logger.remove()
 logger.add(sys.stderr, level="INFO")
 
+LIVE_LLM_TESTS = os.environ.get("RUN_LIVE_LLM_TESTS") == "I_ACCEPT_API_CHARGES"
 
-def _llm_available():
-    """Check if LLM API is reachable with configured provider/model"""
-    try:
-        gw = LLMGateway(model=settings.llm_quick_model)
-        gw.call(prompt="ping", max_tokens=5)
-        return True
-    except Exception:
-        return False
+
+def _require_live_llm_tests() -> None:
+    if not LIVE_LLM_TESTS:
+        raise RuntimeError("Live LLM tests require explicit paid-API opt-in")
 
 
 requires_llm = pytest.mark.skipif(
-    not _llm_available(),
-    reason="LLM API not available (wrong provider/model or no API key)"
+    not LIVE_LLM_TESTS,
+    reason="Live LLM tests require explicit paid-API opt-in",
 )
 
 
 @requires_llm
 def test_llm_gateway_with_cache():
     """Test 1: LLMGateway with caching"""
+    _require_live_llm_tests()
     logger.info("=" * 60)
     logger.info("TEST 1: LLMGateway with Caching")
     logger.info("=" * 60)
@@ -90,6 +88,7 @@ def test_llm_gateway_with_cache():
 @requires_llm
 def test_batching():
     """Test 2: Batch analysis of clauses"""
+    _require_live_llm_tests()
     logger.info("\n" + "=" * 60)
     logger.info("TEST 2: Batch Analysis")
     logger.info("=" * 60)
@@ -119,9 +118,10 @@ def test_batching():
 
 @requires_llm
 def test_deep_analysis():
-    """Test 3: Deep analysis with gpt-4o"""
+    """Test 3: Deep analysis with the configured reasoning model."""
+    _require_live_llm_tests()
     logger.info("\n" + "=" * 60)
-    logger.info("TEST 3: Deep Analysis (Level 2 - gpt-4o)")
+    logger.info(f"TEST 3: Deep Analysis (Level 2 - {settings.llm_deep_model})")
     logger.info("=" * 60)
 
     db = next(get_db())
@@ -169,11 +169,12 @@ def test_deep_analysis():
 @requires_llm
 def test_token_tracking():
     """Test 4: Token tracking and cost calculation"""
+    _require_live_llm_tests()
     logger.info("\n" + "=" * 60)
     logger.info("TEST 4: Token Tracking & Cost Calculation")
     logger.info("=" * 60)
 
-    llm = LLMGateway(model="gpt-4o-mini")
+    llm = LLMGateway(model=settings.llm_quick_model)
 
     # Make a few calls
     for i in range(3):
@@ -197,6 +198,10 @@ def test_token_tracking():
 
 def main():
     """Run all tests"""
+    if not LIVE_LLM_TESTS:
+        logger.error("Live LLM tests are blocked without explicit paid-API opt-in")
+        return 2
+
     logger.info("\n" + "🚀" * 30)
     logger.info("FULL WORKFLOW TEST - Contract AI System")
     logger.info("🚀" * 30)

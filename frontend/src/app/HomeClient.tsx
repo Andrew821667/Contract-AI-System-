@@ -476,7 +476,7 @@ export default function Home() {
             className="mt-12 text-center"
           >
             <p className="text-slate-600 text-sm">
-              AI-модели: DeepSeek V3/R1, YandexGPT 5, Qwen3 и другие.
+              AI-модели: DeepSeek V4 Flash/Pro, YandexGPT 5, Qwen3 и другие.
               Переключение между провайдерами одной настройкой.
             </p>
           </motion.div>

@@ -71,11 +71,9 @@ def test_orchestrator_agent():
     # Initialize services
     print("\n4. Initialize services...")
     try:
-        # Note: For real testing, set OPENAI_API_KEY environment variable
-        # This test uses stub agents which don't make real LLM calls
+        # Stub agents do not make LLM calls, so never inherit a real key here.
         import os
-        if 'OPENAI_API_KEY' not in os.environ:
-            os.environ['OPENAI_API_KEY'] = 'test-key-for-stub-agents'
+        os.environ['OPENAI_API_KEY'] = 'test-key-for-stub-agents'
 
         # LLM Gateway using GPT (stub agents don't make real calls)
         llm = LLMGateway(provider="openai")

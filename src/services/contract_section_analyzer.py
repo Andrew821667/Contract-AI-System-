@@ -10,12 +10,12 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from openai import AsyncOpenAI
-import os
 
 from src.core.llm_models import (
     DEEPSEEK_FLASH_MODEL,
     is_reasoning_model,
     normalize_model_name,
+    openai_compatible_client_options,
     openai_compatible_model_options,
 )
 
@@ -81,9 +81,7 @@ class ContractSectionAnalyzer:
     def __init__(self, model: str = DEEPSEEK_FLASH_MODEL, api_key: str = None,
                  base_url: str = None):
         self.model = normalize_model_name(model)
-        client_kwargs = {"api_key": api_key or os.getenv("OPENAI_API_KEY")}
-        if base_url:
-            client_kwargs["base_url"] = base_url
+        client_kwargs = openai_compatible_client_options(self.model, api_key, base_url)
         self.client = AsyncOpenAI(**client_kwargs)
 
     async def extract_sections(self, contract_text: str) -> List[ContractSection]:

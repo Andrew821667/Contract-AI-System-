@@ -42,6 +42,9 @@ Q = [
 ]
 
 if __name__ == "__main__":
+    from live_guard import require_live_llm_eval
+
+    require_live_llm_eval()
     # запуск требует DSKEY (авто-рерайт). Импорт Q — без побочных эффектов.
     _key = os.environ.get("DSKEY", "").strip()
     if not _key:

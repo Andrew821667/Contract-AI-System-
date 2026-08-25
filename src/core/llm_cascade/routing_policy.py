@@ -16,6 +16,8 @@ from src.core.llm_models import (
     DEEPSEEK_FLASH_MODEL,
     DEEPSEEK_PRO_MODEL,
     normalize_model_name,
+    normalize_reasoning_model_name,
+    normalize_standard_model_name,
 )
 
 
@@ -53,10 +55,15 @@ class LLMRoutingPolicy(BaseModel):
     def normalize_model_lists(cls, models: list[str]) -> list[str]:
         return [normalize_model_name(model) for model in models]
 
-    @field_validator("default_model", "high_sensitivity_model")
+    @field_validator("default_model")
     @classmethod
-    def normalize_optional_model(cls, model: str | None) -> str | None:
-        return normalize_model_name(model) if model else None
+    def normalize_default_model(cls, model: str | None) -> str | None:
+        return normalize_standard_model_name(model) if model else None
+
+    @field_validator("high_sensitivity_model")
+    @classmethod
+    def normalize_high_sensitivity_model(cls, model: str | None) -> str | None:
+        return normalize_reasoning_model_name(model) if model else None
 
     @field_validator("local_models")
     @classmethod
