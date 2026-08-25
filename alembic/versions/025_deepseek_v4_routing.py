@@ -53,6 +53,9 @@ def _as_dict(value: Any) -> dict[str, Any]:
 
 def _update_system_default(target: str, accepted: set[str]) -> None:
     bind = op.get_bind()
+    if "system_config" not in sa.inspect(bind).get_table_names():
+        return
+
     row = bind.execute(
         sa.select(system_config.c.config_value).where(
             system_config.c.config_key == "router_config"
@@ -80,6 +83,9 @@ def _update_policy_models(
     accepted_high: set[str],
 ) -> None:
     bind = op.get_bind()
+    if "policies" not in sa.inspect(bind).get_table_names():
+        return
+
     rows = bind.execute(
         sa.select(policies.c.id, policies.c.rules).where(
             policies.c.policy_type == "llm_routing"
