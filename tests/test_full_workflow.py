@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Comprehensive test of the complete workflow with new features:
-1. Two-level analysis system (DeepSeek V4 Flash + Pro)
+1. Two-level analysis system (DeepSeek V4.1 Flash + V4 Pro)
 2. Batching (5 clauses per request)
 3. LLM caching in database
 4. Token tracking and cost calculation

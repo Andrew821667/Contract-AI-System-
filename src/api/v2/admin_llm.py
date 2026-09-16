@@ -18,9 +18,11 @@ from src.core.llm_models import (
     DEEPSEEK_FLASH_INPUT_COST,
     DEEPSEEK_FLASH_MODEL,
     DEEPSEEK_FLASH_OUTPUT_COST,
+    DEEPSEEK_FLASH_PUBLIC_NAME,
     DEEPSEEK_PRO_INPUT_COST,
     DEEPSEEK_PRO_MODEL,
     DEEPSEEK_PRO_OUTPUT_COST,
+    DEEPSEEK_PRO_PUBLIC_NAME,
     normalize_model_name,
 )
 
@@ -33,7 +35,7 @@ router = APIRouter(prefix="/admin/llm", tags=["Admin LLM"])
 AVAILABLE_MODELS = [
     {
         "id": DEEPSEEK_FLASH_MODEL,
-        "name": "DeepSeek V4 Flash",
+        "name": DEEPSEEK_FLASH_PUBLIC_NAME,
         "provider": "deepseek",
         "cost_input": DEEPSEEK_FLASH_INPUT_COST,
         "cost_output": DEEPSEEK_FLASH_OUTPUT_COST,
@@ -41,7 +43,7 @@ AVAILABLE_MODELS = [
     },
     {
         "id": DEEPSEEK_PRO_MODEL,
-        "name": "DeepSeek V4 Pro",
+        "name": DEEPSEEK_PRO_PUBLIC_NAME,
         "provider": "deepseek",
         "cost_input": DEEPSEEK_PRO_INPUT_COST,
         "cost_output": DEEPSEEK_PRO_OUTPUT_COST,

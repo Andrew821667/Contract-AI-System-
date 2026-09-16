@@ -53,7 +53,7 @@ class ModelRouter:
     Smart Router for LLM model selection.
 
     Strategy:
-    - DeepSeek V4 Flash: primary worker for standard tasks
+    - DeepSeek V4.1 Flash: primary worker for standard tasks
     - DeepSeek V4 Pro: serious/expert tasks
     - Claude 4.6 Sonnet: expert fallback
     - GPT-5.4: Reserve channel if primary/fallback unavailable

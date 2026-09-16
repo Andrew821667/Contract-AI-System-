@@ -9,6 +9,7 @@ import toast from 'react-hot-toast'
 import { useAuthStore } from '@/stores/authStore'
 import { getUserRole, getRolePermissions, getRoleColor, getRoleLabel } from '@/utils/roles'
 import ChangePasswordModal from '@/components/ChangePasswordModal'
+import DemoModelNotice from '@/components/DemoModelNotice'
 import AppLayout from '@/components/AppLayout'
 import { getContractStatusLabel, getContractStatusClass } from '@/utils/statusLabels'
 import { SkeletonCard, SkeletonRow, SkeletonChart } from '@/components/ui/Skeleton'
@@ -211,6 +212,12 @@ export default function DashboardPage() {
                 Ваша роль: {roleLabel}
               </p>
             </div>
+
+            {(user?.is_demo || user?.role === 'demo') ? (
+              <div className="mb-6">
+                <DemoModelNotice />
+              </div>
+            ) : null}
 
             <div className={`p-6 rounded-2xl ${roleColor.bg} mb-6`}>
               <h3 className="text-xl font-bold text-stone-800 mb-4">

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowRightIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
 import BrandLockup from '@/components/BrandLockup'
+import DemoModelNotice from '@/components/DemoModelNotice'
 import api from '@/services/api'
 
 type RequestForm = {
@@ -129,6 +130,7 @@ export default function DemoAccessClient() {
                 </label>
                 {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
                 <SubmitButton loading={loading} label="Активировать и войти" />
+                <DemoModelNotice />
               </form>
             ) : submitted ? (
               <div className="py-8 text-center">
@@ -183,6 +185,7 @@ export default function DemoAccessClient() {
                 </label>
                 {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>}
                 <SubmitButton loading={loading} label="Отправить заявку" />
+                <DemoModelNotice />
               </form>
             )}
           </section>

@@ -1,6 +1,6 @@
 """
 LLM Configuration for Multi-Model Routing
-Supports: DeepSeek V4 Flash/Pro, Claude, GPT and local models
+Supports: DeepSeek V4.1 Flash / V4 Pro, Claude, GPT and local models
 
 DEPRECATED: This config duplicates settings from config/settings.py.
 New code should use `from config.settings import settings` for LLM configuration.
@@ -30,7 +30,7 @@ class LLMConfig(BaseSettings):
     Configuration for all supported LLM models.
 
     Models:
-    - DeepSeek V4 Flash: primary worker without thinking
+    - DeepSeek V4.1 Flash: primary worker without thinking
     - DeepSeek V4 Pro: serious/expert tasks with thinking
     - Claude Sonnet: expert fallback
     - GPT-4o: Reserve channel ($2.50/1M tokens)
