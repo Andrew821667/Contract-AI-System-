@@ -12,7 +12,27 @@ from typing import Any
 from sqlalchemy.orm import Session, selectinload, noload
 
 from src.core.base import AIContext
+from src.models.analyzer_models import ContractRecommendation, ContractRisk
 from src.models.database import Contract, AnalysisResult
+
+# Сколько текста договора уходит в промпт помощника. Хватает на типовой
+# договор целиком; у длинного — начало, где предмет, цена, сроки и стороны.
+DOCUMENT_TEXT_LIMIT = 24_000
+
+
+def _plain_text(value: str) -> str:
+    """XML/HTML разметку парсера — в читаемый текст с абзацами."""
+    import html
+    import re
+
+    if "<" not in value:
+        return re.sub(r"[ \t]+", " ", value).strip()
+    text = re.sub(r"</(?:p|paragraph|clause|section|title|item|li|div|br)\s*>", "\n", value, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = html.unescape(text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n\s*\n+", "\n", text)
+    return text.strip()
 
 
 class AIContextBuilderService:
@@ -49,27 +69,17 @@ class AIContextBuilderService:
             "risk_level": contract.risk_level,
         }
 
-        # Findings (результаты анализа)
+        # Текст договора: без него помощник отвечал типовыми советами и
+        # честно писал «в контексте нет текста договора» — на демо это
+        # выглядело так, будто система не видит загруженный документ.
+        document_text = self._load_document_text(contract)
+
+        # Findings — риски и рекомендации последнего анализа, каждый со
+        # своим названием и сутью: раньше сюда попадали только служебные
+        # счётчики из AnalysisResult, и в промпте оставались пустые строки.
         findings: list[dict[str, Any]] = []
         if include_findings:
-            results = (
-                self.db.query(AnalysisResult)
-                .filter(AnalysisResult.contract_id == document_id)
-                .order_by(AnalysisResult.created_at.desc())
-                .limit(5)
-                .all()
-            )
-            for r in results:
-                finding: dict[str, Any] = {"id": r.id, "version": r.version}
-                if r.compliance_issues:
-                    finding["compliance_issues"] = r.compliance_issues
-                if r.legal_issues:
-                    finding["legal_issues"] = r.legal_issues
-                if r.risks_by_category:
-                    finding["risks_by_category"] = r.risks_by_category
-                if r.recommendations:
-                    finding["recommendations"] = r.recommendations
-                findings.append(finding)
+            findings = self._load_findings(document_id)
 
         # Комментарии (из collaboration модуля — пока пустой список)
         comments: list[dict[str, Any]] = []
@@ -89,6 +99,7 @@ class AIContextBuilderService:
         return AIContext(
             document_id=document_id,
             document_type=contract.document_type,
+            document_text=document_text,
             document_metadata=doc_metadata,
             user_id=user_id,
             stage=stage,
@@ -97,6 +108,77 @@ class AIContextBuilderService:
             workflow_state=workflow_state,
             prior_actions=prior_actions,
         )
+
+    def _load_document_text(self, contract: Contract) -> str | None:
+        """Текст договора для промпта.
+
+        parsed_text при загрузке хранится усечённым (10 000 знаков, для поиска
+        основного договора), поэтому файл разбирается заново — парсер отдаёт
+        XML, из него оставляем только текст.
+        """
+        text = ""
+        if contract.file_path:
+            try:
+                from src.services.document_parser import DocumentParser
+
+                text = DocumentParser().parse(contract.file_path) or ""
+            except Exception as exc:  # noqa: BLE001 — помощник должен работать и без текста
+                from loguru import logger
+
+                logger.warning(f"AI context: не удалось разобрать файл договора {contract.id}: {exc}")
+        if not text.strip():
+            text = contract.parsed_text or ""
+        text = _plain_text(text)
+        if not text:
+            return None
+        if len(text) > DOCUMENT_TEXT_LIMIT:
+            return text[:DOCUMENT_TEXT_LIMIT] + "\n…[текст договора обрезан для контекста]"
+        return text
+
+    def _load_findings(self, document_id: str) -> list[dict[str, Any]]:
+        latest = (
+            self.db.query(AnalysisResult)
+            .filter(AnalysisResult.contract_id == document_id)
+            .order_by(AnalysisResult.created_at.desc())
+            .first()
+        )
+        if not latest:
+            return []
+        findings: list[dict[str, Any]] = []
+        severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        risks = (
+            self.db.query(ContractRisk)
+            .filter(ContractRisk.analysis_id == latest.id)
+            .all()
+        )
+        for risk in sorted(risks, key=lambda r: severity_order.get((r.severity or "").lower(), 9)):
+            findings.append(
+                {
+                    "id": f"risk:{risk.id}",
+                    "kind": "risk",
+                    "severity": risk.severity,
+                    "title": risk.title,
+                    "description": risk.description,
+                    "section": risk.section_name,
+                }
+            )
+        recommendations = (
+            self.db.query(ContractRecommendation)
+            .filter(ContractRecommendation.analysis_id == latest.id)
+            .all()
+        )
+        priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        for rec in sorted(recommendations, key=lambda r: priority_order.get((r.priority or "").lower(), 9)):
+            findings.append(
+                {
+                    "id": f"recommendation:{rec.id}",
+                    "kind": "recommendation",
+                    "severity": rec.priority,
+                    "title": rec.title,
+                    "description": rec.description,
+                }
+            )
+        return findings
 
     def _load_comments(self, document_id: str) -> list[dict[str, Any]]:
         """Загрузить комментарии к документу."""
