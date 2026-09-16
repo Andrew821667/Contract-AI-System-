@@ -14,6 +14,7 @@
 #
 # Использование:  sh scripts/deploy_prod_macmini.sh            # текущий HEAD после pull
 #                 SKIP_PULL=1 sh scripts/deploy_prod_macmini.sh # без git pull
+#                 (SKIP_PULL — переменная окружения, не аргумент)
 
 set -eu
 
@@ -54,11 +55,13 @@ done
 curl -s -m 3 http://127.0.0.1:8000/health; echo
 
 say "frontend: образ contract-ai-frontend:$sha"
+# Пути только абсолютные: docker запускается через sudo -i от andrej, и
+# текущий каталог там — его домашний, а не $APP_DIR.
 d build -q \
   --build-arg NEXT_PUBLIC_API_URL= \
   --build-arg NEXT_PUBLIC_WS_URL= \
   --build-arg BACKEND_URL="$BACKEND_URL_FOR_IMAGE" \
-  -t "contract-ai-frontend:$sha" -f frontend/Dockerfile frontend >/dev/null
+  -t "contract-ai-frontend:$sha" -f "$APP_DIR/frontend/Dockerfile" "$APP_DIR/frontend" >/dev/null
 
 say "frontend: контейнер на $PUBLISH"
 # Всё, что публикует порт, кроме нового контейнера, — останавливается: два
