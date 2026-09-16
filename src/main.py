@@ -225,7 +225,14 @@ async def cleanup_scoped_session(request: Request, call_next):
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    """Handle HTTP exceptions with unified format"""
+    """Handle HTTP exceptions with unified format.
+
+    Помимо {error, message, details} ответ несёт и исходный `detail` FastAPI:
+    структурные ошибки (например, analysis_perspective_required со списком
+    сторон) читаются фронтом из `detail.code` / `detail.parties`, а единый
+    формат их выбрасывал — и вместо выбора стороны клиент видел только тост
+    с текстом ошибки. Ключ `code` поднят и на верхний уровень.
+    """
     if isinstance(exc.detail, str):
         error = exc.detail
         message = exc.detail
@@ -238,10 +245,10 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         error = "Request error"
         message = str(exc.detail)
         details = exc.detail
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"error": error, "message": message, "details": details},
-    )
+    content = {"error": error, "message": message, "details": details, "detail": exc.detail}
+    if isinstance(exc.detail, dict) and exc.detail.get("code"):
+        content["code"] = exc.detail["code"]
+    return JSONResponse(status_code=exc.status_code, content=content)
 
 
 @app.exception_handler(RequestValidationError)

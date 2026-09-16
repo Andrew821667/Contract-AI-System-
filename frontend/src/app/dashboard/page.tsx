@@ -67,23 +67,11 @@ export default function DashboardPage() {
     if (!token) {
       router.push('/login')
     } else {
-      // Check if using default password
-      const passwordChanged = localStorage.getItem('passwordChanged')
-      const userStr = localStorage.getItem('user')
-
-      if (!passwordChanged && userStr) {
-        try {
-          const userData = JSON.parse(userStr)
-          // Show password change dialog for demo users
-          if (userData.is_demo || userData.role === 'demo') {
-            setTimeout(() => {
-              setShowPasswordChange(true)
-            }, 2000)
-          }
-        } catch (e) {
-          // ignore parse errors
-        }
-      }
+      // Диалог «смените пароль по умолчанию» показывался демо-пользователям,
+      // но демо-доступ активируется по персональной ссылке без пароля вовсе:
+      // «текущий пароль» такому клиенту взять неоткуда, и первое, что он
+      // видел после входа, — форму, которую нельзя заполнить. Пароль он
+      // сможет задать сам в настройках, если захочет.
 
       // Show welcome message on first visit
       const hasSeenWelcome = sessionStorage.getItem('hasSeenWelcome')
