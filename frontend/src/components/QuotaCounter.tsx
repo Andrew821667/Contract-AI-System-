@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import api, { QuotaResponse } from '@/services/api'
+import DemoModelNotice from './DemoModelNotice'
 
 export default function QuotaCounter() {
   const [quota, setQuota] = useState<QuotaResponse | null>(null)
@@ -72,6 +73,8 @@ export default function QuotaCounter() {
           />
         </div>
       </div>
+
+      {quota.contracts_period === 'demo' ? <DemoModelNotice variant="compact" /> : null}
     </div>
   )
 }

@@ -8,6 +8,7 @@ import Card from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import BrandLockup from '@/components/BrandLockup'
 import { pricingFaq } from '@/content/contractSeo'
+import { DEMO_MODEL_NAME, PAID_TOP_MODEL_NAME } from '@/utils/demoModel'
 
 export default function PricingPage() {
   const router = useRouter()
@@ -25,7 +26,9 @@ export default function PricingPage() {
       features: [
         { text: 'Лимит договоров в приглашении', included: true },
         { text: 'Ограниченный срок доступа', included: true },
+        { text: `Облегчённая модель ${DEMO_MODEL_NAME}`, included: true },
         { text: 'Базовый анализ рисков (Уровень 1)', included: true },
+        { text: `Самые мощные модели (${PAID_TOP_MODEL_NAME})`, included: false },
         { text: '5 шаблонов генерации', included: true },
         { text: 'Экспорт DOCX', included: true },
         { text: 'Глубокий анализ (Уровень 2)', included: false },
@@ -45,6 +48,7 @@ export default function PricingPage() {
       features: [
         { text: '50 договоров в месяц', included: true },
         { text: '200 AI-запросов', included: true },
+        { text: `Самые мощные модели (${PAID_TOP_MODEL_NAME})`, included: true },
         { text: 'Полный анализ (Уровень 1 + 2)', included: true },
         { text: 'Все шаблоны генерации', included: true },
         { text: 'Экспорт DOCX, PDF, XML', included: true },

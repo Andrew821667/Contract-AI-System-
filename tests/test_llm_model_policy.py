@@ -19,6 +19,15 @@ def test_legacy_deepseek_names_are_normalized() -> None:
     assert normalize_model_name("deepseek-reasoner") == DEEPSEEK_PRO_MODEL
 
 
+def test_flash_is_the_versionless_v41_name() -> None:
+    """С V4.1 DeepSeek называет Flash `deepseek-flash`; старое имя V4 — только псевдоним."""
+    assert DEEPSEEK_FLASH_MODEL == "deepseek-flash"
+    assert normalize_model_name("deepseek-v4-flash") == DEEPSEEK_FLASH_MODEL
+    assert normalize_model_name("deepseek-v4-flash-vision-exp") == DEEPSEEK_FLASH_MODEL
+    assert normalize_model_name("deepseek-v4.1-flash") == DEEPSEEK_FLASH_MODEL
+    assert normalize_model_name("deepseek-v4-pro") == DEEPSEEK_PRO_MODEL
+
+
 def test_legacy_environment_values_follow_field_purpose() -> None:
     assert normalize_standard_model_name("deepseek-reasoner") == DEEPSEEK_FLASH_MODEL
     assert normalize_reasoning_model_name("deepseek-chat") == DEEPSEEK_PRO_MODEL

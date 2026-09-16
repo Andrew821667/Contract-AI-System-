@@ -6,12 +6,23 @@ import os
 from typing import Any
 
 
-DEEPSEEK_FLASH_MODEL = "deepseek-v4-flash"
+# DeepSeek V4.1 Flash (с 10.09.2026) в API называется просто `deepseek-flash`:
+# имя больше не привязано к поколению. Старое `deepseek-v4-flash` DeepSeek ещё
+# принимает, но обслуживает той же V4.1 и по той же цене, поэтому здесь оно —
+# только псевдоним. Pro остаётся `deepseek-v4-pro` — V4.1 Pro ещё не выпущен.
+DEEPSEEK_FLASH_MODEL = "deepseek-flash"
 DEEPSEEK_PRO_MODEL = "deepseek-v4-pro"
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 
-DEEPSEEK_FLASH_INPUT_COST = 0.14
-DEEPSEEK_FLASH_OUTPUT_COST = 0.28
+# Публичные названия — для админки, тарифов и примечаний клиенту.
+DEEPSEEK_FLASH_PUBLIC_NAME = "DeepSeek V4.1 Flash"
+DEEPSEEK_PRO_PUBLIC_NAME = "DeepSeek V4 Pro"
+
+# Цены за 1M токенов в USD по прайсу DeepSeek на сентябрь 2026 (пиковый
+# тариф; в off-peak окна DeepSeek считает вдвое дешевле). Вход — без
+# учёта cache hit.
+DEEPSEEK_FLASH_INPUT_COST = 0.30
+DEEPSEEK_FLASH_OUTPUT_COST = 1.20
 DEEPSEEK_PRO_INPUT_COST = 0.435
 DEEPSEEK_PRO_OUTPUT_COST = 0.87
 
@@ -20,6 +31,9 @@ _LEGACY_MODEL_ALIASES = {
     "deepseek-chat": DEEPSEEK_FLASH_MODEL,
     "deepseek-v3": DEEPSEEK_FLASH_MODEL,
     "deepseek-v3.2": DEEPSEEK_FLASH_MODEL,
+    "deepseek-v4-flash": DEEPSEEK_FLASH_MODEL,
+    "deepseek-v4-flash-vision-exp": DEEPSEEK_FLASH_MODEL,
+    "deepseek-v4.1-flash": DEEPSEEK_FLASH_MODEL,
     "deepseek-reasoner": DEEPSEEK_PRO_MODEL,
 }
 
@@ -110,6 +124,8 @@ def model_costs(model: str | None) -> tuple[float, float] | None:
 __all__ = [
     "DEEPSEEK_FLASH_MODEL",
     "DEEPSEEK_PRO_MODEL",
+    "DEEPSEEK_FLASH_PUBLIC_NAME",
+    "DEEPSEEK_PRO_PUBLIC_NAME",
     "DEEPSEEK_BASE_URL",
     "DEEPSEEK_FLASH_INPUT_COST",
     "DEEPSEEK_FLASH_OUTPUT_COST",
