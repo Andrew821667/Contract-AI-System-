@@ -32,6 +32,7 @@ from src.core.ai_collaboration.schemas import (
     AIConversationTurnRead,
 )
 from src.core.ai_collaboration.context_builder import AIContextBuilderService
+from src.core.ai_collaboration.session_service import render_document_context
 from src.core.base import AIContext
 
 logger = logging.getLogger(__name__)
@@ -234,38 +235,17 @@ async def _generate_ai_response(
             user_query = turn.content
             break
 
-    # Собираем контекст документа
-    context_parts = []
-    if ai_session.document_id:
-        try:
-            from src.models.database import Contract
-            contract = db.query(Contract).filter(Contract.id == ai_session.document_id).first()
-            if contract:
-                context_parts.append(f"Документ: {contract.file_name}")
-                if contract.contract_type and contract.contract_type != "unknown":
-                    context_parts.append(f"Тип: {contract.contract_type}")
-                if contract.meta_info:
-                    import json
-                    meta = contract.meta_info if isinstance(contract.meta_info, dict) else json.loads(contract.meta_info)
-                    if meta.get("parties"):
-                        context_parts.append(f"Стороны: {meta['parties']}")
-                    # Добавляем текст документа для контекста (первые 3000 символов)
-                    text = meta.get("full_text", meta.get("text", ""))
-                    if text:
-                        context_parts.append(f"\nТекст документа (фрагмент):\n{text[:3000]}")
-        except Exception as e:
-            logger.warning(f"Failed to load document context: {e}")
+    # Контекст документа — тем же сборщиком, что и GET /context: текст
+    # договора и результаты анализа. Раньше маршрут искал текст в
+    # meta_info.full_text, которого никто не пишет, и помощник честно
+    # отвечал «текста договора в контексте нет».
+    doc_context, doc_hint = await _build_document_context(db, ai_session, user_id)
 
     # RAG-обогащение: законы, судебная практика, база знаний системы
     rag_context = ""
     if user_query:
         try:
-            rag_query = user_query
-            if ai_session.document_id and context_parts:
-                # Уточняем запрос контекстом документа
-                doc_hint = context_parts[0] if context_parts else ""
-                rag_query = f"{doc_hint}. {user_query}" if doc_hint else user_query
-
+            rag_query = f"{doc_hint}. {user_query}" if doc_hint else user_query
             rag_context = get_legal_context(
                 query=rag_query,
                 collections=["laws", "case_law", "knowledge"],
@@ -277,22 +257,7 @@ async def _generate_ai_response(
         except Exception as e:
             logger.warning(f"RAG retrieval failed (non-fatal): {e}")
 
-    # Системный промпт
-    system_prompt = (
-        "Ты — AI-ассистент юридической системы Contract AI System. "
-        "Ты помогаешь юристам анализировать договоры, выявлять риски, "
-        "предлагать формулировки и отвечать на вопросы о работе системы.\n\n"
-        "Правила:\n"
-        "- Отвечай на русском языке\n"
-        "- Будь конкретным и полезным\n"
-        "- Ссылайся на конкретные пункты документа, если они есть в контексте\n"
-        "- Ссылайся на закон/норму из правовой базы; номер статьи или закона указывай ТОЛЬКО если он есть в контексте — если номера в контексте нет, не придумывай его, опиши норму своими словами\n"
-        "- Если не знаешь ответ, честно скажи об этом\n"
-    )
-    if context_parts:
-        system_prompt += "\n\n# Контекст документа\n" + "\n".join(context_parts)
-    if rag_context:
-        system_prompt += f"\n\n# Правовая база и база знаний\n{rag_context}"
+    system_prompt = _compose_system_prompt(doc_context, rag_context)
 
     # Формируем промпт из истории
     messages_text = []
@@ -312,6 +277,55 @@ async def _generate_ai_response(
     )
 
     return response if isinstance(response, str) else str(response)
+
+
+async def _build_document_context(db: Session, ai_session: AISession, user_id: str) -> tuple[str, str]:
+    """Блок контекста документа для промпта и короткая подсказка для RAG-запроса.
+
+    Без документа (общая сессия) возвращает пустые строки; ошибка сборки не
+    роняет ответ — помощник отвечает без контекста, как раньше.
+    """
+    if not ai_session.document_id:
+        return "", ""
+    try:
+        context = await AIContextBuilderService(db).build(
+            document_id=ai_session.document_id,
+            user_id=user_id,
+            stage=ai_session.stage or "general",
+            include_comments=False,
+            include_workflow=False,
+            include_prior_actions=False,
+        )
+    except Exception as e:
+        logger.warning(f"Failed to load document context: {e}")
+        return "", ""
+    file_name = (context.document_metadata or {}).get("file_name") or ai_session.document_id
+    return render_document_context(context), f"Документ: {file_name}"
+
+
+AI_PANEL_RULES = (
+    "Ты — AI-ассистент юридической системы Contract AI System. "
+    "Ты помогаешь юристам анализировать договоры, выявлять риски, "
+    "предлагать формулировки и отвечать на вопросы о работе системы.\n\n"
+    "Правила:\n"
+    "- Отвечай на русском языке\n"
+    "- Будь конкретным и полезным\n"
+    "- Если в контексте есть текст договора и результаты анализа — отвечай по ним: "
+    "цитируй нужные пункты дословно и ссылайся на выявленные риски и рекомендации\n"
+    "- Ссылайся на закон/норму из правовой базы; номер статьи или закона указывай ТОЛЬКО если он есть в контексте — "
+    "если номера в контексте нет, не придумывай его, опиши норму своими словами\n"
+    "- Если не знаешь ответ, честно скажи об этом\n"
+)
+
+
+def _compose_system_prompt(doc_context: str, rag_context: str) -> str:
+    """Системный промпт AI-панели: правила, затем документ, затем правовая база."""
+    prompt = AI_PANEL_RULES
+    if doc_context:
+        prompt += "\n\n" + doc_context
+    if rag_context:
+        prompt += f"\n\n# Правовая база и база знаний\n{rag_context}"
+    return prompt
 
 
 # ──────────────────────────────────────────────

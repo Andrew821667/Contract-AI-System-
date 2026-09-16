@@ -20,6 +20,65 @@ from .context_builder import AIContextBuilderService
 from .models import AIAction, AIAuditRecord, AIConversationTurn, AISession
 
 
+def render_document_context(context: AIContext) -> str:
+    """Блок контекста документа для системного промпта.
+
+    Один и тот же текст нужен и сервису коллаборации, и маршруту AI-панели
+    (`api/v2/ai_sessions.py`), который вызывает LLM напрямую: метаданные,
+    стадия, риски и рекомендации анализа, текст договора.
+    """
+    parts: list[str] = []
+
+    # Метаданные документа
+    parts.append("# Контекст документа")
+    parts.append(f"- Document ID: {context.document_id}")
+    if context.document_type:
+        parts.append(f"- Тип документа: {context.document_type}")
+    if context.document_metadata:
+        meta_items = ", ".join(f"{k}: {v}" for k, v in context.document_metadata.items())
+        parts.append(f"- Метаданные: {meta_items}")
+
+    # Стадия и роль
+    parts.append(f"\n# Стадия: {context.stage}")
+    if context.user_role:
+        parts.append(f"# Роль пользователя: {context.user_role}")
+
+    # Результаты анализа: риски и рекомендации с сутью, а не одними названиями
+    risks = [f for f in context.findings if f.get("kind") == "risk"]
+    recommendations = [f for f in context.findings if f.get("kind") == "recommendation"]
+    other = [f for f in context.findings if f.get("kind") not in ("risk", "recommendation")]
+    if risks:
+        parts.append(f"\n# Риски по результатам анализа ({len(risks)})")
+        for finding in risks[:12]:
+            line = f"- [{finding.get('severity', 'info')}] {finding.get('title', '—')}"
+            if finding.get("section"):
+                line += f" (раздел: {finding['section']})"
+            if finding.get("description"):
+                line += f": {str(finding['description'])[:400]}"
+            parts.append(line)
+    if recommendations:
+        parts.append(f"\n# Рекомендации ({len(recommendations)})")
+        for finding in recommendations[:8]:
+            line = f"- [{finding.get('severity', 'info')}] {finding.get('title', '—')}"
+            if finding.get("description"):
+                line += f": {str(finding['description'])[:300]}"
+            parts.append(line)
+    if other:
+        parts.append("\n# Findings")
+        for finding in other[:5]:
+            severity = finding.get("severity", "info")
+            title = finding.get("title", finding.get("description", "—"))
+            parts.append(f"- [{severity}] {title}")
+
+    # Сам договор — последним большим блоком, чтобы помощник отвечал по
+    # конкретным пунктам, а не типовыми советами.
+    if context.document_text:
+        parts.append("\n# Текст договора")
+        parts.append(context.document_text)
+
+    return "\n".join(parts)
+
+
 class AICollaboratorService:
     """Основной сервис AI-коллаборации."""
 
@@ -211,56 +270,10 @@ class AICollaboratorService:
         Построить системный промпт из AIContext.
 
         Включает: метаданные документа, стадию, роль пользователя,
-        топ-5 findings, состояние workflow, инструкцию по формату actions.
+        риски и рекомендации анализа, текст договора, состояние workflow,
+        инструкцию по формату actions.
         """
-        parts: list[str] = []
-
-        # Метаданные документа
-        parts.append("# Контекст документа")
-        parts.append(f"- Document ID: {context.document_id}")
-        if context.document_type:
-            parts.append(f"- Тип документа: {context.document_type}")
-        if context.document_metadata:
-            meta_items = ", ".join(f"{k}: {v}" for k, v in context.document_metadata.items())
-            parts.append(f"- Метаданные: {meta_items}")
-
-        # Стадия и роль
-        parts.append(f"\n# Стадия: {context.stage}")
-        if context.user_role:
-            parts.append(f"# Роль пользователя: {context.user_role}")
-
-        # Результаты анализа: риски и рекомендации с сутью, а не одними названиями
-        risks = [f for f in context.findings if f.get("kind") == "risk"]
-        recommendations = [f for f in context.findings if f.get("kind") == "recommendation"]
-        other = [f for f in context.findings if f.get("kind") not in ("risk", "recommendation")]
-        if risks:
-            parts.append(f"\n# Риски по результатам анализа ({len(risks)})")
-            for finding in risks[:12]:
-                line = f"- [{finding.get('severity', 'info')}] {finding.get('title', '—')}"
-                if finding.get("section"):
-                    line += f" (раздел: {finding['section']})"
-                if finding.get("description"):
-                    line += f": {str(finding['description'])[:400]}"
-                parts.append(line)
-        if recommendations:
-            parts.append(f"\n# Рекомендации ({len(recommendations)})")
-            for finding in recommendations[:8]:
-                line = f"- [{finding.get('severity', 'info')}] {finding.get('title', '—')}"
-                if finding.get("description"):
-                    line += f": {str(finding['description'])[:300]}"
-                parts.append(line)
-        if other:
-            parts.append("\n# Findings")
-            for finding in other[:5]:
-                severity = finding.get("severity", "info")
-                title = finding.get("title", finding.get("description", "—"))
-                parts.append(f"- [{severity}] {title}")
-
-        # Сам договор — последним большим блоком, чтобы помощник отвечал по
-        # конкретным пунктам, а не типовыми советами.
-        if context.document_text:
-            parts.append("\n# Текст договора")
-            parts.append(context.document_text)
+        parts: list[str] = [render_document_context(context)]
 
         # Workflow state
         if context.workflow_state:
