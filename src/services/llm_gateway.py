@@ -29,6 +29,23 @@ from ..utils.rate_limiter import get_global_rate_limiter, RateLimitExceeded
 _LLM_THREAD_POOL = ThreadPoolExecutor(max_workers=32, thread_name_prefix="llm")
 
 
+class LLMOutputTruncated(ValueError):
+    """Модель упёрлась в max_tokens и JSON оборвался на середине.
+
+    Повторять тот же запрос бессмысленно — ответ оборвётся снова на том же
+    месте; нужен больший лимит. Найдено в сквозном прогоне демо: список
+    правок к договору не влезал в 4000 токенов, парсер падал на
+    «Unterminated string», и клиент получал ноль правок без объяснений.
+    """
+
+    def __init__(self, max_tokens: int):
+        super().__init__(f"LLM output truncated at max_tokens={max_tokens}")
+        self.max_tokens = max_tokens
+
+
+MAX_OUTPUT_TOKENS_CEILING = 32000
+
+
 class LLMGateway:
     """Unified gateway for all LLM providers"""
 
@@ -55,6 +72,7 @@ class LLMGateway:
         self._initialize_client()
         self.total_input_tokens = 0
         self.total_output_tokens = 0
+        self._last_finish_reason: Optional[str] = None
 
         # Rate limiting
         self.use_rate_limiter = True
@@ -244,16 +262,22 @@ class LLMGateway:
             reraise=True,
         ):
             with attempt:
-                return self._call_once(
-                    prompt=prompt,
-                    system_prompt=system_prompt,
-                    response_format=response_format,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    use_cache=use_cache,
-                    db_session=db_session,
-                    **kwargs,
-                )
+                try:
+                    return self._call_once(
+                        prompt=prompt,
+                        system_prompt=system_prompt,
+                        response_format=response_format,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        use_cache=use_cache,
+                        db_session=db_session,
+                        **kwargs,
+                    )
+                except LLMOutputTruncated as truncated:
+                    # Следующая попытка — с удвоенным лимитом, а не тем же самым.
+                    max_tokens = min(truncated.max_tokens * 2, MAX_OUTPUT_TOKENS_CEILING)
+                    logger.warning(f"Retrying LLM call with max_tokens={max_tokens} after truncated output")
+                    raise
 
         raise RuntimeError("LLM call exhausted retries without returning a response")
 
@@ -308,6 +332,7 @@ class LLMGateway:
         # Rate limiting check
         estimated_tokens = estimated_input_tokens + max_tokens
         estimated_cost = self._estimate_cost(estimated_tokens)
+        self._last_finish_reason = None
 
         if self.use_rate_limiter and self.rate_limiter:
             try:
@@ -324,6 +349,7 @@ class LLMGateway:
 
         # Парсинг JSON если требуется (applies to both rate-limited and non-rate-limited paths)
         if response_format == "json":
+            truncated = self._last_finish_reason == "length"
             try:
                 # Clean markdown code blocks if present
                 cleaned_response = response.strip()
@@ -339,6 +365,9 @@ class LLMGateway:
 
                 return json.loads(cleaned_response)
             except json.JSONDecodeError as e:
+                if truncated:
+                    logger.error(f"JSON response cut off at max_tokens={max_tokens}: {e}")
+                    raise LLMOutputTruncated(max_tokens) from e
                 logger.error(f"Failed to parse JSON response: {e}")
                 logger.debug(f"Raw response (truncated): {response[:500]}")
 
@@ -501,7 +530,11 @@ class LLMGateway:
             self.total_output_tokens += response.usage.completion_tokens
             logger.debug(f"Tokens used: {response.usage.prompt_tokens} input, {response.usage.completion_tokens} output")
 
-        return response.choices[0].message.content
+        choice = response.choices[0]
+        self._last_finish_reason = getattr(choice, "finish_reason", None)
+        if self._last_finish_reason == "length":
+            logger.warning(f"LLM output hit max_tokens={max_tokens} (finish_reason=length)")
+        return choice.message.content
 
     def _call_yandex(self, prompt: str, system_prompt: Optional[str], temperature: float, max_tokens: int, **kwargs) -> str:
         """Вызов YandexGPT API"""
