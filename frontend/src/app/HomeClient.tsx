@@ -28,7 +28,6 @@ export default function Home() {
   const [loginLoading, setLoginLoading] = useState(false)
 
   useEffect(() => {
-    setLegalAccepted(localStorage.getItem('contract_ai_legal_consent_v1') === 'accepted')
     const token = useAuthStore.getState().accessToken
     if (token) {
       router.replace('/dashboard')
@@ -264,6 +263,7 @@ export default function Home() {
                       type="checkbox"
                       checked={legalAccepted}
                       onChange={(event) => setLegalAccepted(event.target.checked)}
+                      required
                       className="mt-1 h-4 w-4 rounded border-stone-500 text-primary-600 focus:ring-primary-500"
                     />
                     <span>

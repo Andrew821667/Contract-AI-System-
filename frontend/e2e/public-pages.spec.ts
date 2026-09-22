@@ -8,6 +8,15 @@ test.describe('Публичные страницы', () => {
     await expect(page.getByRole('link', { name: /войти|вход|login/i })).toBeVisible()
   })
 
+  test('Согласие на главной пользователь отмечает сам', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('contract_ai_legal_consent_v1', 'accepted')
+    })
+    await page.goto('/')
+
+    await expect(page.getByRole('checkbox', { name: /принимаю/i })).not.toBeChecked()
+  })
+
   test('Страница логина отображает форму', async ({ page }) => {
     await page.goto('/login')
     await expect(page.locator('input[type="text"], input[type="email"]')).toBeVisible()
