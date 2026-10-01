@@ -11,6 +11,7 @@ import Card from '@/components/ui/Card'
 import BrandLockup from '@/components/BrandLockup'
 import BrandMark from '@/components/BrandMark'
 import { contractFaq } from '@/content/contractSeo'
+import { PASSWORD_RESET_HREF } from '@/utils/demoPrefill'
 
 const freeLimits = [
   { value: 'По заявке', label: 'персональный доступ' },
@@ -294,10 +295,9 @@ export default function Home() {
                 </form>
 
                 <div className="mt-4 text-center">
+                  {/* Не только Telegram: без VPN он открывается не у всех. */}
                   <a
-                    href="https://t.me/legal_ai_helper_new_bot"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href={PASSWORD_RESET_HREF}
                     className="text-sm text-slate-600 hover:text-primary-700 hover:underline"
                   >
                     Забыли пароль?

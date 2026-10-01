@@ -8,6 +8,7 @@ import Card from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
 import BrandLockup from '@/components/BrandLockup'
 import { pricingFaq } from '@/content/contractSeo'
+import { demoRequestHref } from '@/utils/demoPrefill'
 import { DEMO_MODEL_NAME, PAID_TOP_MODEL_NAME } from '@/utils/demoModel'
 
 export default function PricingPage() {
@@ -326,8 +327,8 @@ export default function PricingPage() {
                         Запросить демо
                       </Button>
                     ) : (
-                      <Button variant={plan.popular ? 'primary' : 'outline'} className="w-full" href="/#login">
-                        Оформить
+                      <Button variant={plan.popular ? 'primary' : 'outline'} className="w-full" href={demoRequestHref(plan.name)}>
+                        Запросить доступ
                       </Button>
                     )}
                   </div>
@@ -374,8 +375,8 @@ export default function PricingPage() {
                     )}
 
                     <div className="mt-4">
-                      <Button variant="outline" className="w-full" href="/#login">
-                        Оформить
+                      <Button variant="outline" className="w-full" href={demoRequestHref(`Пакет «${pack.name}»`)}>
+                        Запросить доступ
                       </Button>
                     </div>
                   </Card>
