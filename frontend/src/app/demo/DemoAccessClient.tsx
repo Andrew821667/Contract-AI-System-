@@ -7,6 +7,7 @@ import { ArrowRightIcon, CheckCircleIcon } from '@heroicons/react/24/outline'
 import BrandLockup from '@/components/BrandLockup'
 import DemoModelNotice from '@/components/DemoModelNotice'
 import api from '@/services/api'
+import { demoTaskPrefill } from '@/utils/demoPrefill'
 
 type RequestForm = {
   name: string
@@ -26,7 +27,8 @@ export default function DemoAccessClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const token = searchParams.get('token')?.trim() || ''
-  const [form, setForm] = useState(initialForm)
+  // Пришли с кнопки тарифа или «Забыли пароль?» — подставляем, о чём заявка.
+  const [form, setForm] = useState<RequestForm>(() => ({ ...initialForm, task: demoTaskPrefill(searchParams) }))
   const [activation, setActivation] = useState({ name: '', email: '' })
   const [activationConsent, setActivationConsent] = useState(false)
   const [loading, setLoading] = useState(false)
