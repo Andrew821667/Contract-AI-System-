@@ -35,7 +35,7 @@ scipy==1.11.4
 
 # Document processing
 python-docx==1.1.0
-pypdf>=4.0.0
+pypdf>=6.19.0  # 6.17–6.19 закрывают DoS на подготовленных PDF (память и время разбора)
 pdfplumber==0.10.3
 reportlab==4.0.9  # PDF generation
 lxml==5.1.0
