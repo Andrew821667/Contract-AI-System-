@@ -1,15 +1,17 @@
 #!/bin/sh
 # Регулярное обновление БЗ КС. Cron в ночном окне. Статус → JSON (для админки;
 # Telegram с legalai заблокирован). Single-instance lock.
-#   1) edition-diff: изменённые редакции → перекачка → манифест changed_docids
-#   2) добор новых документов (skip-existing)
+#   1) кодексы: перекачка и сравнение текста → изменённые → манифест changed_docids
+#   2) добор новых документов ФЗ и ФКЗ (skip-existing, архивные редакции — тоже skip)
 #   3) ingest: новые (skip) + изменённые (--update --only-docids)
 #   4) embed: новые (resume) + изменённые (--refresh --only-docids)
 #   4b) fts-build: пересборка лексического FTS гибрида из ChromaDB
 #   5) relink → статус
 #   6) рестарт бэкенда (KeepAlive) → новые/вычищенные доки в живой in-memory индекс
-CT=/Users/legalai/projects/OpenClaw_consultant-tools
 KS=/Users/legalai/projects/Contract-AI-System-
+# Инструменты выгрузки из К+ — часть репозитория (tools/consultant, раньше
+# отдельный OpenClaw_consultant-tools); своё окружение tools/consultant/.venv.
+CT=$KS/tools/consultant
 DATA=/Users/legalai/consultant-data
 LOG=$DATA/kb_update.log
 STATUS=$DATA/kb_update_status.json
@@ -28,15 +30,22 @@ fail() { echo "$(date) FAIL: $1" >> $LOG; status error "$1"; exit 1; }
 
 echo "=== $(date) KB UPDATE START ===" >> $LOG
 
-# 1. edition-diff (изменённые редакции перекачиваются, doc_id → манифест)
-cd "$CT" || fail "consultant-tools недоступен"
-status running "сверка редакций (edition-diff)"
-$PYC -m modules.edition_check --category all >> $LOG 2>&1 || echo "warn: edition_check" >> $LOG
+# 1. Новые редакции кодексов. В К+ новая редакция кодекса — под тем же
+#    номером документа: добор её не видит. Прежняя сверка по дате в облачном
+#    интерфейсе К+ ослепла после смены вёрстки (с июля 2026 — «изменено 0»
+#    каждую неделю, все 23 кодекса застряли в редакциях на 30.05.2026) и
+#    отнимала ~4,5 ч прогона. Теперь кодекс перекачивается и текст
+#    сравнивается с сохранённым; изменённые → манифест для точечного
+#    обновления графа и векторов (шаги 3b и 4).
+cd "$CT" || fail "инструменты К+ недоступны ($CT)"
+status running "новые редакции кодексов"
+$PYC modules/kodeksy.py --refresh >> $LOG 2>&1 || echo "warn: kodeksy refresh — больше половины кодексов не скачалось" >> $LOG
 CHANGED=$( [ -s "$MANIFEST" ] && tr '\n' ',' < "$MANIFEST" | sed 's/,$//' || echo "" )
 
 # 2. добор НОВЫХ документов (skip-existing)
 status running "добор новых документов"
-$PYC modules/federal_laws.py --all --only fz --skip-amendments >> $LOG 2>&1 || echo "warn: fz" >> $LOG
+# ФЗ и ФКЗ (раньше --only fz: 27 ФКЗ не обновлялись с мая 2026).
+$PYC modules/federal_laws.py --all --skip-amendments >> $LOG 2>&1 || echo "warn: fz/fkz" >> $LOG
 $PYC -m modules.decrees >> $LOG 2>&1 || echo "warn: decrees" >> $LOG
 
 # 2a. добор СУДЕБНОЙ ПРАКТИКИ.
@@ -54,9 +63,9 @@ $PYC -m modules.court_practice --organ "Верховный Суд РФ" --slug v
 $PYC -m modules.court_practice --organ "Конституционный Суд РФ" --slug ks_post --title-filter "^Постановление" \
      >> $LOG 2>&1 || echo "warn: court ks_post" >> $LOG
 
-# 2b. дедуп редакций: у каждой редакции в К+ свой doc_id, добор качает новую
-#     редакцию как НОВЫЙ файл (edition_check по старому id смену не видит) —
-#     без этого шага в сторах копятся устаревшие редакции законов.
+# 2b. дедуп редакций: у редакции закона в К+ свой doc_id, добор качает новую
+#     редакцию как НОВЫЙ файл — без этого шага в сторах копятся устаревшие
+#     редакции законов. Унесённые в архив добор больше не перекачивает.
 cd "$KS" || fail "КС недоступна"
 status running "дедуп редакций"
 $PYK scripts/kb_dedup_editions.py >> $LOG 2>&1 || echo "warn: dedup_editions" >> $LOG
