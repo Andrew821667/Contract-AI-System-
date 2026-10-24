@@ -15,9 +15,11 @@
   E3 есть структура: >= 1 нода типа article (для НПА)
   E4 не TOC-заглушка: доля article-нод от общего числа нод адекватна
   E5 нет маркеров недоступности ('доступен по расписанию', 'некоммерческая версия')
+     в коротком документе; в большом — W3 (усечена отдельная статья, а не весь акт)
   E6 frontmatter распознан: document_type определён, title непустой
   W1 metadata.source_url присутствует (нужен для граф-рёбер)
   W2 metadata.number (номер ФЗ/кодекса) присутствует
+  W3 маркер недоступности в большом документе (см. E5)
 """
 from __future__ import annotations
 
@@ -37,11 +39,17 @@ BLOCKERS = (
     'коммерческой версии консультантплюс',
     'Войдите в систему и используйте',
 )
+# Заглушка К+ — страница в сотни символов (113 штук в прогоне 24.10.2026:
+# 737–863 симв, ни одной статьи). Маркер в документе больше порога — не
+# заглушка: в НК ч.2 К+ усекает две длинные статьи («полный текст — в
+# коммерческой версии»), в КТМ «по расписанию» — сам текст закона. Отбраковка
+# таких кодексов оставляла в графе прежнюю редакцию.
+STUB_MAX_CHARS = 20000
 
 
 @dataclass
 class ValidationIssue:
-    code: str                # E1..E6 / W1..W2
+    code: str                # E1..E6 / W1..W3
     severity: str            # 'error' | 'warning'
     message: str
 
@@ -117,8 +125,13 @@ def validate_parse_result(parse_result, body_text: str,
     low = (body_text or "").lower()
     for marker in BLOCKERS:
         if marker.lower() in low:
-            rep.issues.append(ValidationIssue('E5', 'error',
-                f'маркер недоступности: «{marker}»'))
+            if rep.body_chars < STUB_MAX_CHARS:
+                rep.issues.append(ValidationIssue('E5', 'error',
+                    f'маркер недоступности: «{marker}»'))
+            else:
+                rep.issues.append(ValidationIssue('W3', 'warning',
+                    f'маркер недоступности «{marker}» в документе '
+                    f'{rep.body_chars:,} симв — возможна усечённая статья'))
             break
 
     # E2 — объём тела
