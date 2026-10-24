@@ -171,9 +171,10 @@ def test_phase2_finds_article_in_its_part_of_code(test_db):
     assert _node(test_db, part2.id, "article", "506").id in targets
 
 
-def test_phase2_fz_number_exact_and_unambiguous(test_db):
-    """«N 425-ФЗ» ведёт в закон N 425-ФЗ и не цепляет N 4-ФЗ (было ILIKE
-    '%ФЗ-4%'), а номер, который носят два закона разных лет, без даты не
+def test_phase2_links_fz_by_date_and_number(test_db):
+    """ФЗ связывается по дате и номеру: «от 28.12.2013 N 425-ФЗ» ведёт в
+    свой закон и не цепляет N 4-ФЗ (было ILIKE '%ФЗ-4%'); «от 06.04.2011
+    N 63-ФЗ» — в закон 2011 года, а не 2002-го; номер без даты не
     связывается вовсе."""
     importer = ConsultantImporter(db=test_db)
     fz425 = _ingest(importer, LAW, "Федеральный закон от 28.12.2013 N 425-ФЗ",
@@ -185,10 +186,12 @@ def test_phase2_fz_number_exact_and_unambiguous(test_db):
     fz63b = _ingest(importer, LAW, "Федеральный закон от 06.04.2011 N 63-ФЗ",
                     "https://www.consultant.ru/document/cons_doc_LAW_112701/")
     law_text = LAW.replace("по правилам Гражданского кодекса",
-                           "по правилам Федерального закона N 425-ФЗ и Федерального закона N 63-ФЗ")
+                           "по правилам Федерального закона от 28.12.2013 N 425-ФЗ.\n"
+                           "2. Подпись — по Федеральному закону от 06.04.2011 N 63-ФЗ.\n"
+                           "3. Иное — по Федеральному закону N 4-ФЗ")
     law = _ingest(importer, law_text, "Федеральный закон N 777-ФЗ", LAW_URL)
     codes = {e.norm_code for e in test_db.query(GraphEntity).filter(GraphEntity.entity_type == "norm_ref")}
-    assert {"ФЗ-425", "ФЗ-63"} <= codes
+    assert {"ФЗ-425", "ФЗ-63", "ФЗ-4"} <= codes
     importer._docid_to_gdoc = {"777": law.id}
 
     importer.resolve_cross_document_edges()
@@ -196,5 +199,5 @@ def test_phase2_fz_number_exact_and_unambiguous(test_db):
     target_docs = {n.document_id for n in test_db.query(GraphNode).join(
         GraphEdge, GraphEdge.target_id == GraphNode.id).filter(
         GraphEdge.edge_type == "regulated_by", GraphEdge.source_id.in_(law_nodes))}
-    assert fz425.id in target_docs
-    assert not target_docs & {fz4.id, fz63a.id, fz63b.id}
+    assert {fz425.id, fz63b.id} <= target_docs
+    assert not target_docs & {fz4.id, fz63a.id}
