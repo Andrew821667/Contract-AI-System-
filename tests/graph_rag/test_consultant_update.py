@@ -149,3 +149,23 @@ def test_phase2_prefers_code_over_law_mentioning_it(test_db):
     assert _node(test_db, code.id, "article", "330").id in targets
     intro_nodes = {n.id for n in test_db.query(GraphNode).filter(GraphNode.document_id == intro.id)}
     assert not targets & intro_nodes
+
+
+def test_phase2_finds_article_in_its_part_of_code(test_db):
+    """«ст. 506 ГК РФ» — статья второй части: ищется во всех частях кодекса."""
+    importer = ConsultantImporter(db=test_db)
+    _ingest(importer, CODE_V1, "Гражданский кодекс РФ часть 1", CODE_URL)
+    part2 = _ingest(importer, """ГРАЖДАНСКИЙ КОДЕКС РОССИЙСКОЙ ФЕДЕРАЦИИ (ЧАСТЬ ВТОРАЯ)
+
+Статья 506. Договор поставки
+1. По договору поставки поставщик обязуется передать товары покупателю.
+""", "Гражданский кодекс РФ часть 2", "https://www.consultant.ru/document/cons_doc_LAW_9027/")
+    law_text = LAW.replace("по правилам Гражданского кодекса", "по правилам ст. 506 ГК РФ")
+    law = _ingest(importer, law_text, "Федеральный закон N 777-ФЗ", LAW_URL)
+    importer._docid_to_gdoc = {"777": law.id}
+
+    importer.resolve_cross_document_edges()
+    law_nodes = {n.id for n in test_db.query(GraphNode).filter(GraphNode.document_id == law.id)}
+    targets = {e.target_id for e in test_db.query(GraphEdge).filter(
+        GraphEdge.edge_type == "regulated_by", GraphEdge.source_id.in_(law_nodes))}
+    assert _node(test_db, part2.id, "article", "506").id in targets

@@ -429,15 +429,17 @@ class ConsultantImporter:
 
         # Карты целей из ВСЕЙ БД
         docid_all: Dict[str, str] = {}
-        normcode_all: Dict[str, str] = {}
+        # norm_code → документы: у кодекса все части (ГК — 4, НК — 2; нумерация
+        # статей сквозная), у прочих — один документ, как раньше
+        normcode_all: Dict[str, List[str]] = {}
         # (вид, дата, номер) → gdoc подзаконного акта (для линкера (В))
         subord_by_req: Dict[tuple, str] = {}
-        # Порядок решает, кому достанется код (setdefault ниже): «ГК РФ» матчит
-        # и сам ГК, и ФЗ «О введении в действие … Гражданского кодекса». Раньше
-        # выигрывал ГК — его залили первым; после замены редакции новый ГК —
-        # последний, и ссылки «ст. 330 ГК РФ» ушли бы в закон о введении.
-        # Поэтому кодексы — вперёд (части по порядку: ч.1 раньше ч.2), прочие —
-        # по времени загрузки, как было.
+        # Порядок решает, кому достанется код: «ГК РФ» матчит и сам ГК, и ФЗ
+        # «О введении в действие … Гражданского кодекса». Раньше выигрывал ГК —
+        # его залили первым; после замены редакции новый ГК — последний, и
+        # ссылки «ст. 330 ГК РФ» ушли бы в закон о введении. Поэтому кодексы —
+        # вперёд (части по порядку: ч.1 раньше ч.2), прочие — по времени
+        # загрузки, как было.
         docs = (db.query(GraphDocument)
                 .filter(GraphDocument.layer == LayerType.NPA.value,
                         GraphDocument.status == 'active')
@@ -450,8 +452,8 @@ class ConsultantImporter:
             if mm:
                 docid_all[mm.group(1)] = d.id
             nc = _normcode_from_title(d.title)
-            if nc:
-                normcode_all.setdefault(nc, d.id)
+            if nc and (is_code(d) or nc not in normcode_all):
+                normcode_all.setdefault(nc, []).append(d.id)
             # подзаконные акты → карта по реквизитам (из заголовка)
             if (d.document_type in ('government_decree', 'government_order',
                                     'presidential_decree') and d.title):
@@ -552,12 +554,14 @@ class ConsultantImporter:
             code = ent.norm_code or ''
             if code not in targets_for:
                 targets_for[code] = [(nc, tg) for nc, tg in normcode_all.items() if nc in code]
-            for norm_code, target_gdoc in targets_for[code]:
+            for norm_code, target_gdocs in targets_for[code]:
                 tgt = None
                 if ent.norm_article:
-                    tgt = (_by_number(target_gdoc, ent.norm_article)
-                           or _by_number(target_gdoc, f'ст. {ent.norm_article}'))
-                _add_edge(ent.node_id, tgt or _root(target_gdoc), EdgeType.REGULATED_BY.value,
+                    # статья — в той части кодекса, где она есть (ст. 506 ГК — ч.2)
+                    tgt = next((t for g in target_gdocs
+                                for t in (_by_number(g, ent.norm_article),
+                                          _by_number(g, f'ст. {ent.norm_article}')) if t), None)
+                _add_edge(ent.node_id, tgt or _root(target_gdocs[0]), EdgeType.REGULATED_BY.value,
                           float(ent.confidence or 0.8), ent.raw_text,
                           f'norm_ref → {norm_code} ст.{ent.norm_article}')
 
