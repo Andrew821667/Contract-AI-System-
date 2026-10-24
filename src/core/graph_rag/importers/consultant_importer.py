@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from ..enums import EdgeType, EdgeClass, EdgeStatus, ExtractedBy, LayerType
-from ..models import GraphDocument, GraphEdge
+from ..models import CandidateEdge, GraphDocument, GraphEdge, GraphEntity, GraphNode, NodeVersion
 from ..parser import NPAGraphParser
 from .validator import validate_parse_result, ValidationReport
 
@@ -74,6 +74,10 @@ TITLE_TO_NORMCODE = [
     (re.compile(r'кодекс\w*\s+.*административн', re.I), 'КоАП РФ'),
     (re.compile(r'административн\w+\s+правонаруш', re.I), 'КоАП РФ'),
 ]
+
+# Дата в реквизитах: «Федеральный закон от 13.07.2015 N 218-ФЗ».
+_DATE_RE = re.compile(r'(\d{2}\.\d{2}\.\d{4})')
+_FZ_DATE_RE = re.compile(r'от\s+(\d{2}\.\d{2}\.\d{4})\s+N')
 
 # Markdown inline-ссылка на документ КП. Форматы в тексте К+:
 #   [текст](/document/cons_doc_LAW_<id>/<hash>/)
@@ -177,6 +181,7 @@ class ImportReport:
     ingested: int = 0
     skipped: int = 0
     replaced: int = 0
+    inbound_restored: int = 0
     failed: int = 0
     validation_failed: int = 0
     cross_edges_created: int = 0
@@ -185,7 +190,8 @@ class ImportReport:
     def log_summary(self):
         logger.info('=' * 64)
         logger.info(f'ИТОГО: файлов={self.total_files}, ingested={self.ingested}, '
-                    f'skip={self.skipped}, replaced={self.replaced}, fail={self.failed}, '
+                    f'skip={self.skipped}, replaced={self.replaced}, '
+                    f'входящих-перенесено={self.inbound_restored}, fail={self.failed}, '
                     f'валидация-fail={self.validation_failed}, '
                     f'cross-рёбра={self.cross_edges_created}')
 
@@ -221,31 +227,94 @@ class ConsultantImporter:
         return files
 
     # ── Фаза 1 ─────────────────────────────────────────────────
-    def _purge_by_source(self, source_url: str) -> bool:
+    def _node_paths(self, gdoc_id: str) -> Dict[str, tuple]:
+        """node_id → адрес узла в документе: цепочка (тип, номер) от корня.
+
+        У новой редакции другие id узлов, а адрес тот же: «статья 330, пункт 2»
+        остаётся собой. По адресу входящие ссылки переносятся на новую редакцию.
+        """
+        rows = (self.pipeline.db.query(GraphNode.id, GraphNode.parent_id,
+                                       GraphNode.node_type, GraphNode.number)
+                .filter(GraphNode.document_id == gdoc_id)
+                .order_by(GraphNode.level, GraphNode.position).all())
+        paths: Dict[str, tuple] = {}
+        for nid, parent_id, node_type, number in rows:  # родитель раньше детей (level)
+            paths[nid] = paths.get(parent_id, ()) + ((node_type, (number or '').strip()),)
+        return paths
+
+    def _purge_by_source(self, source_url: str) -> Optional[List[dict]]:
         """Полностью удалить документ и его граф по source_file (для REPLACE).
 
-        Удаляет рёбра (ссылающиеся на ноды документа), entities, ноды и сам
-        документ. Возвращает True, если что-то удалено.
+        Удаляет рёбра (ссылающиеся на ноды документа), entities, версии нод,
+        ноды и сам документ. Возвращает None, если документа не было, иначе —
+        входящие рёбра из ДРУГИХ документов (адрес цели + поля ребра): их
+        создавала Фаза 2 и прямой линкер по всему графу, а повторный прогон по
+        одному документу их не восстановит — _restore_inbound переносит их на
+        новую редакцию.
         """
         db = self.pipeline.db
         doc = (db.query(GraphDocument)
                .filter(GraphDocument.source_file == source_url).first())
         if not doc:
-            return False
+            return None
+        paths = self._node_paths(doc.id)
+        own = db.query(GraphNode.id).filter(GraphNode.document_id == doc.id)
+        inbound = []
+        for e in (db.query(GraphEdge)
+                  .join(GraphNode, GraphNode.id == GraphEdge.source_id)
+                  .filter(GraphEdge.target_id.in_(own), GraphNode.document_id != doc.id)):
+            inbound.append({
+                'source_id': e.source_id, 'target_path': paths.get(e.target_id, ()),
+                'edge_type': e.edge_type, 'edge_class': e.edge_class, 'status': e.status,
+                'evidence': e.evidence, 'rationale': e.rationale, 'confidence': e.confidence,
+                'extracted_by': e.extracted_by, 'valid_from': e.valid_from, 'valid_to': e.valid_to,
+            })
+        # подзапрос, а не список id: у кодекса десятки тысяч нод
+        for model, cols in ((GraphEdge, ('source_id', 'target_id')),
+                            (CandidateEdge, ('source_id', 'target_id')),
+                            (NodeVersion, ('node_id',))):
+            for col in cols:
+                db.query(model).filter(getattr(model, col).in_(own)).delete(synchronize_session=False)
         from sqlalchemy import text as _sql
-        nid_q = db.query(GraphNode.id).filter(GraphNode.document_id == doc.id).subquery()
-        node_ids = [r[0] for r in db.query(nid_q.c.id).all()]
-        if node_ids:
-            # рёбра, где нода документа — источник или цель
-            db.query(GraphEdge).filter(GraphEdge.source_id.in_(node_ids)).delete(synchronize_session=False)
-            db.query(GraphEdge).filter(GraphEdge.target_id.in_(node_ids)).delete(synchronize_session=False)
-            # entities нод документа (таблица graph_entities, FK node_id)
-            db.execute(_sql("DELETE FROM graph_entities WHERE node_id IN (SELECT id FROM graph_nodes WHERE document_id=:d)"), {"d": doc.id})
-            db.query(GraphNode).filter(GraphNode.document_id == doc.id).delete(synchronize_session=False)
+        db.execute(_sql("DELETE FROM graph_entities WHERE node_id IN (SELECT id FROM graph_nodes WHERE document_id=:d)"), {"d": doc.id})
+        db.query(GraphNode).filter(GraphNode.document_id == doc.id).delete(synchronize_session=False)
         db.query(GraphDocument).filter(GraphDocument.id == doc.id).delete(synchronize_session=False)
         db.flush()
-        logger.info(f'PURGE: удалён старый документ {doc.id} ({len(node_ids)} нод) для замены')
-        return True
+        logger.info(f'PURGE: удалён старый документ {doc.id} ({len(paths)} нод, '
+                    f'входящих рёбер к переносу {len(inbound)}) для замены')
+        return inbound
+
+    def _restore_inbound(self, inbound: List[dict], new_gdoc_id: str) -> int:
+        """Перевесить входящие рёбра на узлы новой редакции по адресу.
+
+        Узла с тем же адресом нет (пункт исключён, статьи перенумерованы) —
+        ребро уходит на ближайшего сохранившегося предка, в крайнем случае на
+        корень документа: ссылка на кодекс важнее точной статьи.
+        """
+        by_path: Dict[tuple, str] = {}
+        root = None
+        for nid, path in self._node_paths(new_gdoc_id).items():
+            by_path.setdefault(path, nid)  # дубль адреса — первый по порядку
+            if root is None and path and path[-1][0] == 'document':
+                root = nid
+        restored = 0
+        seen = set()
+        for spec in inbound:
+            path = spec['target_path']
+            while path and path not in by_path:
+                path = path[:-1]
+            target = by_path[path] if path else root
+            if target is None:
+                continue
+            key = (spec['source_id'], target, spec['edge_type'])
+            if key in seen:
+                continue  # два старых ребра свелись к одному узлу
+            seen.add(key)
+            fields = {k: v for k, v in spec.items() if k != 'target_path'}
+            self.pipeline.repo.edges.create(actor='importer', target_id=target, **fields)
+            restored += 1
+        self.pipeline.repo.commit()
+        return restored
 
     def import_all(self, kinds: Optional[List[str]] = None,
                    dry_run: bool = False, limit: Optional[int] = None,
@@ -303,16 +372,20 @@ class ConsultantImporter:
             # Ingest (source_file = source_url, чтобы хранить doc_id)
             source_url = (parse_result.metadata or {}).get('source_url') or str(path)
             # Режим обновления: если документ уже есть — удалить старую версию
-            # целиком (ноды/рёбра/entities/документ) перед перезаливкой.
+            # целиком (ноды/рёбра/entities/документ) перед перезаливкой, а
+            # ссылки на неё из других документов перенести на новую.
+            inbound = None
             if update:
-                purged = self._purge_by_source(source_url)
-                if purged:
+                inbound = self._purge_by_source(source_url)
+                if inbound is not None:
                     rep.replaced += 1
             result = self.pipeline._ingest(parse_result, source_file=source_url)
             if result.extraction_warnings and 'уже загружен' in ' '.join(result.extraction_warnings):
                 rep.skipped += 1
             else:
                 rep.ingested += 1
+                if inbound:
+                    rep.inbound_restored += self._restore_inbound(inbound, result.document.id)
 
             # Карты для Фазы 2
             gdoc_id = result.document.id
@@ -324,12 +397,18 @@ class ConsultantImporter:
                 self._normcode_to_gdoc[nc] = gdoc_id
 
         # ── Фаза 2 ──
-        if not dry_run and self.pipeline is not None and not no_phase2:
-            rep.cross_edges_created = self.resolve_cross_document_edges()
-            self.pipeline.repo.commit()
+        if dry_run or self.pipeline is None:
+            pass
         elif no_phase2:
             self.pipeline.repo.commit()
             logger.info('Фаза 2 пропущена (--no-phase2)')
+        elif not self._docid_to_gdoc:
+            # Без источников resolve_cross_document_edges взял бы ВСЕ НПА графа —
+            # это режим --relink, а не инкрементальный прогон.
+            logger.info('Фаза 2: в прогоне не залито ни одного документа — пропуск')
+        else:
+            rep.cross_edges_created = self.resolve_cross_document_edges()
+            self.pipeline.repo.commit()
 
         rep.log_summary()
         return rep
@@ -354,18 +433,38 @@ class ConsultantImporter:
 
         # Карты целей из ВСЕЙ БД
         docid_all: Dict[str, str] = {}
-        normcode_all: Dict[str, str] = {}
+        # norm_code кодекса → все его части (ГК — 4, НК — 2; нумерация статей
+        # сквозная). ФЗ — по реквизитам (дата, «ФЗ-N»): номер ФЗ без года
+        # неоднозначен (в базе 235 из 391 номеров у нескольких законов, а в
+        # жизни — почти у всех), 97% ссылок на ФЗ дату содержат.
+        normcode_all: Dict[str, List[str]] = {}
+        fz_by_req: Dict[tuple, str] = {}
         # (вид, дата, номер) → gdoc подзаконного акта (для линкера (В))
         subord_by_req: Dict[tuple, str] = {}
-        for d in (db.query(GraphDocument)
-                  .filter(GraphDocument.layer == LayerType.NPA.value,
-                          GraphDocument.status == 'active')):
+        # Порядок решает, кому достанется код: «ГК РФ» матчит и сам ГК, и ФЗ
+        # «О введении в действие … Гражданского кодекса». Раньше выигрывал ГК —
+        # его залили первым; после замены редакции новый ГК — последний, и
+        # ссылки «ст. 330 ГК РФ» ушли бы в закон о введении. Поэтому кодексы —
+        # вперёд (части по порядку: ч.1 раньше ч.2), прочие — по времени
+        # загрузки, как было.
+        docs = (db.query(GraphDocument)
+                .filter(GraphDocument.layer == LayerType.NPA.value,
+                        GraphDocument.status == 'active')
+                .order_by(GraphDocument.created_at).all())
+        # kodeks — из frontmatter выгрузки К+, codex — тип парсера по заголовку
+        is_code = lambda d: d.document_type in ('kodeks', 'codex')  # noqa: E731
+        docs.sort(key=lambda d: (not is_code(d), (d.title or '') if is_code(d) else ''))
+        for d in docs:
             mm = re.search(r'cons_doc_LAW_(\d+)', d.source_file or '')
             if mm:
                 docid_all[mm.group(1)] = d.id
             nc = _normcode_from_title(d.title)
-            if nc:
-                normcode_all.setdefault(nc, d.id)
+            if nc and is_code(d):
+                normcode_all.setdefault(nc, []).append(d.id)
+            elif nc and nc.startswith('ФЗ-'):
+                dm = _FZ_DATE_RE.search(d.title or '')
+                if dm:
+                    fz_by_req.setdefault((nc, dm.group(1)), d.id)
             # подзаконные акты → карта по реквизитам (из заголовка)
             if (d.document_type in ('government_decree', 'government_order',
                                     'presidential_decree') and d.title):
@@ -382,8 +481,15 @@ class ConsultantImporter:
         src_node_ids = set()
         roots_by_gdoc: Dict[str, str] = {}
         nodes_by_gdoc: Dict[str, list] = {}
+        # Ноды — запросом только по document_id, архив отсекается в Python.
+        # В прод-SQLite нет статистики индексов (ANALYZE), и с условием
+        # is_archived=0 (repo.nodes.get_by_document/find_by_number) планировщик
+        # берёт ix_graph_nodes_is_archived — перебор ВСЕХ нод графа с текстами
+        # (334 тыс.) на каждый вызов: Фаза 2 по 23 кодексам не кончалась и за час.
         for gd in src_gdocs:
-            nodes = repo.nodes.get_by_document(gd)
+            nodes = [n for n in (db.query(GraphNode).filter(GraphNode.document_id == gd)
+                                 .order_by(GraphNode.level, GraphNode.position))
+                     if not n.is_archived]
             nodes_by_gdoc[gd] = nodes
             for n in nodes:
                 src_node_ids.add(n.id)
@@ -393,11 +499,14 @@ class ConsultantImporter:
         # корень любого целевого документа (кэш)
         root_cache: Dict[str, Optional[str]] = {}
         def _root(gdoc: str) -> Optional[str]:
-            if gdoc in root_cache:
-                return root_cache[gdoc]
-            roots = [n.id for n in repo.nodes.get_by_document(gdoc)
-                     if n.node_type == 'document']
-            root_cache[gdoc] = roots[0] if roots else None
+            # только корень, а не все ноды цели с текстами (у кодекса их тысячи;
+            # индекс ix_graph_nodes_doc_level: document_id + level корня)
+            if gdoc not in root_cache:
+                rows = (db.query(GraphNode.id, GraphNode.node_type, GraphNode.is_archived)
+                        .filter(GraphNode.document_id == gdoc, GraphNode.level == 0)
+                        .order_by(GraphNode.position).all())
+                root_cache[gdoc] = next((r.id for r in rows if r.node_type == 'document'
+                                         and not r.is_archived), None)
             return root_cache[gdoc]
 
         # Существующие рёбра (дедуп)
@@ -422,17 +531,55 @@ class ConsultantImporter:
             existing.add((src, tgt, etype))
             created += 1
 
-        # (А) norm_ref entities → REGULATED_BY (источник из текущего запуска)
-        for norm_code, target_gdoc in normcode_all.items():
-            for ent in repo.entities.find_norm_references(norm_code=norm_code):
-                if ent.node_id not in src_node_ids:
-                    continue
-                target_node = None
+        # (А) norm_ref entities → REGULATED_BY (источник из текущего запуска).
+        # Одним запросом по нодам источников. Прежний цикл «по каждому коду —
+        # ILIKE по всем entities графа» при тысячах кодов ФЗ-N перечитывал
+        # 4-гигабайтную базу десятки минут (замена 23 кодексов, 24.10.2026).
+        # Код — точным совпадением: прежний ILIKE '%ФЗ-4%' цеплял и ФЗ-425,
+        # ФЗ-42… (на копии прод-базы все неточные совпадения были ложными).
+        # ФЗ — только с датой в тексте ссылки, без неё цель была бы случайной.
+        # Тип entity — в Python: с ним в SQL планировщик идёт индексом типа по
+        # всем norm_ref графа, без него — индексом node_id по нодам источников.
+        if self._docid_to_gdoc:
+            src_nodes_q = db.query(GraphNode.id).filter(GraphNode.document_id.in_(src_gdocs))
+            ent_q = db.query(GraphEntity).filter(GraphEntity.node_id.in_(src_nodes_q))
+        else:
+            ent_q = db.query(GraphEntity).filter(GraphEntity.entity_type == 'norm_ref')
+        targets_for: Dict[str, list] = {}
+        numbers_of: Dict[str, Dict[str, str]] = {}
+
+        def _by_number(gdoc: str, number: str) -> Optional[str]:
+            # номер → первая нода с ним (как find_by_number), одним запросом на цель
+            if gdoc not in numbers_of:
+                m: Dict[str, str] = {}
+                for nid, num, archived in (db.query(GraphNode.id, GraphNode.number,
+                                                    GraphNode.is_archived)
+                                           .filter(GraphNode.document_id == gdoc)):
+                    if num and not archived:
+                        m.setdefault(num, nid)
+                numbers_of[gdoc] = m
+            return numbers_of[gdoc].get(number)
+
+        for ent in ent_q.all():
+            if ent.entity_type != 'norm_ref' or ent.node_id not in src_node_ids:
+                continue
+            code = ent.norm_code or ''
+            if code.startswith('ФЗ-'):
+                dm = _DATE_RE.search(ent.raw_text or '')
+                tg = fz_by_req.get((code, dm.group(1))) if dm else None
+                targets = [(code, [tg])] if tg else []
+            else:
+                if code not in targets_for:
+                    targets_for[code] = [(code, normcode_all[code])] if code in normcode_all else []
+                targets = targets_for[code]
+            for norm_code, target_gdocs in targets:
+                tgt = None
                 if ent.norm_article:
-                    target_node = (repo.nodes.find_by_number(target_gdoc, ent.norm_article)
-                                   or repo.nodes.find_by_number(target_gdoc, f'ст. {ent.norm_article}'))
-                tgt = target_node.id if target_node else _root(target_gdoc)
-                _add_edge(ent.node_id, tgt, EdgeType.REGULATED_BY.value,
+                    # статья — в той части кодекса, где она есть (ст. 506 ГК — ч.2)
+                    tgt = next((t for g in target_gdocs
+                                for t in (_by_number(g, ent.norm_article),
+                                          _by_number(g, f'ст. {ent.norm_article}')) if t), None)
+                _add_edge(ent.node_id, tgt or _root(target_gdocs[0]), EdgeType.REGULATED_BY.value,
                           float(ent.confidence or 0.8), ent.raw_text,
                           f'norm_ref → {norm_code} ст.{ent.norm_article}')
 
