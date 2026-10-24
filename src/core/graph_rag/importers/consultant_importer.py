@@ -432,9 +432,20 @@ class ConsultantImporter:
         normcode_all: Dict[str, str] = {}
         # (вид, дата, номер) → gdoc подзаконного акта (для линкера (В))
         subord_by_req: Dict[tuple, str] = {}
-        for d in (db.query(GraphDocument)
-                  .filter(GraphDocument.layer == LayerType.NPA.value,
-                          GraphDocument.status == 'active')):
+        # Порядок решает, кому достанется код (setdefault ниже): «ГК РФ» матчит
+        # и сам ГК, и ФЗ «О введении в действие … Гражданского кодекса». Раньше
+        # выигрывал ГК — его залили первым; после замены редакции новый ГК —
+        # последний, и ссылки «ст. 330 ГК РФ» ушли бы в закон о введении.
+        # Поэтому кодексы — вперёд (части по порядку: ч.1 раньше ч.2), прочие —
+        # по времени загрузки, как было.
+        docs = (db.query(GraphDocument)
+                .filter(GraphDocument.layer == LayerType.NPA.value,
+                        GraphDocument.status == 'active')
+                .order_by(GraphDocument.created_at).all())
+        # kodeks — из frontmatter выгрузки К+, codex — тип парсера по заголовку
+        is_code = lambda d: d.document_type in ('kodeks', 'codex')  # noqa: E731
+        docs.sort(key=lambda d: (not is_code(d), (d.title or '') if is_code(d) else ''))
+        for d in docs:
             mm = re.search(r'cons_doc_LAW_(\d+)', d.source_file or '')
             if mm:
                 docid_all[mm.group(1)] = d.id

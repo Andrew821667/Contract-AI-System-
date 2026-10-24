@@ -128,3 +128,24 @@ def test_phase2_links_norm_refs_of_replaced_document(test_db):
     assert any(e.source_id in law_nodes for e in edges)
     # повторный прогон не плодит дублей
     assert importer.resolve_cross_document_edges() == 0
+
+
+def test_phase2_prefers_code_over_law_mentioning_it(test_db):
+    """Новая редакция ГК залита позже ФЗ «О введении в действие … ГК» —
+    «ст. 330 ГК РФ» всё равно ведёт в ГК, а не в закон о введении."""
+    importer = ConsultantImporter(db=test_db)
+    intro = _ingest(importer, LAW, 'Федеральный закон N 52-ФЗ "О введении в действие части '
+                    'первой Гражданского кодекса Российской Федерации"',
+                    "https://www.consultant.ru/document/cons_doc_LAW_52/")
+    code = _ingest(importer, CODE_V1, "Гражданский кодекс РФ", CODE_URL)
+    law_text = LAW.replace("по правилам Гражданского кодекса", "по правилам ст. 330 ГК РФ")
+    law = _ingest(importer, law_text, "Федеральный закон N 777-ФЗ", LAW_URL)
+    importer._docid_to_gdoc = {"777": law.id}
+
+    importer.resolve_cross_document_edges()
+    law_nodes = {n.id for n in test_db.query(GraphNode).filter(GraphNode.document_id == law.id)}
+    targets = {e.target_id for e in test_db.query(GraphEdge).filter(
+        GraphEdge.edge_type == "regulated_by", GraphEdge.source_id.in_(law_nodes))}
+    assert _node(test_db, code.id, "article", "330").id in targets
+    intro_nodes = {n.id for n in test_db.query(GraphNode).filter(GraphNode.document_id == intro.id)}
+    assert not targets & intro_nodes
