@@ -9,7 +9,7 @@
 такого узла больше нет — на ближайшего предка.
 """
 from src.core.graph_rag.importers.consultant_importer import ConsultantImporter
-from src.core.graph_rag.models import GraphDocument, GraphEdge, GraphNode, NodeVersion
+from src.core.graph_rag.models import GraphDocument, GraphEdge, GraphEntity, GraphNode, NodeVersion
 from src.core.graph_rag.parser import NPAGraphParser
 
 CODE_URL = "https://www.consultant.ru/document/cons_doc_LAW_5142/"
@@ -169,3 +169,32 @@ def test_phase2_finds_article_in_its_part_of_code(test_db):
     targets = {e.target_id for e in test_db.query(GraphEdge).filter(
         GraphEdge.edge_type == "regulated_by", GraphEdge.source_id.in_(law_nodes))}
     assert _node(test_db, part2.id, "article", "506").id in targets
+
+
+def test_phase2_fz_number_exact_and_unambiguous(test_db):
+    """«N 425-ФЗ» ведёт в закон N 425-ФЗ и не цепляет N 4-ФЗ (было ILIKE
+    '%ФЗ-4%'), а номер, который носят два закона разных лет, без даты не
+    связывается вовсе."""
+    importer = ConsultantImporter(db=test_db)
+    fz425 = _ingest(importer, LAW, "Федеральный закон от 28.12.2013 N 425-ФЗ",
+                    "https://www.consultant.ru/document/cons_doc_LAW_156571/")
+    fz4 = _ingest(importer, LAW, "Федеральный закон от 10.01.2003 N 4-ФЗ",
+                  "https://www.consultant.ru/document/cons_doc_LAW_4/")
+    fz63a = _ingest(importer, LAW, "Федеральный закон от 31.05.2002 N 63-ФЗ",
+                    "https://www.consultant.ru/document/cons_doc_LAW_63/")
+    fz63b = _ingest(importer, LAW, "Федеральный закон от 06.04.2011 N 63-ФЗ",
+                    "https://www.consultant.ru/document/cons_doc_LAW_112701/")
+    law_text = LAW.replace("по правилам Гражданского кодекса",
+                           "по правилам Федерального закона N 425-ФЗ и Федерального закона N 63-ФЗ")
+    law = _ingest(importer, law_text, "Федеральный закон N 777-ФЗ", LAW_URL)
+    codes = {e.norm_code for e in test_db.query(GraphEntity).filter(GraphEntity.entity_type == "norm_ref")}
+    assert {"ФЗ-425", "ФЗ-63"} <= codes
+    importer._docid_to_gdoc = {"777": law.id}
+
+    importer.resolve_cross_document_edges()
+    law_nodes = {n.id for n in test_db.query(GraphNode).filter(GraphNode.document_id == law.id)}
+    target_docs = {n.document_id for n in test_db.query(GraphNode).join(
+        GraphEdge, GraphEdge.target_id == GraphNode.id).filter(
+        GraphEdge.edge_type == "regulated_by", GraphEdge.source_id.in_(law_nodes))}
+    assert fz425.id in target_docs
+    assert not target_docs & {fz4.id, fz63a.id, fz63b.id}

@@ -432,6 +432,8 @@ class ConsultantImporter:
         # norm_code → документы: у кодекса все части (ГК — 4, НК — 2; нумерация
         # статей сквозная), у прочих — один документ, как раньше
         normcode_all: Dict[str, List[str]] = {}
+        code_ids: set = set()
+        ambiguous: set = set()
         # (вид, дата, номер) → gdoc подзаконного акта (для линкера (В))
         subord_by_req: Dict[tuple, str] = {}
         # Порядок решает, кому достанется код: «ГК РФ» матчит и сам ГК, и ФЗ
@@ -452,8 +454,14 @@ class ConsultantImporter:
             if mm:
                 docid_all[mm.group(1)] = d.id
             nc = _normcode_from_title(d.title)
-            if nc and (is_code(d) or nc not in normcode_all):
+            if nc and is_code(d):
                 normcode_all.setdefault(nc, []).append(d.id)
+            elif nc and nc not in normcode_all:
+                normcode_all[nc] = [d.id]
+            elif nc and normcode_all[nc][0] not in code_ids:
+                ambiguous.add(nc)  # второй ФЗ с тем же номером (другого года)
+            if is_code(d):
+                code_ids.add(d.id)
             # подзаконные акты → карта по реквизитам (из заголовка)
             if (d.document_type in ('government_decree', 'government_order',
                                     'presidential_decree') and d.title):
@@ -524,8 +532,10 @@ class ConsultantImporter:
         # Одним запросом по нодам источников. Прежний цикл «по каждому коду —
         # ILIKE по всем entities графа» при тысячах кодов ФЗ-N перечитывал
         # 4-гигабайтную базу десятки минут (замена 23 кодексов, 24.10.2026).
-        # Совпадение кода — подстрокой с учётом регистра, как ILIKE в SQLite:
-        # её lower() не трогает кириллицу.
+        # Код — точным совпадением. Прежний ILIKE '%ФЗ-4%' цеплял и ФЗ-425,
+        # ФЗ-42…: на копии прод-базы все неточные совпадения были ложными.
+        # Номер ФЗ без даты, который в базе носят несколько законов разных лет
+        # (235 из 391), не связываем — цель была бы случайной.
         # Тип entity — в Python: с ним в SQL планировщик идёт индексом типа по
         # всем norm_ref графа, без него — индексом node_id по нодам источников.
         if self._docid_to_gdoc:
@@ -553,7 +563,8 @@ class ConsultantImporter:
                 continue
             code = ent.norm_code or ''
             if code not in targets_for:
-                targets_for[code] = [(nc, tg) for nc, tg in normcode_all.items() if nc in code]
+                targets_for[code] = ([(code, normcode_all[code])]
+                                     if code in normcode_all and code not in ambiguous else [])
             for norm_code, target_gdocs in targets_for[code]:
                 tgt = None
                 if ent.norm_article:
