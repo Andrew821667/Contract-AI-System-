@@ -1,0 +1,9 @@
+# Версии — как в окружении, на котором корпус собирали (Python 3.11):
+# Playwright 1.60.0 использует уже скачанный браузер chromium-1223.
+requests==2.34.2
+beautifulsoup4==4.14.3
+html2text==2025.4.15
+python-dotenv==1.2.2
+playwright==1.60.0
+GitPython==3.1.50
+python-telegram-bot==22.7

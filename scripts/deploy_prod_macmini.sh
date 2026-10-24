@@ -42,6 +42,13 @@ say "HEAD $sha"
 say "зависимости backend"
 .venv/bin/python -m pip install -q -r requirements.txt
 
+# Инструменты выгрузки из К+ (еженедельный kb_update.sh) — своё окружение:
+# Playwright и компания не нужны бэкенду. Версии зафиксированы, браузер
+# Playwright берётся из общего кэша ~/Library/Caches/ms-playwright.
+say "зависимости инструментов К+ (tools/consultant)"
+[ -x tools/consultant/.venv/bin/python ] || "$(command -v python3.11 || echo /opt/homebrew/bin/python3.11)" -m venv tools/consultant/.venv
+tools/consultant/.venv/bin/python -m pip install -q -r tools/consultant/requirements.txt
+
 say "миграции"
 .venv/bin/python -m alembic upgrade head
 

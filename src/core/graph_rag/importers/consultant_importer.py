@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-ConsultantImporter — загрузка выгрузки OpenClaw_consultant-tools в graph_rag.
+ConsultantImporter — загрузка выгрузки инструментов К+ (tools/consultant) в graph_rag.
 
 Источник данных: ~/consultant-data/
     kodeksy/converted-md/*.md
