@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from ..enums import EdgeType, EdgeClass, EdgeStatus, ExtractedBy, LayerType
-from ..models import GraphDocument, GraphEdge
+from ..models import CandidateEdge, GraphDocument, GraphEdge, GraphNode, NodeVersion
 from ..parser import NPAGraphParser
 from .validator import validate_parse_result, ValidationReport
 
@@ -177,6 +177,7 @@ class ImportReport:
     ingested: int = 0
     skipped: int = 0
     replaced: int = 0
+    inbound_restored: int = 0
     failed: int = 0
     validation_failed: int = 0
     cross_edges_created: int = 0
@@ -185,7 +186,8 @@ class ImportReport:
     def log_summary(self):
         logger.info('=' * 64)
         logger.info(f'ИТОГО: файлов={self.total_files}, ingested={self.ingested}, '
-                    f'skip={self.skipped}, replaced={self.replaced}, fail={self.failed}, '
+                    f'skip={self.skipped}, replaced={self.replaced}, '
+                    f'входящих-перенесено={self.inbound_restored}, fail={self.failed}, '
                     f'валидация-fail={self.validation_failed}, '
                     f'cross-рёбра={self.cross_edges_created}')
 
@@ -221,31 +223,94 @@ class ConsultantImporter:
         return files
 
     # ── Фаза 1 ─────────────────────────────────────────────────
-    def _purge_by_source(self, source_url: str) -> bool:
+    def _node_paths(self, gdoc_id: str) -> Dict[str, tuple]:
+        """node_id → адрес узла в документе: цепочка (тип, номер) от корня.
+
+        У новой редакции другие id узлов, а адрес тот же: «статья 330, пункт 2»
+        остаётся собой. По адресу входящие ссылки переносятся на новую редакцию.
+        """
+        rows = (self.pipeline.db.query(GraphNode.id, GraphNode.parent_id,
+                                       GraphNode.node_type, GraphNode.number)
+                .filter(GraphNode.document_id == gdoc_id)
+                .order_by(GraphNode.level, GraphNode.position).all())
+        paths: Dict[str, tuple] = {}
+        for nid, parent_id, node_type, number in rows:  # родитель раньше детей (level)
+            paths[nid] = paths.get(parent_id, ()) + ((node_type, (number or '').strip()),)
+        return paths
+
+    def _purge_by_source(self, source_url: str) -> Optional[List[dict]]:
         """Полностью удалить документ и его граф по source_file (для REPLACE).
 
-        Удаляет рёбра (ссылающиеся на ноды документа), entities, ноды и сам
-        документ. Возвращает True, если что-то удалено.
+        Удаляет рёбра (ссылающиеся на ноды документа), entities, версии нод,
+        ноды и сам документ. Возвращает None, если документа не было, иначе —
+        входящие рёбра из ДРУГИХ документов (адрес цели + поля ребра): их
+        создавала Фаза 2 и прямой линкер по всему графу, а повторный прогон по
+        одному документу их не восстановит — _restore_inbound переносит их на
+        новую редакцию.
         """
         db = self.pipeline.db
         doc = (db.query(GraphDocument)
                .filter(GraphDocument.source_file == source_url).first())
         if not doc:
-            return False
+            return None
+        paths = self._node_paths(doc.id)
+        own = db.query(GraphNode.id).filter(GraphNode.document_id == doc.id)
+        inbound = []
+        for e in (db.query(GraphEdge)
+                  .join(GraphNode, GraphNode.id == GraphEdge.source_id)
+                  .filter(GraphEdge.target_id.in_(own), GraphNode.document_id != doc.id)):
+            inbound.append({
+                'source_id': e.source_id, 'target_path': paths.get(e.target_id, ()),
+                'edge_type': e.edge_type, 'edge_class': e.edge_class, 'status': e.status,
+                'evidence': e.evidence, 'rationale': e.rationale, 'confidence': e.confidence,
+                'extracted_by': e.extracted_by, 'valid_from': e.valid_from, 'valid_to': e.valid_to,
+            })
+        # подзапрос, а не список id: у кодекса десятки тысяч нод
+        for model, cols in ((GraphEdge, ('source_id', 'target_id')),
+                            (CandidateEdge, ('source_id', 'target_id')),
+                            (NodeVersion, ('node_id',))):
+            for col in cols:
+                db.query(model).filter(getattr(model, col).in_(own)).delete(synchronize_session=False)
         from sqlalchemy import text as _sql
-        nid_q = db.query(GraphNode.id).filter(GraphNode.document_id == doc.id).subquery()
-        node_ids = [r[0] for r in db.query(nid_q.c.id).all()]
-        if node_ids:
-            # рёбра, где нода документа — источник или цель
-            db.query(GraphEdge).filter(GraphEdge.source_id.in_(node_ids)).delete(synchronize_session=False)
-            db.query(GraphEdge).filter(GraphEdge.target_id.in_(node_ids)).delete(synchronize_session=False)
-            # entities нод документа (таблица graph_entities, FK node_id)
-            db.execute(_sql("DELETE FROM graph_entities WHERE node_id IN (SELECT id FROM graph_nodes WHERE document_id=:d)"), {"d": doc.id})
-            db.query(GraphNode).filter(GraphNode.document_id == doc.id).delete(synchronize_session=False)
+        db.execute(_sql("DELETE FROM graph_entities WHERE node_id IN (SELECT id FROM graph_nodes WHERE document_id=:d)"), {"d": doc.id})
+        db.query(GraphNode).filter(GraphNode.document_id == doc.id).delete(synchronize_session=False)
         db.query(GraphDocument).filter(GraphDocument.id == doc.id).delete(synchronize_session=False)
         db.flush()
-        logger.info(f'PURGE: удалён старый документ {doc.id} ({len(node_ids)} нод) для замены')
-        return True
+        logger.info(f'PURGE: удалён старый документ {doc.id} ({len(paths)} нод, '
+                    f'входящих рёбер к переносу {len(inbound)}) для замены')
+        return inbound
+
+    def _restore_inbound(self, inbound: List[dict], new_gdoc_id: str) -> int:
+        """Перевесить входящие рёбра на узлы новой редакции по адресу.
+
+        Узла с тем же адресом нет (пункт исключён, статьи перенумерованы) —
+        ребро уходит на ближайшего сохранившегося предка, в крайнем случае на
+        корень документа: ссылка на кодекс важнее точной статьи.
+        """
+        by_path: Dict[tuple, str] = {}
+        root = None
+        for nid, path in self._node_paths(new_gdoc_id).items():
+            by_path.setdefault(path, nid)  # дубль адреса — первый по порядку
+            if root is None and path and path[-1][0] == 'document':
+                root = nid
+        restored = 0
+        seen = set()
+        for spec in inbound:
+            path = spec['target_path']
+            while path and path not in by_path:
+                path = path[:-1]
+            target = by_path[path] if path else root
+            if target is None:
+                continue
+            key = (spec['source_id'], target, spec['edge_type'])
+            if key in seen:
+                continue  # два старых ребра свелись к одному узлу
+            seen.add(key)
+            fields = {k: v for k, v in spec.items() if k != 'target_path'}
+            self.pipeline.repo.edges.create(actor='importer', target_id=target, **fields)
+            restored += 1
+        self.pipeline.repo.commit()
+        return restored
 
     def import_all(self, kinds: Optional[List[str]] = None,
                    dry_run: bool = False, limit: Optional[int] = None,
@@ -303,16 +368,20 @@ class ConsultantImporter:
             # Ingest (source_file = source_url, чтобы хранить doc_id)
             source_url = (parse_result.metadata or {}).get('source_url') or str(path)
             # Режим обновления: если документ уже есть — удалить старую версию
-            # целиком (ноды/рёбра/entities/документ) перед перезаливкой.
+            # целиком (ноды/рёбра/entities/документ) перед перезаливкой, а
+            # ссылки на неё из других документов перенести на новую.
+            inbound = None
             if update:
-                purged = self._purge_by_source(source_url)
-                if purged:
+                inbound = self._purge_by_source(source_url)
+                if inbound is not None:
                     rep.replaced += 1
             result = self.pipeline._ingest(parse_result, source_file=source_url)
             if result.extraction_warnings and 'уже загружен' in ' '.join(result.extraction_warnings):
                 rep.skipped += 1
             else:
                 rep.ingested += 1
+                if inbound:
+                    rep.inbound_restored += self._restore_inbound(inbound, result.document.id)
 
             # Карты для Фазы 2
             gdoc_id = result.document.id
@@ -324,12 +393,18 @@ class ConsultantImporter:
                 self._normcode_to_gdoc[nc] = gdoc_id
 
         # ── Фаза 2 ──
-        if not dry_run and self.pipeline is not None and not no_phase2:
-            rep.cross_edges_created = self.resolve_cross_document_edges()
-            self.pipeline.repo.commit()
+        if dry_run or self.pipeline is None:
+            pass
         elif no_phase2:
             self.pipeline.repo.commit()
             logger.info('Фаза 2 пропущена (--no-phase2)')
+        elif not self._docid_to_gdoc:
+            # Без источников resolve_cross_document_edges взял бы ВСЕ НПА графа —
+            # это режим --relink, а не инкрементальный прогон.
+            logger.info('Фаза 2: в прогоне не залито ни одного документа — пропуск')
+        else:
+            rep.cross_edges_created = self.resolve_cross_document_edges()
+            self.pipeline.repo.commit()
 
         rep.log_summary()
         return rep

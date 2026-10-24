@@ -27,6 +27,11 @@ STARTED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 status() { printf '{"started":"%s","finished":"%s","state":"%s","message":"%s"%s}\n' \
   "$STARTED" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$2" "$3" > "$STATUS"; }
 fail() { echo "$(date) FAIL: $1" >> $LOG; status error "$1"; exit 1; }
+# Нефатальный сбой шага: строка в лог + в итоговый статус. Раньше «warn» жил
+# только в середине лога, а статус говорил «ok» — так 24.10.2026 незаметно
+# упала замена 23 кодексов в графе.
+WARNS=""
+warn() { echo "warn: $1" >> $LOG; WARNS="${WARNS:+$WARNS; }$1"; }
 
 echo "=== $(date) KB UPDATE START ===" >> $LOG
 
@@ -39,14 +44,21 @@ echo "=== $(date) KB UPDATE START ===" >> $LOG
 #    обновления графа и векторов (шаги 3b и 4).
 cd "$CT" || fail "инструменты К+ недоступны ($CT)"
 status running "новые редакции кодексов"
-$PYC modules/kodeksy.py --refresh >> $LOG 2>&1 || echo "warn: kodeksy refresh — больше половины кодексов не скачалось" >> $LOG
-CHANGED=$( [ -s "$MANIFEST" ] && tr '\n' ',' < "$MANIFEST" | sed 's/,$//' || echo "" )
+$PYC modules/kodeksy.py --refresh >> $LOG 2>&1 || warn "kodeksy refresh — больше половины кодексов не скачалось"
+# Изменённые копятся в PENDING, пока граф и векторы по ним не обновятся:
+# манифест кодексов перезаписывается каждый прогон, а следующая сверка уже
+# видит на диске новый текст («без изменений») — упавшее обновление иначе
+# не повторится никогда.
+PENDING=$DATA/refs/pending_docids.txt
+cat "$MANIFEST" "$PENDING" 2>/dev/null | grep -E '^[0-9]+$' | sort -u > "$PENDING.tmp" && mv "$PENDING.tmp" "$PENDING"
+CHANGED=$(tr '\n' ',' < "$PENDING" | sed 's/,$//')
+NCH=$(grep -c . "$PENDING")
 
 # 2. добор НОВЫХ документов (skip-existing)
 status running "добор новых документов"
 # ФЗ и ФКЗ (раньше --only fz: 27 ФКЗ не обновлялись с мая 2026).
-$PYC modules/federal_laws.py --all --skip-amendments >> $LOG 2>&1 || echo "warn: fz/fkz" >> $LOG
-$PYC -m modules.decrees >> $LOG 2>&1 || echo "warn: decrees" >> $LOG
+$PYC modules/federal_laws.py --all --skip-amendments >> $LOG 2>&1 || warn "fz/fkz"
+$PYC -m modules.decrees >> $LOG 2>&1 || warn "decrees"
 
 # 2a. добор СУДЕБНОЙ ПРАКТИКИ.
 #     Раньше этого шага не было вовсе: качались только ФЗ и подзаконка, а
@@ -57,29 +69,33 @@ $PYC -m modules.decrees >> $LOG 2>&1 || echo "warn: decrees" >> $LOG
 #     собирали изначально.
 status running "добор судебной практики"
 $PYC -m modules.court_practice --organ "Пленум Верховного Суда РФ" --slug plenum_vs \
-     >> $LOG 2>&1 || echo "warn: court plenum_vs" >> $LOG
+     >> $LOG 2>&1 || warn "court plenum_vs"
 $PYC -m modules.court_practice --organ "Верховный Суд РФ" --slug vs_all \
-     >> $LOG 2>&1 || echo "warn: court vs_all" >> $LOG
+     >> $LOG 2>&1 || warn "court vs_all"
 $PYC -m modules.court_practice --organ "Конституционный Суд РФ" --slug ks_post --title-filter "^Постановление" \
-     >> $LOG 2>&1 || echo "warn: court ks_post" >> $LOG
+     >> $LOG 2>&1 || warn "court ks_post"
 
 # 2b. дедуп редакций: у редакции закона в К+ свой doc_id, добор качает новую
 #     редакцию как НОВЫЙ файл — без этого шага в сторах копятся устаревшие
 #     редакции законов. Унесённые в архив добор больше не перекачивает.
 cd "$KS" || fail "КС недоступна"
 status running "дедуп редакций"
-$PYK scripts/kb_dedup_editions.py >> $LOG 2>&1 || echo "warn: dedup_editions" >> $LOG
+$PYK scripts/kb_dedup_editions.py >> $LOG 2>&1 || warn "dedup_editions"
 
 # 3. ingest: новые
 git pull -q origin main >> $LOG 2>&1
 status running "заливка новых в граф"
 $PYK -m src.core.graph_rag.importers.consultant_importer \
      --kind kodeksy --kind fkz --kind fz --kind decrees --kind court --no-phase2 >> $LOG 2>&1 || fail "ингест новых"
-# 3b. изменённые редакции — точечный REPLACE
+# 3b. изменённые редакции — точечный REPLACE. С Фазой 2: она строится только
+#     от залитых в этом вызове документов (минуты на 23 кодекса) и возвращает
+#     их исходящие ссылки; входящие из других документов переносит сам REPLACE.
+CHANGED_OK=1
 if [ -n "$CHANGED" ]; then
   status running "обновление изменённых редакций"
   $PYK -m src.core.graph_rag.importers.consultant_importer \
-       --kind kodeksy --kind fkz --kind fz --kind decrees --update --only-docids "$CHANGED" --no-phase2 >> $LOG 2>&1 || echo "warn: update changed" >> $LOG
+       --kind kodeksy --kind fkz --kind fz --kind decrees --update --only-docids "$CHANGED" >> $LOG 2>&1 \
+    || { CHANGED_OK=0; warn "замена изменённых редакций в графе — повторится в следующий прогон"; }
 fi
 
 # 4. embed: новые (resume) + изменённые (refresh).
@@ -92,18 +108,21 @@ status running "эмбеддинг"
 $PYK scripts/kb_embed.py --mode embed --collection all >> $LOG 2>&1 || fail "embed новых"
 $PYK scripts/kb_embed.py --mode embed --collection all --model user2 >> $LOG 2>&1 || fail "embed новых (user2)"
 if [ -n "$CHANGED" ]; then
-  $PYK scripts/kb_embed.py --mode embed --collection all --refresh --only-docids "$CHANGED" >> $LOG 2>&1
-  $PYK scripts/kb_embed.py --mode embed --collection all --model user2 --refresh --only-docids "$CHANGED" >> $LOG 2>&1
+  $PYK scripts/kb_embed.py --mode embed --collection all --refresh --only-docids "$CHANGED" >> $LOG 2>&1 \
+    || { CHANGED_OK=0; warn "векторы изменённых редакций (minilm)"; }
+  $PYK scripts/kb_embed.py --mode embed --collection all --model user2 --refresh --only-docids "$CHANGED" >> $LOG 2>&1 \
+    || { CHANGED_OK=0; warn "векторы изменённых редакций (user2)"; }
+  [ "$CHANGED_OK" = 1 ] && rm -f "$PENDING"
 fi
 
 # 4b. пересборка лексического FTS-индекса гибрида (RAG_HYBRID) из ChromaDB —
 #     kb_embed его НЕ трогает; без этого шага лексический канал слепнет к новым докам.
 status running "пересборка FTS (гибрид)"
-$PYK scripts/kb_fts_build.py >> $LOG 2>&1 || echo "warn: fts_build" >> $LOG
+$PYK scripts/kb_fts_build.py >> $LOG 2>&1 || warn "fts_build"
 
 # 5. relink + статус
 status running "пересборка связей"
-$PYK scripts/kb_relink.py "$DB" >> $LOG 2>&1 || echo "warn: relink" >> $LOG
+$PYK scripts/kb_relink.py "$DB" >> $LOG 2>&1 || warn "relink"
 
 # 5b. пересчёт счётчиков документов.
 #     relink достраивает cross-document рёбра ПОСЛЕ ингеста и update_stats()
@@ -111,7 +130,7 @@ $PYK scripts/kb_relink.py "$DB" >> $LOG 2>&1 || echo "warn: relink" >> $LOG
 #     недосчёт накопился до 90 891 ребра (879 854 в графе против 788 963 в
 #     сумме счётчиков), расхождение было у 6879 документов из 8212.
 status running "пересчёт счётчиков графа"
-$PYK scripts/graph_recount_stats.py >> $LOG 2>&1 || echo "warn: graph_recount_stats" >> $LOG
+$PYK scripts/graph_recount_stats.py >> $LOG 2>&1 || warn "graph_recount_stats"
 
 # 6. рестарт бэкенда: KeepAlive-LaunchDaemon грузит ChromaDB-HNSW в память ПРИ
 #    СТАРТЕ — новые (ингест) и вычищенные (дедуп 2b) доки не видны ЖИВОМУ индексу
@@ -145,15 +164,18 @@ if [ -n "$BPID" ]; then
   done
   # Не поднялся — это НЕ мелочь: система лежит. Пишем в статус, чтобы падение
   # было видно снаружи, а не только строкой «warn» в середине лога.
+  # fail, а не status error: иначе итоговый «ok» ниже затирал эту ошибку.
   if [ "$RESTARTED" != 1 ]; then
-    echo "$(date) ОШИБКА: backend не поднялся за 90с после рестарта" >> $LOG
-    status error "backend не поднялся после рестарта — система недоступна"
+    fail "backend не поднялся за 90с после рестарта — система недоступна"
   fi
 else
-  echo "warn: uvicorn не найден — рестарт пропущен" >> $LOG
+  warn "uvicorn не найден — рестарт пропущен"
 fi
 
-NCH=$( [ -s "$MANIFEST" ] && wc -l < "$MANIFEST" | tr -d ' ' || echo 0 )
 DOCS=$($PYK -c "import sqlite3;print(sqlite3.connect('$DB',timeout=30).execute('select count(*) from graph_documents').fetchone()[0])" 2>/dev/null)
-echo "=== $(date) KB UPDATE DONE (docs=$DOCS, changed=$NCH) ===" >> $LOG
-status ok "обновление завершено" ",\"documents\":$DOCS,\"changed_editions\":$NCH"
+echo "=== $(date) KB UPDATE DONE (docs=$DOCS, changed=$NCH${WARNS:+, warn: $WARNS}) ===" >> $LOG
+if [ -n "$WARNS" ]; then
+  status warning "обновление завершено с предупреждениями: $WARNS" ",\"documents\":$DOCS,\"changed_editions\":$NCH"
+else
+  status ok "обновление завершено" ",\"documents\":$DOCS,\"changed_editions\":$NCH"
+fi
