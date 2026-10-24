@@ -457,8 +457,15 @@ class ConsultantImporter:
         src_node_ids = set()
         roots_by_gdoc: Dict[str, str] = {}
         nodes_by_gdoc: Dict[str, list] = {}
+        # Ноды — запросом только по document_id, архив отсекается в Python.
+        # В прод-SQLite нет статистики индексов (ANALYZE), и с условием
+        # is_archived=0 (repo.nodes.get_by_document/find_by_number) планировщик
+        # берёт ix_graph_nodes_is_archived — перебор ВСЕХ нод графа с текстами
+        # (334 тыс.) на каждый вызов: Фаза 2 по 23 кодексам не кончалась и за час.
         for gd in src_gdocs:
-            nodes = repo.nodes.get_by_document(gd)
+            nodes = [n for n in (db.query(GraphNode).filter(GraphNode.document_id == gd)
+                                 .order_by(GraphNode.level, GraphNode.position))
+                     if not n.is_archived]
             nodes_by_gdoc[gd] = nodes
             for n in nodes:
                 src_node_ids.add(n.id)
@@ -468,14 +475,14 @@ class ConsultantImporter:
         # корень любого целевого документа (кэш)
         root_cache: Dict[str, Optional[str]] = {}
         def _root(gdoc: str) -> Optional[str]:
-            # только корень, а не все ноды цели с текстами (у кодекса их тысячи)
+            # только корень, а не все ноды цели с текстами (у кодекса их тысячи;
+            # индекс ix_graph_nodes_doc_level: document_id + level корня)
             if gdoc not in root_cache:
-                row = (db.query(GraphNode.id)
-                       .filter(GraphNode.document_id == gdoc,
-                               GraphNode.node_type == 'document',
-                               GraphNode.is_archived == False)  # noqa: E712
-                       .order_by(GraphNode.level, GraphNode.position).first())
-                root_cache[gdoc] = row[0] if row else None
+                rows = (db.query(GraphNode.id, GraphNode.node_type, GraphNode.is_archived)
+                        .filter(GraphNode.document_id == gdoc, GraphNode.level == 0)
+                        .order_by(GraphNode.position).all())
+                root_cache[gdoc] = next((r.id for r in rows if r.node_type == 'document'
+                                         and not r.is_archived), None)
             return root_cache[gdoc]
 
         # Существующие рёбра (дедуп)
@@ -506,22 +513,30 @@ class ConsultantImporter:
         # 4-гигабайтную базу десятки минут (замена 23 кодексов, 24.10.2026).
         # Совпадение кода — подстрокой с учётом регистра, как ILIKE в SQLite:
         # её lower() не трогает кириллицу.
-        ent_q = (db.query(GraphEntity)
-                 .join(GraphNode, GraphNode.id == GraphEntity.node_id)
-                 .filter(GraphEntity.entity_type == 'norm_ref'))
+        # Тип entity — в Python: с ним в SQL планировщик идёт индексом типа по
+        # всем norm_ref графа, без него — индексом node_id по нодам источников.
         if self._docid_to_gdoc:
-            ent_q = ent_q.filter(GraphNode.document_id.in_(src_gdocs))
+            src_nodes_q = db.query(GraphNode.id).filter(GraphNode.document_id.in_(src_gdocs))
+            ent_q = db.query(GraphEntity).filter(GraphEntity.node_id.in_(src_nodes_q))
+        else:
+            ent_q = db.query(GraphEntity).filter(GraphEntity.entity_type == 'norm_ref')
         targets_for: Dict[str, list] = {}
-        number_cache: Dict[tuple, Optional[str]] = {}
+        numbers_of: Dict[str, Dict[str, str]] = {}
 
         def _by_number(gdoc: str, number: str) -> Optional[str]:
-            if (gdoc, number) not in number_cache:
-                node = repo.nodes.find_by_number(gdoc, number)
-                number_cache[(gdoc, number)] = node.id if node else None
-            return number_cache[(gdoc, number)]
+            # номер → первая нода с ним (как find_by_number), одним запросом на цель
+            if gdoc not in numbers_of:
+                m: Dict[str, str] = {}
+                for nid, num, archived in (db.query(GraphNode.id, GraphNode.number,
+                                                    GraphNode.is_archived)
+                                           .filter(GraphNode.document_id == gdoc)):
+                    if num and not archived:
+                        m.setdefault(num, nid)
+                numbers_of[gdoc] = m
+            return numbers_of[gdoc].get(number)
 
         for ent in ent_q.all():
-            if ent.node_id not in src_node_ids:
+            if ent.entity_type != 'norm_ref' or ent.node_id not in src_node_ids:
                 continue
             code = ent.norm_code or ''
             if code not in targets_for:
