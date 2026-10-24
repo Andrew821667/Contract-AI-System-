@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from ..enums import EdgeType, EdgeClass, EdgeStatus, ExtractedBy, LayerType
-from ..models import CandidateEdge, GraphDocument, GraphEdge, GraphNode, NodeVersion
+from ..models import CandidateEdge, GraphDocument, GraphEdge, GraphEntity, GraphNode, NodeVersion
 from ..parser import NPAGraphParser
 from .validator import validate_parse_result, ValidationReport
 
@@ -468,11 +468,14 @@ class ConsultantImporter:
         # корень любого целевого документа (кэш)
         root_cache: Dict[str, Optional[str]] = {}
         def _root(gdoc: str) -> Optional[str]:
-            if gdoc in root_cache:
-                return root_cache[gdoc]
-            roots = [n.id for n in repo.nodes.get_by_document(gdoc)
-                     if n.node_type == 'document']
-            root_cache[gdoc] = roots[0] if roots else None
+            # только корень, а не все ноды цели с текстами (у кодекса их тысячи)
+            if gdoc not in root_cache:
+                row = (db.query(GraphNode.id)
+                       .filter(GraphNode.document_id == gdoc,
+                               GraphNode.node_type == 'document',
+                               GraphNode.is_archived == False)  # noqa: E712
+                       .order_by(GraphNode.level, GraphNode.position).first())
+                root_cache[gdoc] = row[0] if row else None
             return root_cache[gdoc]
 
         # Существующие рёбра (дедуп)
@@ -497,17 +500,38 @@ class ConsultantImporter:
             existing.add((src, tgt, etype))
             created += 1
 
-        # (А) norm_ref entities → REGULATED_BY (источник из текущего запуска)
-        for norm_code, target_gdoc in normcode_all.items():
-            for ent in repo.entities.find_norm_references(norm_code=norm_code):
-                if ent.node_id not in src_node_ids:
-                    continue
-                target_node = None
+        # (А) norm_ref entities → REGULATED_BY (источник из текущего запуска).
+        # Одним запросом по нодам источников. Прежний цикл «по каждому коду —
+        # ILIKE по всем entities графа» при тысячах кодов ФЗ-N перечитывал
+        # 4-гигабайтную базу десятки минут (замена 23 кодексов, 24.10.2026).
+        # Совпадение кода — подстрокой с учётом регистра, как ILIKE в SQLite:
+        # её lower() не трогает кириллицу.
+        ent_q = (db.query(GraphEntity)
+                 .join(GraphNode, GraphNode.id == GraphEntity.node_id)
+                 .filter(GraphEntity.entity_type == 'norm_ref'))
+        if self._docid_to_gdoc:
+            ent_q = ent_q.filter(GraphNode.document_id.in_(src_gdocs))
+        targets_for: Dict[str, list] = {}
+        number_cache: Dict[tuple, Optional[str]] = {}
+
+        def _by_number(gdoc: str, number: str) -> Optional[str]:
+            if (gdoc, number) not in number_cache:
+                node = repo.nodes.find_by_number(gdoc, number)
+                number_cache[(gdoc, number)] = node.id if node else None
+            return number_cache[(gdoc, number)]
+
+        for ent in ent_q.all():
+            if ent.node_id not in src_node_ids:
+                continue
+            code = ent.norm_code or ''
+            if code not in targets_for:
+                targets_for[code] = [(nc, tg) for nc, tg in normcode_all.items() if nc in code]
+            for norm_code, target_gdoc in targets_for[code]:
+                tgt = None
                 if ent.norm_article:
-                    target_node = (repo.nodes.find_by_number(target_gdoc, ent.norm_article)
-                                   or repo.nodes.find_by_number(target_gdoc, f'ст. {ent.norm_article}'))
-                tgt = target_node.id if target_node else _root(target_gdoc)
-                _add_edge(ent.node_id, tgt, EdgeType.REGULATED_BY.value,
+                    tgt = (_by_number(target_gdoc, ent.norm_article)
+                           or _by_number(target_gdoc, f'ст. {ent.norm_article}'))
+                _add_edge(ent.node_id, tgt or _root(target_gdoc), EdgeType.REGULATED_BY.value,
                           float(ent.confidence or 0.8), ent.raw_text,
                           f'norm_ref → {norm_code} ст.{ent.norm_article}')
 

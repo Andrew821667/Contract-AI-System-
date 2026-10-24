@@ -110,3 +110,21 @@ def test_replace_leaves_no_orphans(test_db):
 def test_purge_of_unknown_document_is_none(test_db):
     importer = ConsultantImporter(db=test_db)
     assert importer._purge_by_source(CODE_URL) is None
+
+
+def test_phase2_links_norm_refs_of_replaced_document(test_db):
+    """Фаза 2 от залитых в прогоне: «ст. 330 ГК РФ» → статья 330 ГК."""
+    importer = ConsultantImporter(db=test_db)
+    code = _ingest(importer, CODE_V1, "Гражданский кодекс РФ", CODE_URL)
+    law_text = LAW.replace("по правилам Гражданского кодекса", "по правилам ст. 330 ГК РФ")
+    law = _ingest(importer, law_text, "Федеральный закон N 777-ФЗ", LAW_URL)
+    importer._docid_to_gdoc = {"777": law.id}
+
+    assert importer.resolve_cross_document_edges() >= 1
+    art_330 = _node(test_db, code.id, "article", "330")
+    law_nodes = {n.id for n in test_db.query(GraphNode).filter(GraphNode.document_id == law.id)}
+    edges = test_db.query(GraphEdge).filter(GraphEdge.edge_type == "regulated_by",
+                                            GraphEdge.target_id == art_330.id).all()
+    assert any(e.source_id in law_nodes for e in edges)
+    # повторный прогон не плодит дублей
+    assert importer.resolve_cross_document_edges() == 0
