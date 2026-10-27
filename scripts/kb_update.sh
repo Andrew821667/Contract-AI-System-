@@ -77,10 +77,14 @@ $PYC -m modules.court_practice --organ "Конституционный Суд Р
 
 # 2b. дедуп редакций: у редакции закона в К+ свой doc_id, добор качает новую
 #     редакцию как НОВЫЙ файл — без этого шага в сторах копятся устаревшие
-#     редакции законов. Унесённые в архив добор больше не перекачивает.
+#     редакции законов, подзаконки и постановлений Пленума. Унесённые в архив
+#     добор больше не перекачивает. Новую редакцию под прежним doc_id дедуп
+#     дописывает в PENDING — перечитываем.
 cd "$KS" || fail "КС недоступна"
 status running "дедуп редакций"
 $PYK scripts/kb_dedup_editions.py >> $LOG 2>&1 || warn "dedup_editions"
+[ -s "$PENDING" ] && CHANGED=$(grep -E '^[0-9]+$' "$PENDING" | sort -u | tr '\n' ',' | sed 's/,$//') \
+  && NCH=$(grep -cE '^[0-9]+$' "$PENDING")
 
 # 3. ingest: новые
 git pull -q origin main >> $LOG 2>&1
@@ -94,7 +98,7 @@ CHANGED_OK=1
 if [ -n "$CHANGED" ]; then
   status running "обновление изменённых редакций"
   $PYK -m src.core.graph_rag.importers.consultant_importer \
-       --kind kodeksy --kind fkz --kind fz --kind decrees --update --only-docids "$CHANGED" >> $LOG 2>&1 \
+       --kind kodeksy --kind fkz --kind fz --kind decrees --kind court --update --only-docids "$CHANGED" >> $LOG 2>&1 \
     || { CHANGED_OK=0; warn "замена изменённых редакций в графе — повторится в следующий прогон"; }
 fi
 
