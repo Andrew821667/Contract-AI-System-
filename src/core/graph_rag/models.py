@@ -156,6 +156,7 @@ class GraphNode(Base):
         ),
         Index("ix_graph_nodes_parent_position", "parent_id", "position"),
         Index("ix_graph_nodes_doc_level", "document_id", "level"),
+        Index("ix_graph_nodes_number", "number"),
     )
 
     def __repr__(self):
