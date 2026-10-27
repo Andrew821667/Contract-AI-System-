@@ -201,3 +201,16 @@ def test_phase2_links_fz_by_date_and_number(test_db):
         GraphEdge.edge_type == "regulated_by", GraphEdge.source_id.in_(law_nodes))}
     assert {fz425.id, fz63b.id} <= target_docs
     assert not target_docs & {fz4.id, fz63a.id}
+
+
+def test_code_titles_map_to_their_own_norm_codes():
+    """КАС не перехватывает код КоАП; КоАП («КоАП РФ» в выгрузке) и кодексы
+    через дефис («Уголовно-процессуальный») получают свои коды."""
+    from src.core.graph_rag.importers.consultant_importer import _normcode_from_title
+    assert _normcode_from_title("Кодекс административного судопроизводства РФ") == "КАС РФ"
+    assert _normcode_from_title("КоАП РФ") == "КоАП РФ"
+    assert _normcode_from_title(
+        "Кодекс Российской Федерации об административных правонарушениях") == "КоАП РФ"
+    assert _normcode_from_title("Уголовно-процессуальный кодекс РФ") == "УПК РФ"
+    assert _normcode_from_title("Уголовно-исполнительный кодекс РФ") == "УИК РФ"
+    assert _normcode_from_title("Уголовный кодекс РФ") == "УК РФ"

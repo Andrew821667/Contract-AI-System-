@@ -55,6 +55,10 @@ KODEKSY = [
     ("Воздушный кодекс РФ",                   "https://www.consultant.ru/document/cons_doc_LAW_13744/"),
     ("Кодекс торгового мореплавания РФ",      "https://www.consultant.ru/document/cons_doc_LAW_22916/"),
     ("Таможенный кодекс ЕАЭС",                "https://www.consultant.ru/document/cons_doc_LAW_215315/"),
+    # Добор ФЗ видит кодексы в каталоге и пропускает («Не классифицирован»),
+    # так что без этого списка двух кодексов в базе не было вовсе (до 10.2026).
+    ("Кодекс административного судопроизводства РФ", "https://www.consultant.ru/document/cons_doc_LAW_176147/"),
+    ("Кодекс внутреннего водного транспорта РФ",     "https://www.consultant.ru/document/cons_doc_LAW_30650/"),
 ]
 
 
