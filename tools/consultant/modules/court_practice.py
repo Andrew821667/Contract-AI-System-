@@ -18,6 +18,9 @@ import html2text                                          # noqa: E402
 from config import BASE_DIR                               # noqa: E402
 from modules.federal_laws import ConsultantSession, kill_restriction, safe_fn  # noqa: E402
 
+# архив старых редакций (kb_dedup_editions.py): court-practice/<slug>/<файл>
+ARCHIVE_DIR = BASE_DIR / "archive-editions" / "court-practice"
+
 log = logging.getLogger("court")
 
 
@@ -88,7 +91,7 @@ def fetch_doc(p, href):
 def run(organ, slug, limit=0, title_filter=None):
     out_md = BASE_DIR / "court-practice" / slug / "converted-md"
     out_md.mkdir(parents=True, exist_ok=True)
-    stat = {"found": 0, "saved": 0, "stub": 0, "short": 0, "err": 0}
+    stat = {"found": 0, "saved": 0, "archived": 0, "stub": 0, "short": 0, "err": 0}
     tf = re.compile(title_filter, re.I) if title_filter else None
     with ConsultantSession(headless=True) as sess:
         p, rnd = sess.page, sess.rnd
@@ -102,6 +105,11 @@ def run(organ, slug, limit=0, title_filter=None):
             target = out_md / f"{safe_fn(it['title'])[:150]}.md"
             if target.exists():                      # резюмируемость: не качать повторно
                 stat["saved"] += 1
+                continue
+            # прежнюю редакцию дедуп унёс в архив — если каталог К+ её ещё
+            # показывает, не качать снова (иначе круг: скачали → в архив)
+            if (ARCHIVE_DIR / slug / target.name).exists():
+                stat["archived"] += 1
                 continue
             try:
                 html = fetch_doc(p, it["url"])

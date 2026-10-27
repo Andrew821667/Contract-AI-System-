@@ -204,6 +204,15 @@ def main():
         print("dry-run/нечего делать — стор не тронут")
         return
 
+    # Порядок важен на случай сбоя посреди (database is locked и т.п.):
+    # сначала задание на обновление, затем чистка сторов, и только потом
+    # файлы — в архив. Пока файл на месте, следующий прогон увидит дубль и
+    # повторит; перенеси его первым — устаревший текст остался бы в сторах
+    # навсегда.
+    if refresh:
+        old = set(PENDING.read_text(encoding="utf-8").split()) if PENDING.exists() else set()
+        PENDING.write_text("\n".join(sorted(old | refresh)) + "\n", encoding="utf-8")
+
     con = sqlite3.connect(str(DB), timeout=60)
     import chromadb
     from chromadb.config import Settings
@@ -213,12 +222,10 @@ def main():
 
     purged_ids, g_docs, c_chunks = [], 0, 0
     for it in losers:
-        dst = _archive_path(it)
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(it["f"], dst)
         if not it["purge"]:
             continue
         g_docs += _purge_graph(con, it["docid"])
+        con.commit()
         for name in it["colls"]:
             col = colls.setdefault(name, cl.get_or_create_collection(name))
             got = col.get(where={"doc_id": it["docid"]}, include=[])
@@ -226,12 +233,11 @@ def main():
                 col.delete(ids=got["ids"])
                 c_chunks += len(got["ids"])
         purged_ids.append(it["docid"])
-    con.commit()
     con.close()
-
-    if refresh:
-        old = set(PENDING.read_text(encoding="utf-8").split()) if PENDING.exists() else set()
-        PENDING.write_text("\n".join(sorted(old | refresh)) + "\n", encoding="utf-8")
+    for it in losers:
+        dst = _archive_path(it)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(it["f"], dst)
 
     stamp = datetime.date.today().isoformat()
     manifest = BASE / "refs" / f"purged_docids_{stamp}.txt"

@@ -117,3 +117,39 @@ def test_fz_identity_still_from_frontmatter(tmp_path):
     losers, _ = dedup.plan(_sources(tmp_path))
     assert [x["f"] for x in losers] == [old]
     assert dedup._archive_path(losers[0]) == dedup.ARCHIVE / "a.md"
+
+
+def test_failure_midway_keeps_files_and_refresh(tmp_path, monkeypatch):
+    """Сбой чистки графа (database is locked и т.п.): задание на обновление уже
+    записано, файлы не унесены — следующий прогон увидит дубль и повторит."""
+    import sqlite3
+    import sys
+    import types
+
+    import pytest
+
+    d = tmp_path / "decrees/converted-md"
+    files = [
+        _md(d / "a.md", "100", "Постановление Правительства РФ от 01.02.2020 N 1 (ред. от 01.01.2025)"),
+        _md(d / "b.md", "532112", "Постановление Правительства РФ от 01.02.2020 N 1 (ред. от 15.04.2026)"),
+        _md(d / "c.md", "532112", "Постановление Правительства РФ от 01.02.2020 N 1 "
+            "(ред. от 15.04.2026, с изм. от 08.07.2026)"),
+    ]
+    db = tmp_path / "empty.db"
+    sqlite3.connect(db).close()  # без таблиц графа — чистка упадёт
+    chroma = types.ModuleType("chromadb")
+    chroma.PersistentClient = lambda **kw: None
+    chroma_config = types.ModuleType("chromadb.config")
+    chroma_config.Settings = lambda **kw: None
+    monkeypatch.setitem(sys.modules, "chromadb", chroma)
+    monkeypatch.setitem(sys.modules, "chromadb.config", chroma_config)
+    monkeypatch.setattr(dedup, "SOURCES", _sources(tmp_path))
+    monkeypatch.setattr(dedup, "DB", db)
+    monkeypatch.setattr(dedup, "ARCHIVE", tmp_path / "archive")
+    monkeypatch.setattr(dedup, "PENDING", tmp_path / "pending_docids.txt")
+    monkeypatch.setattr(sys, "argv", ["kb_dedup_editions.py"])
+
+    with pytest.raises(sqlite3.OperationalError):
+        dedup.main()
+    assert dedup.PENDING.read_text(encoding="utf-8").split() == ["532112"]
+    assert all(Path(f).exists() for f in files)
