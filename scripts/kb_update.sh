@@ -136,6 +136,24 @@ $PYK scripts/kb_relink.py "$DB" >> $LOG 2>&1 || warn "relink"
 status running "пересчёт счётчиков графа"
 $PYK scripts/graph_recount_stats.py >> $LOG 2>&1 || warn "graph_recount_stats"
 
+# 5c. проверка базы.
+#     До 10.2026 прогон писал «ok», не проверяя, что лишние редакции ушли,
+#     а новые кодексы дошли до графа и векторов. Свой статус ещё running —
+#     пропускаем его; ошибки остальных проверок попадут в итоговые предупреждения.
+status running "проверка базы"
+VERIFY_OUT=$("$PYK" scripts/kb_verify.py --skip status 2>&1)
+VERIFY_RC=$?
+printf '%s\n' "$VERIFY_OUT" >> "$LOG"
+if [ "$VERIFY_RC" -ne 0 ]; then
+  VERIFY_FAILS=$(printf '%s\n' "$VERIFY_OUT" | awk -F: '
+    /^FAIL [^:]+:/ {
+      sub(/^FAIL /, "", $1)
+      printf "%s%s", sep, $1
+      sep = ", "
+    }')
+  warn "kb_verify${VERIFY_FAILS:+: $VERIFY_FAILS}"
+fi
+
 # 6. рестарт бэкенда: KeepAlive-LaunchDaemon грузит ChromaDB-HNSW в память ПРИ
 #    СТАРТЕ — новые (ингест) и вычищенные (дедуп 2b) доки не видны ЖИВОМУ индексу
 #    до рестарта. Убиваем uvicorn (legalai владеет процессом) → launchd поднимает

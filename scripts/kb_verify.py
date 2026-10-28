@@ -23,6 +23,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 LAW_ID = re.compile(r"cons_doc_LAW_(\d+)")
+CHECK_IDS = ("status", "dedup", "pending", "kodeksy", "archive", "integrity", "index")
 
 
 def _dedup():
@@ -280,13 +281,22 @@ def main(argv=None):
     ap.add_argument("--chroma", type=Path, default=dedup.CHROMA, help="каталог Chroma")
     ap.add_argument("--json", action="store_true", help="машиночитаемый отчёт")
     ap.add_argument("--no-chroma", action="store_true", help="пропустить векторы")
+    ap.add_argument("--skip", default="", metavar="ID[,ID...]",
+                    help="пропустить проверки: " + ", ".join(CHECK_IDS))
     args = ap.parse_args(argv)
+    skip = set(args.skip.split(",")) if args.skip else set()
+    if unknown := skip - set(CHECK_IDS):
+        ap.error("неизвестные ID проверок: " + ", ".join(sorted(unknown)))
     data, db, chroma = (p.expanduser() for p in (args.data, args.db, args.chroma))
     sources = [(data / pat.relative_to(dedup.BASE), colls, arch)
                for pat, colls, arch in dedup.SOURCES]
     rows = []
 
     def run(key, name, fn, *params):
+        if key in skip:
+            rows.append({"id": key, "name": name, "status": "SKIP",
+                         "details": "пропущена по --skip"})
+            return
         try:
             rows.append(fn(*params))
         except (OSError, ValueError, sqlite3.Error) as exc:
@@ -296,11 +306,13 @@ def main(argv=None):
     run("dedup", "Дедуп редакций", _duplicates, dedup, sources)
     run("pending", "Очередь обновления", _pending, data)
     graph_ids, graph_error = None, ""
-    try:
-        graph_ids = _graph_ids(db)
-    except (OSError, sqlite3.Error) as exc:
-        graph_error = f"граф недоступен: {exc}"
-    vectors = _Vectors(chroma, args.no_chroma)
+    vectors = None
+    if {"kodeksy", "archive"} - skip:
+        try:
+            graph_ids = _graph_ids(db)
+        except (OSError, sqlite3.Error) as exc:
+            graph_error = f"граф недоступен: {exc}"
+        vectors = _Vectors(chroma, args.no_chroma)
     run("kodeksy", "Кодексы", _codes, graph_ids, graph_error, vectors)
     run("archive", "Архив редакций", _archive, data, sources,
         graph_ids, graph_error, vectors)

@@ -2,7 +2,9 @@
 """Проверка БЗ на временных файлах, без сети и настоящего Chroma-клиента."""
 import importlib.util
 import json
+import os
 import sqlite3
+import subprocess
 import sys
 import types
 from pathlib import Path
@@ -230,6 +232,84 @@ def test_bad_status_fails(kb, capsys, raw):
         path.write_text(raw, encoding="utf-8")
     code, rows = _run(kb, capsys)
     assert code == 1 and rows["status"]["status"] == "FAIL"
+
+
+def test_skip_running_status(kb, capsys):
+    (kb.data / "kb_update_status.json").write_text(
+        '{"state":"running"}', encoding="utf-8")
+    code, rows = _run(kb, capsys, "--skip", "status")
+    assert code == 0
+    assert rows["status"]["status"] == "SKIP"
+    assert rows["status"]["details"] == "пропущена по --skip"
+    code = verify.main(["--data", str(kb.data), "--db", str(kb.db),
+                        "--no-chroma", "--skip", "status"])
+    assert code == 0
+    assert capsys.readouterr().out.splitlines()[0] == (
+        "SKIP Статус прогона: пропущена по --skip")
+
+
+def test_skip_multiple_checks(kb, capsys):
+    pending = kb.data / "refs/pending_docids.txt"
+    pending.parent.mkdir()
+    pending.write_text("5142\n", encoding="utf-8")
+    with sqlite3.connect(kb.db) as con:
+        con.execute("DROP INDEX ix_graph_nodes_number")
+    code, rows = _run(kb, capsys, "--skip", "pending,index")
+    assert code == 0
+    assert rows["pending"]["status"] == rows["index"]["status"] == "SKIP"
+
+
+@pytest.mark.parametrize("ids", ["unknown", "status,unknown"])
+def test_skip_unknown_id_is_argparse_error(capsys, ids):
+    with pytest.raises(SystemExit) as exc:
+        verify.main(["--skip", ids])
+    assert exc.value.code == 2
+    assert "неизвестные ID проверок: unknown" in capsys.readouterr().err
+
+
+def test_skip_all_does_not_open_stores(kb, capsys, monkeypatch):
+    def unexpected(*args, **kwargs):
+        pytest.fail("пропущенные проверки не должны открывать хранилища")
+
+    monkeypatch.setattr(verify, "_graph_ids", unexpected)
+    monkeypatch.setattr(verify, "_Vectors", unexpected)
+    code, rows = _run(kb, capsys, "--skip", ",".join(verify.CHECK_IDS))
+    assert code == 0
+    assert all(row["status"] == "SKIP" for row in rows.values())
+
+
+@pytest.mark.parametrize("rc,output,warning", [
+    (0, "OK Кодексы: всё на месте", None),
+    (1, "FAIL Дедуп редакций: лишние файлы\nFAIL Кодексы: нет векторов",
+     "kb_verify: Дедуп редакций, Кодексы"),
+    (2, "ошибка запуска без отчёта", "kb_verify"),
+])
+def test_update_verification_step(tmp_path, rc, output, warning):
+    """Шаг 5c нефатален и разбирает только вывод текущего вызова, а не весь лог."""
+    script = (Path(__file__).parent.parent / "scripts/kb_update.sh").read_text(
+        encoding="utf-8")
+    step = script.split("# 5c.", 1)[1].split("# 6.", 1)[0]
+    step = "\n".join(step.splitlines()[1:])
+    pyk = tmp_path / "python"
+    pyk.write_text(
+        '#!/bin/sh\n[ "$*" = "scripts/kb_verify.py --skip status" ] || exit 99\n'
+        'printf "%s\\n" "$VERIFY_TEST_OUTPUT" >&2\nexit "$VERIFY_TEST_RC"\n',
+        encoding="utf-8")
+    pyk.chmod(0o755)
+    log = tmp_path / "kb_update.log"
+    log.write_text("FAIL Старый прогон: старая ошибка\n", encoding="utf-8")
+    env = {**os.environ, "PYK": str(pyk), "LOG": str(log),
+           "VERIFY_TEST_OUTPUT": output, "VERIFY_TEST_RC": str(rc)}
+    result = subprocess.run(
+        ["sh", "-c", 'status() { printf "%s\\n" "$*"; }\n'
+         'warn() { printf "warn: %s\\n" "$1" >> "$LOG"; }\n'
+         + step + '\nprintf "шаг завершён\\n"\n'],
+        env=env, cwd=tmp_path, capture_output=True, text=True, check=True)
+    assert result.stdout == "running проверка базы\nшаг завершён\n"
+    expected = "FAIL Старый прогон: старая ошибка\n" + output + "\n"
+    if warning:
+        expected += f"warn: {warning}\n"
+    assert log.read_text(encoding="utf-8") == expected
 
 
 def test_duplicates_fail_without_extra_stdout(kb, capsys):
