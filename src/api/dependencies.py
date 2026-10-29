@@ -108,11 +108,14 @@ def _cache_invalidate(token_hash: str) -> None:
     _mem_cache.pop(token_hash, None)
 
 
+def _auth_cache_key(token: str) -> str:
+    """Единый ключ кэша проверки токена."""
+    return hashlib.sha256(token.encode()).hexdigest()[:32]
+
+
 def invalidate_auth_cache(token: str) -> None:
     """Public helper: invalidate auth cache for a given raw token (call on logout)."""
-    import hashlib
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-    _cache_invalidate(token_hash)
+    _cache_invalidate(_auth_cache_key(token))
 
 
 async def get_current_user(
@@ -129,7 +132,7 @@ async def get_current_user(
     to avoid 3 DB queries per request.
     """
     # Check cache first
-    token_hash = hashlib.sha256(token.encode()).hexdigest()[:32]
+    token_hash = _auth_cache_key(token)
     cached_user_id = _cache_get(token_hash)
 
     if cached_user_id:

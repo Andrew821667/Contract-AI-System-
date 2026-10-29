@@ -436,16 +436,11 @@ class AuthService:
         refresh_token = self.create_refresh_token(user.id)
 
         # Create session
-        session = UserSession(
-            user_id=user.id,
-            access_token_hash=self._hash_token(access_token),
-            refresh_token=refresh_token,
+        self.create_session(
+            user.id, access_token, refresh_token,
             ip_address=ip_address,
             user_agent=user_agent,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=self.REFRESH_TOKEN_EXPIRE_DAYS)
         )
-
-        self.db.add(session)
 
         # Log successful login
         self.log_action(
@@ -665,6 +660,28 @@ class AuthService:
         }, None
 
     # ==================== Session Management ====================
+
+    def create_session(
+        self,
+        user_id: str,
+        access_token: str,
+        refresh_token: str,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> UserSession:
+        """Создаёт сессию входа; транзакцию завершает вызывающий код."""
+        session = UserSession(
+            user_id=user_id,
+            access_token_hash=self._hash_token(access_token),
+            refresh_token=refresh_token,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            expires_at=datetime.now(timezone.utc) + timedelta(
+                days=self.REFRESH_TOKEN_EXPIRE_DAYS
+            ),
+        )
+        self.db.add(session)
+        return session
 
     def refresh_session(self, refresh_token: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         """

@@ -109,7 +109,8 @@ References: Use RAG sources when available (precedents, similar cases, legal nor
                 )
 
             analysis = self.db.query(AnalysisResult).filter(
-                AnalysisResult.id == analysis_id
+                AnalysisResult.id == analysis_id,
+                AnalysisResult.contract_id == contract_id,
             ).first()
 
             if not analysis:
