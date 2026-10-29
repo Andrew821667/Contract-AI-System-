@@ -10,7 +10,7 @@ from loguru import logger
 
 from src.models.database import get_db
 from src.models.repositories import TemplateRepository
-from src.models import Contract
+from src.models import Contract, AnalysisResult
 from src.models.auth_models import User
 from src.agents.contract_generator_agent import ContractGeneratorAgent
 from src.agents.disagreement_processor_agent import DisagreementProcessorAgent
@@ -175,6 +175,15 @@ async def generate_disagreements(
     """
     try:
         get_contract_with_access_sync(request_data.contract_id, current_user, db)
+
+        analysis = db.query(AnalysisResult).filter(
+            AnalysisResult.id == request_data.analysis_id,
+            AnalysisResult.contract_id == request_data.contract_id,
+        ).first()
+        if not analysis:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found"
+            )
 
         llm_gateway = LLMGateway(model=settings.llm_quick_model)
         agent = DisagreementProcessorAgent(llm_gateway=llm_gateway, db_session=db)

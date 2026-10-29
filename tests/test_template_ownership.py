@@ -16,9 +16,12 @@ from src.api.contracts import generation_routes, template_routes
 from src.api.dependencies import get_current_user
 from src.api.v2 import templates as governance_routes
 from src.agents.contract_generator_agent import ContractGeneratorAgent
+from src.agents.disagreement_processor_agent import DisagreementProcessorAgent
 from src.core.templates.models import TemplateVersion
+from src.models.analyzer_models import ContractRisk
 from src.models.auth_models import User
 from src.models.database import AnalysisResult, Contract, Template, get_db
+from src.models.disagreement_models import Disagreement
 from src.models.repositories import TemplateRepository
 from src.services.contract_generation_service import ContractGenerationService, GenerationResult
 from src.services.template_manager import TemplateManager
@@ -280,6 +283,56 @@ def test_disagreements_check_contract_access(api, users, contract, monkeypatch, 
     resp = client.post("/contracts/disagreements", json={"contract_id": contract.id, "analysis_id": "test"})
     assert resp.status_code == 403
     gateway.assert_not_called()
+
+
+@pytest.fixture
+def foreign_analysis(test_db, users):
+    contract = Contract(
+        file_name="foreign.docx", file_path="/test/foreign.docx",
+        document_type="contract", assigned_to=users["b"].id,
+    )
+    test_db.add(contract)
+    test_db.flush()
+    analysis = AnalysisResult(contract_id=contract.id)
+    test_db.add(analysis)
+    test_db.flush()
+    test_db.add(ContractRisk(
+        contract_id=contract.id, analysis_id=analysis.id, risk_type="legal",
+        severity="critical", title="Чужой риск", description="Чужие условия",
+    ))
+    test_db.commit()
+    return analysis
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_disagreements_reject_unrelated_analysis(
+    api, contract, foreign_analysis, test_db, monkeypatch, missing,
+):
+    client, _ = api
+    gateway = Mock(side_effect=AssertionError("LLM не должен вызываться"))
+    monkeypatch.setattr(generation_routes, "LLMGateway", gateway)
+    resp = client.post("/contracts/disagreements", json={
+        "contract_id": contract.id,
+        "analysis_id": "missing" if missing else foreign_analysis.id,
+    })
+    assert resp.status_code == 404, resp.text
+    assert resp.json()["detail"] == "Analysis not found"
+    gateway.assert_not_called()
+    assert test_db.query(Disagreement).count() == 0
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_disagreement_agent_rejects_unrelated_analysis(
+    contract, foreign_analysis, test_db, missing,
+):
+    gateway = Mock()
+    analysis_id = "missing" if missing else foreign_analysis.id
+    agent = DisagreementProcessorAgent(llm_gateway=gateway, db_session=test_db)
+    result = agent.execute({"contract_id": contract.id, "analysis_id": analysis_id})
+    assert not result.success
+    assert result.error == f"Analysis {analysis_id} not found"
+    assert not gateway.mock_calls
+    assert test_db.query(Disagreement).count() == 0
 
 
 def test_template_owner_migration(tmp_path):

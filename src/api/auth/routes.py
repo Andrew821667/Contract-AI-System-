@@ -1279,6 +1279,7 @@ class SSOTokenResponse(BaseModel):
 @router.post("/sso-token", response_model=SSOTokenResponse)
 async def sso_token_exchange(
     request: SSOTokenRequest,
+    http_request: Request,
     db: Session = Depends(get_db)
 ):
     """
@@ -1340,12 +1341,18 @@ async def sso_token_exchange(
             user.name = request.user_name
             db.commit()
 
-    # Генерируем JWT
+    # Создаём сессию тем же путём, что и при обычном входе.
     auth_service = AuthService(db)
     access_token = auth_service.create_access_token(
         user_id=user.id,
         additional_claims={"source": "sso_bridge", "org_id": request.org_id}
     )
+    auth_service.create_session(
+        user.id, access_token, auth_service.create_refresh_token(user.id),
+        ip_address=get_client_ip(http_request),
+        user_agent=http_request.headers.get("User-Agent"),
+    )
+    db.commit()
 
     # URL для редиректа — токен в fragment (#), не в query-param (?).
     # Fragment не отправляется серверу, не попадает в Referer/логи/историю.
