@@ -95,7 +95,7 @@ class User(Base):
     used_demo_token_rel = relationship("DemoToken", foreign_keys="DemoToken.used_by_user_id", back_populates="used_by_user")
 
     # From original model
-    templates = relationship("Template", back_populates="creator")
+    templates = relationship("Template", foreign_keys="Template.created_by", back_populates="creator")
     assigned_tasks = relationship("ReviewTask", foreign_keys="ReviewTask.assigned_to", back_populates="assignee")
     export_logs = relationship("ExportLog", back_populates="user")
 

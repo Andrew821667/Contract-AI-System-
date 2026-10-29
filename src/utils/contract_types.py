@@ -321,10 +321,12 @@ def get_generation_contract_types(
 ) -> List[Dict[str, Any]]:
     """Получить список типов договоров для генерации: статические + найденные в анализе."""
     from src.models.database import Contract, Template
+    from src.models.repositories import TemplateRepository
 
     template_types = {
         row[0]
-        for row in db_session.query(Template.contract_type)
+        for row in TemplateRepository(db_session, user_id, include_all)
+        .visible_query().with_entities(Template.contract_type)
         .filter(Template.active == True)  # noqa: E712
         .distinct()
         .all()

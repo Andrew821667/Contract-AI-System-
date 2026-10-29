@@ -61,12 +61,14 @@ class Template(Base):
     meta_info = Column(JSON, nullable=True)  # renamed from metadata to avoid SQLAlchemy reserved word
     version = Column(String(20), nullable=False)
     active = Column(Boolean, default=True, index=True)
+    # NULL — системный шаблон; приватные удаляются вместе с владельцем.
+    owner_id = Column(String(36), ForeignKey('users.id', ondelete='CASCADE'), nullable=True, index=True)
     created_by = Column(String(36), ForeignKey('users.id', ondelete='SET NULL'))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
-    creator = relationship("User", back_populates="templates")
+    creator = relationship("User", foreign_keys=[created_by], back_populates="templates")
 
     __table_args__ = (
         UniqueConstraint('contract_type', 'version', name='uq_template_type_version'),

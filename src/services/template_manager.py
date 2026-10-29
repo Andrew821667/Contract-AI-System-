@@ -48,14 +48,17 @@ class TemplateManager:
     - Convert XML to DOCX
     """
 
-    def __init__(self, db_session: Session, templates_dir: str = "data/templates"):
+    def __init__(
+        self, db_session: Session, templates_dir: str = "data/templates",
+        *, user_id: Optional[str] = None, include_all: bool = False,
+    ):
         """
         Args:
             db_session: DB session for repository
             templates_dir: Directory with templates on disk
         """
         self.db = db_session
-        self.repository = TemplateRepository(db_session)
+        self.repository = TemplateRepository(db_session, user_id, include_all)
         self.templates_dir = Path(templates_dir)
         self.templates_dir.mkdir(parents=True, exist_ok=True)
 
@@ -71,7 +74,8 @@ class TemplateManager:
         name: str,
         version: str = "1.0",
         base_template_id: Optional[str] = None,
-        created_by: Optional[str] = None
+        created_by: Optional[str] = None,
+        owner_id: Optional[str] = None,
     ) -> TemplateModel:
         """
         Load template from XML file into DB
@@ -106,6 +110,11 @@ class TemplateManager:
 
         # If there is a base template, apply inheritance
         if base_template_id:
+            base_template = self.repository.get_by_id(base_template_id)
+            if not base_template:
+                raise ValueError(f"Base template not found: {base_template_id}")
+            # Наследование приватного содержимого сохраняет его владельца.
+            owner_id = base_template.owner_id or owner_id
             xml_content = self._apply_inheritance(xml_content, base_template_id)
 
         # Extract template structure
@@ -119,6 +128,7 @@ class TemplateManager:
             structure=structure,
             version=version,
             created_by=created_by,
+            owner_id=owner_id,
             active=True
         )
 
@@ -275,6 +285,7 @@ class TemplateManager:
             structure=self._extract_template_structure(new_xml_content),
             version=new_version,
             created_by=base_template.created_by,
+            owner_id=base_template.owner_id,
             active=True
         )
 

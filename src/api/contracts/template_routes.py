@@ -8,9 +8,10 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 from loguru import logger
 
-from src.models.database import get_db, Contract, Template, AnalysisResult
+from src.models.database import get_db, Template, AnalysisResult
+from src.models.repositories import TemplateRepository
 from src.models.auth_models import User
-from src.api.dependencies import get_current_user
+from src.api.dependencies import get_current_user, get_contract_with_access_sync
 
 
 router = APIRouter()
@@ -58,7 +59,9 @@ async def list_templates(
     Список всех активных шаблонов для генерации.
     Опционально фильтрация по типу договора.
     """
-    query = db.query(Template).filter(Template.active == True)
+    query = TemplateRepository(
+        db, current_user.id, current_user.role == "admin"
+    ).visible_query().filter(Template.active == True)
     if contract_type:
         query = query.filter(Template.contract_type == contract_type)
     query = query.order_by(Template.contract_type, Template.name)
@@ -89,13 +92,11 @@ async def get_template_status(
     """
     Проверить, сохранён ли этот договор как шаблон для генерации.
     """
-    contract = db.query(Contract).filter(Contract.id == contract_id).first()
-    if not contract:
-        raise HTTPException(status_code=404, detail="Договор не найден")
+    get_contract_with_access_sync(contract_id, current_user, db)
 
     # Проверяем, есть ли шаблон, созданный из этого договора
     template = (
-        db.query(Template)
+        TemplateRepository(db, current_user.id, current_user.role == "admin").visible_query()
         .filter(
             Template.meta_info["source_contract_id"].as_string() == contract_id,
             Template.active == True,
@@ -128,9 +129,7 @@ async def save_contract_as_template(
     Пользователь сам решает, добавлять ли договор как образец.
     """
     # Получаем договор
-    contract = db.query(Contract).filter(Contract.id == contract_id).first()
-    if not contract:
-        raise HTTPException(status_code=404, detail="Договор не найден")
+    contract = get_contract_with_access_sync(contract_id, current_user, db)
 
     if contract.status != "completed":
         raise HTTPException(
@@ -150,7 +149,7 @@ async def save_contract_as_template(
 
     # Проверяем, что шаблон из этого договора ещё не создан
     existing = (
-        db.query(Template)
+        TemplateRepository(db, current_user.id, current_user.role == "admin").visible_query()
         .filter(
             Template.meta_info["source_contract_id"].as_string() == contract_id,
             Template.active == True,
@@ -210,6 +209,7 @@ async def save_contract_as_template(
         version=version,
         active=True,
         created_by=current_user.id,
+        owner_id=contract.assigned_to or current_user.id,
     )
 
     db.add(template)

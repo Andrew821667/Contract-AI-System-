@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from loguru import logger
 
 from src.models.database import get_db
+from src.models.repositories import TemplateRepository
 from src.models import Contract
 from src.models.auth_models import User
 from src.agents.contract_generator_agent import ContractGeneratorAgent
@@ -16,7 +17,7 @@ from src.agents.disagreement_processor_agent import DisagreementProcessorAgent
 from src.services.llm_gateway import LLMGateway
 from src.utils.contract_types import get_generation_contract_types as get_generation_contract_type_catalog
 from config.settings import settings
-from src.api.dependencies import get_current_user
+from src.api.dependencies import get_current_user, get_contract_with_access_sync
 
 from .schemas import (
     ContractGenerateRequest,
@@ -81,7 +82,7 @@ async def generate_contract(
         # Типовой шаблон организации для этого типа, если заведён.
         template_text = ""
         tpl = (
-            db.query(Template)
+            TemplateRepository(db, current_user.id, current_user.role == "admin").visible_query()
             .filter(Template.contract_type == request_data.contract_type, Template.active == True)  # noqa: E712
             .order_by(Template.created_at.desc())
             .first()
@@ -173,12 +174,7 @@ async def generate_disagreements(
     **Returns:** Disagreement document ID and objections list
     """
     try:
-        # Ownership check
-        contract = db.query(Contract).filter(Contract.id == request_data.contract_id).first()
-        if not contract:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contract not found")
-        if contract.assigned_to != current_user.id and current_user.role not in ['admin']:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No permission to access this contract")
+        get_contract_with_access_sync(request_data.contract_id, current_user, db)
 
         llm_gateway = LLMGateway(model=settings.llm_quick_model)
         agent = DisagreementProcessorAgent(llm_gateway=llm_gateway, db_session=db)
