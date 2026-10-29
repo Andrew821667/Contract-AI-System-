@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from src.api.dependencies import get_current_user
 from src.models.database import get_db
 from src.models.auth_models import User
+from src.models.repositories import TemplateRepository
 from src.core.templates.models import TemplateVersion, ClausePolicy
 from src.core.templates.schemas import (
     TemplateVersionRead,
@@ -25,6 +26,14 @@ from src.core.templates.clause_policy_service import ClausePolicyService
 router = APIRouter(tags=["Template Governance"])
 
 
+def _check_template_access(template_id: str, current_user: User, db: Session):
+    template = TemplateRepository(
+        db, current_user.id, current_user.role == "admin"
+    ).get_by_id(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+
 # ────────────────────────────────────────────────
 # Template Versions
 # ────────────────────────────────────────────────
@@ -36,6 +45,7 @@ async def list_template_versions(
     current_user: User = Depends(get_current_user),
 ):
     """Список всех версий шаблона."""
+    _check_template_access(template_id, current_user, db)
     versions = (
         db.query(TemplateVersion)
         .filter(TemplateVersion.template_id == template_id)
@@ -53,6 +63,7 @@ async def create_template_version(
     current_user: User = Depends(get_current_user),
 ):
     """Создать новую версию шаблона (статус: draft)."""
+    _check_template_access(template_id, current_user, db)
     svc = TemplateGovernanceService(db)
     version = svc.create_version(
         template_id=template_id,
@@ -73,6 +84,10 @@ async def activate_template_version(
     current_user: User = Depends(get_current_user),
 ):
     """Активировать версию (деактивирует предыдущую активную)."""
+    version = db.query(TemplateVersion).filter(TemplateVersion.id == version_id).first()
+    if not version:
+        raise HTTPException(status_code=404, detail="Version not found")
+    _check_template_access(version.template_id, current_user, db)
     svc = TemplateGovernanceService(db)
     version = svc.activate_version(version_id)
     if not version:
@@ -89,6 +104,7 @@ async def get_active_version(
     current_user: User = Depends(get_current_user),
 ):
     """Получить текущую активную версию шаблона."""
+    _check_template_access(template_id, current_user, db)
     svc = TemplateGovernanceService(db)
     version = svc.get_active_version(template_id)
     if not version:

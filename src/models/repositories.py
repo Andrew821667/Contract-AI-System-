@@ -78,26 +78,46 @@ class UserRepository(BaseRepository):
 class TemplateRepository(BaseRepository):
     """ 5?>78B>@89 4;O @01>BK A H01;>=0<8"""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, user_id: Optional[str] = None, include_all: bool = False):
         super().__init__(db, Template)
+        self.user_id = user_id
+        self.include_all = include_all
+
+    def visible_query(self):
+        """Общие и собственные шаблоны; без пользователя — только общие."""
+        query = self.db.query(Template)
+        if not self.include_all:
+            if self.user_id:
+                query = query.filter(
+                    Template.owner_id.is_(None) | (Template.owner_id == self.user_id)
+                )
+            else:
+                query = query.filter(Template.owner_id.is_(None))
+        return query
+
+    def get_by_id(self, id: str):
+        return self.visible_query().filter(Template.id == id).first()
+
+    def get_all(self, limit: int = 100, offset: int = 0):
+        return self.visible_query().offset(offset).limit(limit).all()
 
     def get_by_type(self, contract_type: str, active_only: bool = True) -> List[Template]:
         """>;CG8BL H01;>=K ?> B8?C 4>3>2>@0"""
-        query = self.db.query(Template).filter(Template.contract_type == contract_type)
+        query = self.visible_query().filter(Template.contract_type == contract_type)
         if active_only:
             query = query.filter(Template.active == True)
         return query.all()
 
     def get_latest_version(self, contract_type: str) -> Optional[Template]:
         """>;CG8BL ?>A;54=NN 25@A8N H01;>=0 4;O B8?0 4>3>2>@0"""
-        return self.db.query(Template).filter(
+        return self.visible_query().filter(
             Template.contract_type == contract_type,
             Template.active == True
         ).order_by(desc(Template.version)).first()
 
     def get_active_templates(self) -> List[Template]:
         """>;CG8BL 2A5 0:B82=K5 H01;>=K"""
-        return self.db.query(Template).filter(Template.active == True).all()
+        return self.visible_query().filter(Template.active == True).all()
 
 
 class ContractRepository(BaseRepository):

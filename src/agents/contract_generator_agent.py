@@ -19,6 +19,8 @@ from loguru import logger
 from ..agents.base_agent import BaseAgent, AgentResult
 from ..services.template_manager import TemplateManager
 from ..models.database import Template, Contract
+from ..models.auth_models import User
+from ..models.repositories import TemplateRepository
 from ..utils.xml_security import parse_xml_safely, XMLSecurityError
 
 # Optional RAG import
@@ -87,7 +89,7 @@ Be precise, thorough, and legally accurate."""
             logger.info(f"Parameters extracted: {params.get('contract_type', 'unknown')}")
 
             # Step 2: Find suitable template
-            template = self._find_template(params)
+            template = self._find_template(params, user_id=state.get('user_id'))
 
             if not template:
                 # No template found - request user selection
@@ -185,14 +187,18 @@ Be precise, thorough, and legally accurate."""
                 "payment_terms": {}
             }
 
-    def _find_template(self, params: Dict) -> Optional[Template]:
+    def _find_template(self, params: Dict, user_id: Optional[str] = None) -> Optional[Template]:
         """Find suitable template using type + semantic + legal analysis"""
         logger.info(f"Finding template for: {params.get('contract_type')}")
 
         contract_type = params.get('contract_type', 'general')
+        user = self.db.query(User).filter(User.id == user_id).first() if user_id else None
+        repo = TemplateRepository(
+            self.db, user.id if user else None, bool(user and user.role == "admin")
+        )
 
         # Try to find by type first
-        template = self.template_manager.get_template(contract_type)
+        template = repo.get_latest_version(contract_type)
 
         if template:
             logger.info(f"Template found by type: {template.name}")
@@ -209,7 +215,9 @@ Be precise, thorough, and legally accurate."""
                 # Try to get template by ID from metadata
                 template_id = results[0].get('metadata', {}).get('template_id')
                 if template_id:
-                    template = self.db.query(Template).filter(Template.id == template_id).first()
+                    template = repo.visible_query().filter(
+                        Template.id == template_id, Template.active == True
+                    ).first()
                     if template:
                         logger.info(f"Template found via RAG: {template.name}")
                         return template
